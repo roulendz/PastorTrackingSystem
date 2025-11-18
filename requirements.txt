@@ -1,0 +1,15 @@
+# Pastor Tracking System - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Computer vision
+opencv-python==4.8.1.78
+mediapipe==0.10.8
+
+# Serial communication
+pyserial==3.5
+
+# Numerical computing
+numpy==1.24.3
+
+# Data handling
+dataclasses-json==0.6.3
