@@ -19,11 +19,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from interfaces.motor_interface import MotorInterface, NullMotorInterface
 from interfaces.camera_interface import CameraInterface
-from tracking.pose_tracker import PoseTracker
+from tracking.pose_tracker import PoseTracker, PoseResult
 from tracking.fov_estimator import FieldOfViewEstimator
 from control.control_algorithm import ProportionalController, PIDController
 from control.tracker_controller import TrackerController
 from utilities.config_manager import ConfigurationManager
+from utilities.text_renderer import TextRenderer
 
 # Configure logging
 logging.basicConfig(
@@ -31,8 +32,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-
 def setup_argument_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
     obParser = argparse.ArgumentParser(
@@ -209,8 +208,7 @@ class DeadzoneUIController:
         cv2.line(obFrame, (iLeftX, 0), (iLeftX, iHeight), (0, 255, 0), 1)
         cv2.line(obFrame, (iRightX, 0), (iRightX, iHeight), (0, 255, 0), 1)
         sText = f"Deadzone: {flDeadbandDeg:.2f}°"
-        cv2.putText(obFrame, sText, (iRightX + 10 if iRightX + 150 < iWidth else max(10, iLeftX - 150), 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        TextRenderer.draw_text(obFrame, sText, (iRightX + 10 if iRightX + 150 < iWidth else max(10, iLeftX - 150), 30), 0.6, (0, 255, 0), 2)
 
 
 def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneUI: DeadzoneUIController):
@@ -251,8 +249,7 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
         # Draw offset text
         flPixelOffset = obSample.get_pixel_offset_from_center(iWidth)
         sOffsetText = f"Offset: {flPixelOffset:.0f}px"
-        cv2.putText(obFrame, sOffsetText, (iPersonX + 20, iPersonY - 20),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+        TextRenderer.draw_text(obFrame, sOffsetText, (iPersonX + 20, iPersonY - 20), 0.6, (0, 0, 255), 2)
     
     # Draw status info
     if obConfig.bShowDebugInfo:
@@ -269,8 +266,7 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
         ]
         
         for sLine in vInfoLines:
-            cv2.putText(obFrame, sLine, (10, iYPos),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            TextRenderer.draw_text(obFrame, sLine, (10, iYPos), 0.7, (0, 255, 0), 2)
             iYPos += iLineHeight
         
         # Controls
@@ -282,9 +278,27 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
             "Q - Quit"
         ]
         for sLine in vControlLines:
-            cv2.putText(obFrame, sLine, (10, iYPos),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            TextRenderer.draw_text(obFrame, sLine, (10, iYPos), 0.5, (255, 255, 255), 1)
             iYPos += 20
+
+    # Background tracking visualization
+    try:
+        flBGdx = obTrackerController.obFieldOfViewEstimator.get_last_background_pixel_delta_horizontal()
+        sBG = f"BG dx: {flBGdx:.1f}px"
+        TextRenderer.draw_text(obFrame, sBG, (10, iHeight - 120), 0.6, (255, 255, 0), 2)
+        rect = obTrackerController.obFieldOfViewEstimator.get_last_person_mask_rect()
+        if rect:
+            x0, y0, x1, y1 = rect
+            x0 = max(0, min(obFrame.shape[1]-1, x0))
+            y0 = max(0, min(obFrame.shape[0]-1, y0))
+            x1 = max(0, min(obFrame.shape[1]-1, x1))
+            y1 = max(0, min(obFrame.shape[0]-1, y1))
+            cv2.rectangle(obFrame, (x0, y0), (x1, y1), (255, 255, 0), 1)
+            cx = (x0 + x1) // 2
+            arrow_len = int(min(obFrame.shape[1], 200) * max(-1.0, min(1.0, flBGdx / 50.0)))
+            cv2.arrowedLine(obFrame, (cx, 50), (cx + arrow_len, 50), (255, 255, 0), 2, tipLength=0.2)
+    except Exception:
+        pass
 
 
 def main():
@@ -336,11 +350,16 @@ def main():
             if obConfig.bEnableVisualization and obSample.obFrameImage is not None:
                 obVisFrame = obSample.obFrameImage.copy()
                 
-                # Draw pose if person detected
-                if obSample.bPersonWasDetected:
-                    obPoseResult = obPoseTracker.detect_person_in_frame(obSample.obFrameImage)
+                if obSample.bPersonWasDetected and obSample.obPoseLandmarks is not None:
+                    obPoseResult = PoseResult(
+                        flPersonCenterXPixels=obSample.flPersonCenterXPixels,
+                        flPersonCenterYPixels=obSample.flPersonCenterYPixels,
+                        bPersonWasDetected=obSample.bPersonWasDetected,
+                        flPersonConfidenceScore=obSample.flPersonConfidenceScore,
+                        vLandmarks=obSample.obPoseLandmarks
+                    )
                     obVisFrame = obPoseTracker.draw_pose_on_frame(obVisFrame, obPoseResult)
-                
+
                 # Draw overlay
                 draw_visualization_overlay(obVisFrame, obSample, dStats, obConfig, obDeadzoneUI)
                 

@@ -42,6 +42,7 @@ class TrackingSample:
     flPersonConfidenceScore: float = 0.0
     flMinimumConfidenceRequired: float = 0.5
     obFrameImage: Optional[np.ndarray] = None
+    obPoseLandmarks: Optional[object] = None
     
     def get_pixel_offset_from_center(self, iImageWidthPixels: int) -> float:
         """

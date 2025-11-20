@@ -59,6 +59,8 @@ class FieldOfViewEstimator:
         self.qRecentEstimates = deque(maxlen=100)  # Last 100 estimates
         self.flMinimumObservedAnglePerPixel = float('inf')
         self.flMaximumObservedAnglePerPixel = float('-inf')
+        self.flLastBackgroundPixelDeltaHorizontal = 0.0
+        self.tLastMaskRect = None
         
         logger.info(f"FOV Estimator initialized: {flInitialAnglePerPixelDegrees:.4f} deg/px")
     
@@ -94,8 +96,7 @@ class FieldOfViewEstimator:
         Args:
             obNewSample: Latest tracking sample
         """
-        # Skip if person not detected
-        if not obNewSample.is_valid_for_tracking():
+        if obNewSample.obFrameImage is None:
             self.obPreviousSample = None
             return
         
@@ -104,15 +105,16 @@ class FieldOfViewEstimator:
             self.obPreviousSample = obNewSample
             return
         
-        # Calculate deltas
         flAngleDeltaDegrees = self._calculate_angle_delta_degrees(
             self.obPreviousSample.flMotorAngleDegrees,
             obNewSample.flMotorAngleDegrees
         )
-        
-        flPixelDeltaHorizontal = self._calculate_pixel_delta_horizontal(
-            self.obPreviousSample.flPersonCenterXPixels,
-            obNewSample.flPersonCenterXPixels
+        if abs(flAngleDeltaDegrees) < self.flMinimumAngleChangeDegrees:
+            self.obPreviousSample = obNewSample
+            return
+        flPixelDeltaHorizontal = self._calculate_background_pixel_delta_horizontal(
+            self.obPreviousSample,
+            obNewSample
         )
         
         # Check if motion is significant enough
@@ -126,8 +128,6 @@ class FieldOfViewEstimator:
             self.obPreviousSample = obNewSample
             return
         
-        # Calculate new angle-per-pixel sample
-        # Formula: angle_per_pixel = Δθ / Δx
         flNewAnglePerPixelSample = flAngleDeltaDegrees / flPixelDeltaHorizontal
         
         # Reject obvious outliers (>10x different from current estimate)
@@ -211,6 +211,12 @@ class FieldOfViewEstimator:
     def get_number_of_samples_used_for_learning(self) -> int:
         """Get count of samples that contributed to learning."""
         return self.iSamplesUsedForLearningCount
+
+    def get_last_background_pixel_delta_horizontal(self) -> float:
+        return getattr(self, 'flLastBackgroundPixelDeltaHorizontal', 0.0)
+
+    def get_last_person_mask_rect(self):
+        return getattr(self, 'tLastMaskRect', None)
     
     def get_learning_statistics(self) -> dict:
         """
@@ -265,3 +271,53 @@ class FieldOfViewEstimator:
             flAbsoluteAngleDeltaDegrees >= self.flMinimumAngleChangeDegrees and
             flAbsolutePixelDelta >= self.flMinimumPixelChangeHorizontal
         )
+
+    def _calculate_background_pixel_delta_horizontal(self, obPrev: TrackingSample, obCurr: TrackingSample) -> float:
+        import cv2
+        import numpy as np
+        prev_gray_full = cv2.cvtColor(obPrev.obFrameImage, cv2.COLOR_BGR2GRAY)
+        curr_gray_full = cv2.cvtColor(obCurr.obFrameImage, cv2.COLOR_BGR2GRAY)
+        h_full, w_full = prev_gray_full.shape[:2]
+        target_w = 320
+        scale = target_w / float(w_full) if w_full > 0 else 1.0
+        target_h = max(1, int(h_full * scale))
+        prev_gray = cv2.resize(prev_gray_full, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        curr_gray = cv2.resize(curr_gray_full, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        h, w = prev_gray.shape[:2]
+        mask = np.ones((h, w), dtype=np.uint8)
+        rect = None
+        if obCurr.bPersonWasDetected:
+            cx = int(obCurr.flPersonCenterXPixels * scale)
+            cy = int(obCurr.flPersonCenterYPixels * scale)
+            rw = max(1, int(w * 0.30))
+            rh = max(1, int(h * 0.50))
+            x0 = max(0, cx - rw // 2)
+            y0 = max(0, cy - rh // 2)
+            x1 = min(w, x0 + rw)
+            y1 = min(h, y0 + rh)
+            mask[y0:y1, x0:x1] = 0
+            rect = (int(x0 / scale), int(y0 / scale), int(x1 / scale), int(y1 / scale))
+        if obPrev.bPersonWasDetected:
+            cx = int(obPrev.flPersonCenterXPixels * scale)
+            cy = int(obPrev.flPersonCenterYPixels * scale)
+            rw = max(1, int(w * 0.30))
+            rh = max(1, int(h * 0.50))
+            x0 = max(0, cx - rw // 2)
+            y0 = max(0, cy - rh // 2)
+            x1 = min(w, x0 + rw)
+            y1 = min(h, y0 + rh)
+            mask[y0:y1, x0:x1] = 0
+            rect = rect or (int(x0 / scale), int(y0 / scale), int(x1 / scale), int(y1 / scale))
+        flow = cv2.calcOpticalFlowFarneback(prev_gray, curr_gray, None, 0.5, 2, 15, 2, 5, 1.2, 0)
+        dx = flow[..., 0]
+        valid = mask.astype(bool)
+        if not np.any(valid):
+            self.flLastBackgroundPixelDeltaHorizontal = 0.0
+            self.tLastMaskRect = rect
+            return 0.0
+        vals = dx[valid]
+        med_resized = float(np.median(vals))
+        med = med_resized / scale
+        self.flLastBackgroundPixelDeltaHorizontal = med
+        self.tLastMaskRect = rect
+        return med if abs(med) > 1e-6 else 0.0

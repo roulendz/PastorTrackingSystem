@@ -121,7 +121,8 @@ class TrackerController:
                 iSampleSequenceNumber=self.iNextSampleSequenceNumber,
                 flPersonConfidenceScore=obPoseResult.flPersonConfidenceScore,
                 flMinimumConfidenceRequired=self.flMinimumTrackingConfidenceForControl,
-                obFrameImage=obFrameImage  # For visualization
+                obFrameImage=obFrameImage,
+                obPoseLandmarks=obPoseResult.vLandmarks
             )
             self.iNextSampleSequenceNumber += 1
             
@@ -130,8 +131,8 @@ class TrackerController:
                 obNewSample
             )
             
-            # STEP 6: Execute control (if tracking active)
-            if self.eCurrentState == TrackerState.TRACKING:
+            # STEP 6: Execute control (if tracking or calibrating)
+            if self.eCurrentState in (TrackerState.TRACKING, TrackerState.CALIBRATING):
                 self._execute_centering_control_algorithm(obNewSample)
             
             # Update statistics
@@ -160,8 +161,6 @@ class TrackerController:
     def start_calibration_mode(self):
         """
         Enter calibration mode.
-        
-        In this mode, FOV learning continues but control is disabled.
         """
         self.eCurrentState = TrackerState.CALIBRATING
         logger.info("Calibration mode STARTED")
