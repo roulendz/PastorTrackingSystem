@@ -10,6 +10,7 @@ Follows:
 """
 
 import serial
+from serial.tools import list_ports
 import threading
 import time
 from dataclasses import dataclass
@@ -86,20 +87,33 @@ class MotorInterface:
                 baudrate=self.iBaudRate,
                 timeout=1.0
             )
-            
-            # Wait for Arduino reset and READY message
             time.sleep(2.0)
             self.obSerial.reset_input_buffer()
-            
-            # Start feedback reception thread
             self._start_feedback_thread()
-            
             self._bIsConnected = True
             logger.info(f"Connected to motor on {self.sSerialPortName}")
             return True
-            
-        except serial.SerialException as e:
-            logger.error(f"Failed to connect to motor: {e}")
+        except serial.SerialException:
+            vPorts = [p.device for p in list_ports.comports()]
+            for sPort in vPorts:
+                try:
+                    self.obSerial = serial.Serial(
+                        port=sPort,
+                        baudrate=self.iBaudRate,
+                        timeout=1.0
+                    )
+                    time.sleep(2.0)
+                    self.obSerial.reset_input_buffer()
+                    self._start_feedback_thread()
+                    self._bIsConnected = True
+                    self.sSerialPortName = sPort
+                    logger.info(f"Connected to motor on {sPort}")
+                    return True
+                except serial.SerialException:
+                    continue
+            logger.error("Failed to connect to motor: no available serial ports")
+            if vPorts:
+                logger.error(f"Available ports: {', '.join(vPorts)}")
             return False
     
     def disconnect_from_motor_controller(self):
@@ -291,3 +305,56 @@ class MotorInterface:
     def __del__(self):
         """Cleanup on deletion."""
         self.disconnect_from_motor_controller()
+
+
+class NullMotorInterface:
+    def __init__(self):
+        self._obLatestMotorState = MotorState(
+            flMotorAngleDegrees=0.0,
+            flMotorTargetAngleDegrees=0.0,
+            flMotorSpeedStepsPerSecond=0.0,
+            bMotorIsMoving=False,
+            dMotorTimestampSeconds=time.time()
+        )
+        self._fnFeedbackCallback = None
+
+    def connect_to_motor_controller(self) -> bool:
+        return True
+
+    def disconnect_from_motor_controller(self):
+        pass
+
+    def is_connected_to_motor_controller(self) -> bool:
+        return True
+
+    def send_move_to_angle_command(self, flTargetAngleDegrees: float) -> bool:
+        self._obLatestMotorState.flMotorTargetAngleDegrees = flTargetAngleDegrees
+        self._obLatestMotorState.flMotorAngleDegrees = flTargetAngleDegrees
+        return True
+
+    def send_emergency_stop_command(self) -> bool:
+        return True
+
+    def send_home_command(self) -> bool:
+        self._obLatestMotorState.flMotorTargetAngleDegrees = 0.0
+        self._obLatestMotorState.flMotorAngleDegrees = 0.0
+        return True
+
+    def send_enable_driver_command(self, bEnableDriver: bool) -> bool:
+        return True
+
+    def send_speed_and_acceleration_settings(self, a, b) -> bool:
+        return True
+
+    def get_latest_motor_state(self) -> MotorState:
+        return MotorState(
+            flMotorAngleDegrees=self._obLatestMotorState.flMotorAngleDegrees,
+            flMotorTargetAngleDegrees=self._obLatestMotorState.flMotorTargetAngleDegrees,
+            flMotorSpeedStepsPerSecond=self._obLatestMotorState.flMotorSpeedStepsPerSecond,
+            bMotorIsMoving=False,
+            dMotorTimestampSeconds=time.time(),
+            iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
+        )
+
+    def set_feedback_callback(self, fnCallback):
+        self._fnFeedbackCallback = fnCallback

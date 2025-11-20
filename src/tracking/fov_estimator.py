@@ -14,7 +14,7 @@ from collections import deque
 from typing import Optional
 import logging
 
-from ..core.tracking_sample import TrackingSample
+from core.tracking_sample import TrackingSample
 
 logger = logging.getLogger(__name__)
 

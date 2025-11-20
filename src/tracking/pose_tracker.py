@@ -173,10 +173,18 @@ class PoseTracker:
     
     def close_pose_tracker(self):
         """Release MediaPipe resources."""
-        if self.obPoseDetector:
-            self.obPoseDetector.close()
-            self._bIsInitialized = False
-            logger.info("Pose tracker closed")
+        try:
+            if getattr(self, 'obPoseDetector', None):
+                detector = self.obPoseDetector
+                self.obPoseDetector = None
+                try:
+                    detector.close()
+                except Exception:
+                    pass
+                self._bIsInitialized = False
+                logger.info("Pose tracker closed")
+        except Exception:
+            pass
     
     # Private methods
     
@@ -263,4 +271,8 @@ class PoseTracker:
     
     def __del__(self):
         """Cleanup on deletion."""
-        self.close_pose_tracker()
+        try:
+            if getattr(self, '_bIsInitialized', False) and getattr(self, 'obPoseDetector', None):
+                self.close_pose_tracker()
+        except Exception:
+            pass

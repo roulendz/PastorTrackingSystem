@@ -60,6 +60,7 @@ class SystemConfiguration:
     # Visualization
     bEnableVisualization: bool = True
     bShowDebugInfo: bool = True
+    bAllowStartWithoutMotor: bool = True
 
 
 class ConfigurationManager:

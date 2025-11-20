@@ -1,48 +1,73 @@
 @echo off
-REM Installation script for Pastor Tracking System (Windows)
-
 echo ==================================================
 echo   Pastor Tracking System - Installation
 echo ==================================================
 echo.
 
-REM Check Python
-echo [1/5] Checking Python version...
-python --version
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Python not found! Please install Python 3.8 or newer.
-    echo Download from: https://www.python.org/downloads/
-    pause
-    exit /b 1
-)
+setlocal EnableExtensions
+set "SCRIPT_DIR=%~dp0"
+cd /d "%SCRIPT_DIR%\.."
+set "PYENV_EXE=pyenv"
+if exist "%USERPROFILE%\.pyenv\pyenv-win\bin\pyenv.bat" set "PYENV_EXE=%USERPROFILE%\.pyenv\pyenv-win\bin\pyenv.bat"
 
-REM Create virtual environment
+set "PYENV_SHIMS=%USERPROFILE%\.pyenv\pyenv-win\shims"
+set "PY_CMD=python"
+if exist "%PYENV_SHIMS%\python.exe" set "PY_CMD=%PYENV_SHIMS%\python.exe"
+
+call :check_python
+call :create_venv
+call :activate_venv
+call :install_deps
+call :setup_config
+call :complete
+exit /b 0
+
+:check_python
+echo [1/5] Checking Python...
+"%PY_CMD%" --version
+exit /b 0
+
+:create_venv
 echo [2/5] Creating virtual environment...
-python -m venv venv
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Failed to create virtual environment!
-    pause
-    exit /b 1
+if exist venv\Scripts\python.exe (
+    echo Using existing virtual environment.
+) else (
+    "%PY_CMD%" -m venv venv
+    if errorlevel 1 (
+        echo ERROR: Failed to create virtual environment!
+        pause
+        exit /b 1
+    )
 )
+exit /b 0
 
-REM Activate virtual environment
+:activate_venv
 echo [3/5] Activating virtual environment...
 call venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo ERROR: Failed to activate virtual environment!
+    pause
+    exit /b 1
+)
+exit /b 0
 
-REM Install dependencies
+:install_deps
 echo [4/5] Installing Python dependencies...
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Failed to install dependencies!
     pause
     exit /b 1
 )
+exit /b 0
 
-REM Create config directory
+:setup_config
 echo [5/5] Setting up configuration...
 if not exist config mkdir config
+exit /b 0
 
+:complete
 echo.
 echo ==================================================
 echo   Installation Complete!
@@ -65,3 +90,5 @@ echo    cd src
 echo    python main.py
 echo.
 pause
+echo DONE
+exit /b 0

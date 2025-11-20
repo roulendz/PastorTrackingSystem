@@ -17,7 +17,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from interfaces.motor_interface import MotorInterface
+from interfaces.motor_interface import MotorInterface, NullMotorInterface
 from interfaces.camera_interface import CameraInterface
 from tracking.pose_tracker import PoseTracker
 from tracking.fov_estimator import FieldOfViewEstimator
@@ -69,8 +69,12 @@ def initialize_system(obConfig):
     )
     
     if not obMotorInterface.connect_to_motor_controller():
-        logger.error("Failed to connect to motor!")
-        return None
+        if obConfig.bAllowStartWithoutMotor:
+            logger.warning("Motor not connected; starting in motor-less mode")
+            obMotorInterface = NullMotorInterface()
+        else:
+            logger.error("Failed to connect to motor!")
+            return None
     
     # Configure motor speed/acceleration
     obMotorInterface.send_speed_and_acceleration_settings(
@@ -241,6 +245,9 @@ def main():
     
     (obMotorInterface, obCameraInterface, obPoseTracker,
      obFOVEstimator, obControlAlgorithm, obTrackerController) = obComponents
+    
+    # Prepare window
+    cv2.namedWindow('Pastor Tracking System', cv2.WINDOW_NORMAL)
     
     # Main loop
     logger.info("=" * 60)
