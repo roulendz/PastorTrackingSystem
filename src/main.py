@@ -103,23 +103,10 @@ def initialize_system(obConfig):
         obConfig.bPoseEnableSegmentation
     )
     
-    # 4. FOV Estimator
-    logger.info("Initializing FOV estimator...")
-    
-    # Use stored calibration if available
-    if obConfig.bUseStoredCalibration and obConfig.flStoredAnglePerPixelDegrees > 0:
-        flInitialAnglePerPixel = obConfig.flStoredAnglePerPixelDegrees
-        logger.info(f"Using stored calibration: {flInitialAnglePerPixel:.6f} deg/px")
-    else:
-        flInitialAnglePerPixel = obConfig.flInitialAnglePerPixelDegrees
-        logger.info(f"Using default calibration: {flInitialAnglePerPixel:.6f} deg/px")
-    
-    obFOVEstimator = FieldOfViewEstimator(
-        flInitialAnglePerPixel,
-        obConfig.flMinAngleChangeForLearningDegrees,
-        obConfig.flMinPixelChangeForLearningPixels,
-        obConfig.flLearningRateAlpha
-    )
+    # 4. FOV (manual)
+    logger.info("Initializing FOV...")
+    flInitialAnglePerPixel = obConfig.flInitialAnglePerPixelDegrees
+    obFOVEstimator = FieldOfViewEstimator(flInitialAnglePerPixel)
     
     # 5. Control Algorithm
     logger.info(f"Initializing {obConfig.sControlAlgorithmType} controller...")
@@ -261,8 +248,6 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
             f"FPS: {obStats['average_fps']:.1f}",
             f"Motor: {obStats['motor_angle']:.2f}deg",
             f"FOV: {obStats['fov_degrees']:.1f}deg",
-            f"Calibration: {obStats['calibration_samples']} samples",
-            f"Converged: {'YES' if obStats['fov_converged'] else 'NO'}"
         ]
         
         for sLine in vInfoLines:
@@ -281,24 +266,7 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
             TextRenderer.draw_text(obFrame, sLine, (10, iYPos), 0.5, (255, 255, 255), 1)
             iYPos += 20
 
-    # Background tracking visualization
-    try:
-        flBGdx = obTrackerController.obFieldOfViewEstimator.get_last_background_pixel_delta_horizontal()
-        sBG = f"BG dx: {flBGdx:.1f}px"
-        TextRenderer.draw_text(obFrame, sBG, (10, iHeight - 120), 0.6, (255, 255, 0), 2)
-        rect = obTrackerController.obFieldOfViewEstimator.get_last_person_mask_rect()
-        if rect:
-            x0, y0, x1, y1 = rect
-            x0 = max(0, min(obFrame.shape[1]-1, x0))
-            y0 = max(0, min(obFrame.shape[0]-1, y0))
-            x1 = max(0, min(obFrame.shape[1]-1, x1))
-            y1 = max(0, min(obFrame.shape[0]-1, y1))
-            cv2.rectangle(obFrame, (x0, y0), (x1, y1), (255, 255, 0), 1)
-            cx = (x0 + x1) // 2
-            arrow_len = int(min(obFrame.shape[1], 200) * max(-1.0, min(1.0, flBGdx / 50.0)))
-            cv2.arrowedLine(obFrame, (cx, 50), (cx + arrow_len, 50), (255, 255, 0), 2, tipLength=0.2)
-    except Exception:
-        pass
+    # Background motion visualization removed
 
 
 def main():
@@ -380,9 +348,7 @@ def main():
                 if obTrackerController.is_currently_tracking():
                     obTrackerController.stop_tracking_mode()
                     logger.info("Tracking PAUSED")
-            elif iKey == ord('c') or iKey == ord('C'):
-                obTrackerController.start_calibration_mode()
-                logger.info("Calibration mode STARTED")
+            
             elif iKey == ord('h') or iKey == ord('H'):
                 obMotorInterface.send_home_command()
                 logger.info("Homing motor...")
@@ -398,11 +364,7 @@ def main():
         if obTrackerController.is_currently_tracking():
             obTrackerController.stop_tracking_mode()
         
-        # Save calibration
-        flFinalAnglePerPixel = obFOVEstimator.get_estimated_angle_per_pixel_ratio()
-        obConfigManager.update_stored_calibration(flFinalAnglePerPixel)
-        obConfigManager.save_configuration_to_file()
-        logger.info(f"Calibration saved: {flFinalAnglePerPixel:.6f} deg/px")
+        
         
         # Home motor
         obMotorInterface.send_home_command()

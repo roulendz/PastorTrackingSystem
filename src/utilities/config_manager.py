@@ -40,11 +40,8 @@ class SystemConfiguration:
     flPoseMinTrackingConfidence: float = 0.5
     bPoseEnableSegmentation: bool = False
     
-    # FOV estimator settings
+    # FOV settings
     flInitialAnglePerPixelDegrees: float = 0.05
-    flMinAngleChangeForLearningDegrees: float = 1.0
-    flMinPixelChangeForLearningPixels: float = 10.0
-    flLearningRateAlpha: float = 0.05
     
     # Control settings
     sControlAlgorithmType: str = "P"  # "P", "PID", or "Velocity"
@@ -56,9 +53,6 @@ class SystemConfiguration:
     flDeadbandMaxDegrees: float = 20.0
     flTrackingMinConfidenceForControl: float = 0.3
     
-    # Stored calibration
-    bUseStoredCalibration: bool = False
-    flStoredAnglePerPixelDegrees: float = 0.0
     
     # Visualization
     bEnableVisualization: bool = True
@@ -159,16 +153,7 @@ class ConfigurationManager:
         """
         return self.obCurrentConfig
     
-    def update_stored_calibration(self, flAnglePerPixelDegrees: float):
-        """
-        Update stored FOV calibration.
-        
-        Args:
-            flAnglePerPixelDegrees: Calibrated angle per pixel value
-        """
-        self.obCurrentConfig.flStoredAnglePerPixelDegrees = flAnglePerPixelDegrees
-        self.obCurrentConfig.bUseStoredCalibration = True
-        logger.info(f"Stored calibration updated: {flAnglePerPixelDegrees:.6f} deg/px")
+    
     
     def validate_configuration(self) -> bool:
         """

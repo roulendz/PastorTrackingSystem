@@ -10,7 +10,6 @@ Follows:
 """
 
 import time
-import numpy as np
 from enum import Enum
 from typing import Optional
 import logging
@@ -29,7 +28,6 @@ class TrackerState(Enum):
     """States for the tracking system."""
     IDLE = "idle"
     TRACKING = "tracking"
-    CALIBRATING = "calibrating"
     ERROR = "error"
 
 
@@ -126,13 +124,8 @@ class TrackerController:
             )
             self.iNextSampleSequenceNumber += 1
             
-            # STEP 5: Update FOV estimator (learning loop)
-            self.obFieldOfViewEstimator.update_field_of_view_estimator_with_sample(
-                obNewSample
-            )
-            
-            # STEP 6: Execute control (if tracking or calibrating)
-            if self.eCurrentState in (TrackerState.TRACKING, TrackerState.CALIBRATING):
+            # STEP 5: Execute control (if tracking)
+            if self.eCurrentState == TrackerState.TRACKING:
                 self._execute_centering_control_algorithm(obNewSample)
             
             # Update statistics
@@ -158,20 +151,9 @@ class TrackerController:
         self.obMotorInterface.send_emergency_stop_command()
         logger.info("Tracking mode STOPPED")
     
-    def start_calibration_mode(self):
-        """
-        Enter calibration mode.
-        """
-        self.eCurrentState = TrackerState.CALIBRATING
-        logger.info("Calibration mode STARTED")
-    
     def is_currently_tracking(self) -> bool:
         """Check if actively tracking."""
         return self.eCurrentState == TrackerState.TRACKING
-    
-    def is_field_of_view_calibrated(self) -> bool:
-        """Check if FOV has converged."""
-        return self.obFieldOfViewEstimator.has_field_of_view_estimate_converged()
     
     def get_current_field_of_view_degrees(self) -> float:
         """Get current FOV estimate."""
@@ -183,9 +165,6 @@ class TrackerController:
         obState = self.obMotorInterface.get_latest_motor_state()
         return obState.flMotorAngleDegrees
     
-    def get_calibration_sample_count(self) -> int:
-        """Get number of samples used for FOV learning."""
-        return self.obFieldOfViewEstimator.get_number_of_samples_used_for_learning()
     
     def get_system_statistics(self) -> dict:
         """
@@ -202,9 +181,7 @@ class TrackerController:
             'frames_processed': self.iFramesProcessedCount,
             'average_fps': flAverageFPS,
             'motor_angle': self.get_current_motor_angle_degrees(),
-            'fov_degrees': self.get_current_field_of_view_degrees(),
-            'fov_converged': self.is_field_of_view_calibrated(),
-            'calibration_samples': self.get_calibration_sample_count()
+            'fov_degrees': self.get_current_field_of_view_degrees()
         }
     
     # Private methods
