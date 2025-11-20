@@ -52,6 +52,9 @@ class SystemConfiguration:
     flControlIntegralGain: float = 0.0
     flControlDerivativeGain: float = 0.1
     flControlDeadbandDegrees: float = 0.3
+    flDeadbandMinDegrees: float = 0.01
+    flDeadbandMaxDegrees: float = 20.0
+    flTrackingMinConfidenceForControl: float = 0.3
     
     # Stored calibration
     bUseStoredCalibration: bool = False
@@ -61,6 +64,7 @@ class SystemConfiguration:
     bEnableVisualization: bool = True
     bShowDebugInfo: bool = True
     bAllowStartWithoutMotor: bool = True
+    bEnableDeadzoneOverlay: bool = True
 
 
 class ConfigurationManager:

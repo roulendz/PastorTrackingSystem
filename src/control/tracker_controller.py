@@ -76,8 +76,11 @@ class TrackerController:
         
         # Configuration
         self.flDeadbandDegrees = 0.3
+        self.flDeadbandMinDegrees = 0.01
+        self.flDeadbandMaxDegrees = 20.0
         self.flMinimumMotorAngleDegrees = -90.0
         self.flMaximumMotorAngleDegrees = 90.0
+        self.flMinimumTrackingConfidenceForControl = 0.5
         
         # Statistics
         self.iFramesProcessedCount = 0
@@ -117,6 +120,7 @@ class TrackerController:
                 bPersonWasDetected=obPoseResult.bPersonWasDetected,
                 iSampleSequenceNumber=self.iNextSampleSequenceNumber,
                 flPersonConfidenceScore=obPoseResult.flPersonConfidenceScore,
+                flMinimumConfidenceRequired=self.flMinimumTrackingConfidenceForControl,
                 obFrameImage=obFrameImage  # For visualization
             )
             self.iNextSampleSequenceNumber += 1
@@ -225,24 +229,22 @@ class TrackerController:
         iImageWidth, _ = self.obCameraInterface.get_frame_dimensions()
         flPixelOffset = obCurrentSample.get_pixel_offset_from_center(iImageWidth)
         
-        # Convert to angle error
+        # Convert to angle error relative to camera center
         flAngleError = flPixelOffset * flAnglePerPixel
-        
-        # Apply deadband (ignore tiny errors)
-        if abs(flAngleError) < self.flDeadbandDegrees:
-            flAngleError = 0.0
-        
-        # Skip if error is zero
-        if flAngleError == 0.0:
-            return
-        
-        # Calculate correction using control algorithm
-        flCorrection = self.obControlAlgorithm.calculate_correction_from_error(
-            flAngleError
-        )
-        
-        # Compute new target angle
-        flNewTargetAngle = obCurrentSample.flMotorAngleDegrees + flCorrection
+
+        # Absolute person angle relative to home (0°)
+        flPersonAngleRelativeToHome = obCurrentSample.flMotorAngleDegrees + flAngleError
+
+        # Home-biased deadzone: if person within ±deadband of home line, move to 0°
+        if abs(flPersonAngleRelativeToHome) <= self.flDeadbandDegrees:
+            flNewTargetAngle = 0.0
+        else:
+            # Calculate correction using control algorithm (track person)
+            flCorrection = self.obControlAlgorithm.calculate_correction_from_error(
+                flAngleError
+            )
+            # Compute new target angle
+            flNewTargetAngle = obCurrentSample.flMotorAngleDegrees + flCorrection
         
         # Clamp to safety limits
         flNewTargetAngle = max(
@@ -258,6 +260,20 @@ class TrackerController:
         else:
             logger.debug(
                 f"Control: error={flAngleError:.2f}°, "
-                f"correction={flCorrection:.2f}°, "
                 f"target={flNewTargetAngle:.2f}°"
             )
+
+    # Public API for UI/config integration
+    def set_deadband_degrees(self, flDegrees: float):
+        self.flDeadbandDegrees = max(self.flDeadbandMinDegrees, min(self.flDeadbandMaxDegrees, float(flDegrees)))
+
+    def get_deadband_degrees(self) -> float:
+        return self.flDeadbandDegrees
+
+    def apply_configuration(self, obConfig):
+        self.flDeadbandDegrees = float(getattr(obConfig, 'flControlDeadbandDegrees', self.flDeadbandDegrees))
+        self.flDeadbandMinDegrees = float(getattr(obConfig, 'flDeadbandMinDegrees', self.flDeadbandMinDegrees))
+        self.flDeadbandMaxDegrees = float(getattr(obConfig, 'flDeadbandMaxDegrees', self.flDeadbandMaxDegrees))
+        self.flMinimumMotorAngleDegrees = float(getattr(obConfig, 'flMotorMinAngleDegrees', self.flMinimumMotorAngleDegrees))
+        self.flMaximumMotorAngleDegrees = float(getattr(obConfig, 'flMotorMaxAngleDegrees', self.flMaximumMotorAngleDegrees))
+        self.flMinimumTrackingConfidenceForControl = float(getattr(obConfig, 'flTrackingMinConfidenceForControl', self.flMinimumTrackingConfidenceForControl))

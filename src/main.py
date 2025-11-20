@@ -145,6 +145,8 @@ def initialize_system(obConfig):
         obFOVEstimator,
         obControlAlgorithm
     )
+    # Apply configuration to controller
+    obTrackerController.apply_configuration(obConfig)
     
     logger.info("✓ All systems initialized successfully!")
     
@@ -158,7 +160,60 @@ def initialize_system(obConfig):
     )
 
 
-def draw_visualization_overlay(obFrame, obSample, obStats, obConfig):
+class DeadzoneUIController:
+    def __init__(self, obTrackerController: TrackerController, obConfig):
+        self.obTrackerController = obTrackerController
+        self.obConfig = obConfig
+        self.iHomeLineX = 0
+        self.flAnglePerPixel = 0.05
+        self.iImageHeight = 0
+        self.bDraggingLeft = False
+        self.bDraggingRight = False
+        self.iDragThresholdPixels = 8
+
+    def update_mapping(self, iHomeLineX: int, flAnglePerPixel: float, iImageHeight: int):
+        self.iHomeLineX = iHomeLineX
+        self.flAnglePerPixel = max(1e-9, flAnglePerPixel)
+        self.iImageHeight = iImageHeight
+
+    def on_mouse(self, event, x, y, flags, param=None):
+        flDeadbandDeg = self.obTrackerController.get_deadband_degrees()
+        iDeadbandPx = int(flDeadbandDeg / self.flAnglePerPixel)
+        iLeftX = self.iHomeLineX - iDeadbandPx
+        iRightX = self.iHomeLineX + iDeadbandPx
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if abs(x - iLeftX) <= self.iDragThresholdPixels:
+                self.bDraggingLeft = True
+            elif abs(x - iRightX) <= self.iDragThresholdPixels:
+                self.bDraggingRight = True
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if self.bDraggingLeft:
+                iNewDeadbandPx = abs(self.iHomeLineX - x)
+                flNewDeg = iNewDeadbandPx * self.flAnglePerPixel
+                self.obTrackerController.set_deadband_degrees(flNewDeg)
+            elif self.bDraggingRight:
+                iNewDeadbandPx = abs(x - self.iHomeLineX)
+                flNewDeg = iNewDeadbandPx * self.flAnglePerPixel
+                self.obTrackerController.set_deadband_degrees(flNewDeg)
+        elif event == cv2.EVENT_LBUTTONUP:
+            self.bDraggingLeft = False
+            self.bDraggingRight = False
+
+    def draw(self, obFrame):
+        iHeight, iWidth = obFrame.shape[:2]
+        flDeadbandDeg = self.obTrackerController.get_deadband_degrees()
+        iDeadbandPx = int(flDeadbandDeg / self.flAnglePerPixel)
+        iLeftX = max(0, self.iHomeLineX - iDeadbandPx)
+        iRightX = min(iWidth - 1, self.iHomeLineX + iDeadbandPx)
+        cv2.line(obFrame, (iLeftX, 0), (iLeftX, iHeight), (0, 255, 0), 1)
+        cv2.line(obFrame, (iRightX, 0), (iRightX, iHeight), (0, 255, 0), 1)
+        sText = f"Deadzone: {flDeadbandDeg:.2f}°"
+        cv2.putText(obFrame, sText, (iRightX + 10 if iRightX + 150 < iWidth else max(10, iLeftX - 150), 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+
+def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneUI: DeadzoneUIController):
     """
     Draw visualization overlay on frame.
     
@@ -173,6 +228,16 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig):
     # Draw center line
     iCenterX = iWidth // 2
     cv2.line(obFrame, (iCenterX, 0), (iCenterX, iHeight), (0, 255, 255), 2)
+
+    # Compute virtual home line based on current motor angle (locked to world plane)
+    flFOVDegrees = obStats['fov_degrees'] if obStats and 'fov_degrees' in obStats else 0.0
+    flAnglePerPixel = (flFOVDegrees / iWidth) if iWidth > 0 else 0.0
+    flMotorAngle = obStats['motor_angle'] if obStats and 'motor_angle' in obStats else 0.0
+    iHomeLineX = int(iCenterX - (flMotorAngle / (flAnglePerPixel if flAnglePerPixel != 0 else 1e-9)))
+    iHomeLineX = max(0, min(iWidth - 1, iHomeLineX))
+    cv2.line(obFrame, (iHomeLineX, 0), (iHomeLineX, iHeight), (255, 255, 0), 1)
+    obDeadzoneUI.update_mapping(iHomeLineX, flAnglePerPixel if flAnglePerPixel != 0 else 1e-9, iHeight)
+    obDeadzoneUI.draw(obFrame)
     
     # Draw person center if detected
     if obSample and obSample.bPersonWasDetected:
@@ -248,6 +313,8 @@ def main():
     
     # Prepare window
     cv2.namedWindow('Pastor Tracking System', cv2.WINDOW_NORMAL)
+    obDeadzoneUI = DeadzoneUIController(obTrackerController, obConfig)
+    cv2.setMouseCallback('Pastor Tracking System', obDeadzoneUI.on_mouse)
     
     # Main loop
     logger.info("=" * 60)
@@ -275,7 +342,7 @@ def main():
                     obVisFrame = obPoseTracker.draw_pose_on_frame(obVisFrame, obPoseResult)
                 
                 # Draw overlay
-                draw_visualization_overlay(obVisFrame, obSample, dStats, obConfig)
+                draw_visualization_overlay(obVisFrame, obSample, dStats, obConfig, obDeadzoneUI)
                 
                 # Show frame
                 cv2.imshow('Pastor Tracking System', obVisFrame)

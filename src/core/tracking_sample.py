@@ -40,6 +40,7 @@ class TrackingSample:
     bPersonWasDetected: bool
     iSampleSequenceNumber: int
     flPersonConfidenceScore: float = 0.0
+    flMinimumConfidenceRequired: float = 0.5
     obFrameImage: Optional[np.ndarray] = None
     
     def get_pixel_offset_from_center(self, iImageWidthPixels: int) -> float:
@@ -62,7 +63,7 @@ class TrackingSample:
         Returns:
             True if person was detected with sufficient confidence
         """
-        return self.bPersonWasDetected and self.flPersonConfidenceScore > 0.5
+        return self.bPersonWasDetected and self.flPersonConfidenceScore >= self.flMinimumConfidenceRequired
     
     def __repr__(self) -> str:
         """String representation for debugging."""
