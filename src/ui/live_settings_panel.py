@@ -40,14 +40,21 @@ def _ranges() -> Dict[str, Tuple[float, float, float]]:
     }
 
 
-def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int]):
+def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], fnOnChange=None, bInteger: bool = False):
     flMin, flMax, _ = _ranges().get(sKey, (0.0, 100.0, 1.0))
-    with dpg.group(horizontal=True):
-        iMin = dpg.add_input_float(label=f"{sKey} min", default_value=flMin, width=100)
-        iMax = dpg.add_input_float(label=f"{sKey} max", default_value=flMax, width=100)
-        dpg.add_button(label="Apply", callback=lambda: dpg.configure_item(dItems[sKey], min_value=dpg.get_value(iMin), max_value=dpg.get_value(iMax)))
-    dItems[sKey] = dpg.add_slider_float(label=sKey, default_value=float(vDefault), min_value=flMin, max_value=flMax)
-    dpg.add_input_float(label=f"{sKey} value", default_value=float(vDefault), callback=lambda s, a, u: dpg.set_value(dItems[sKey], a))
+    with dpg.group():
+        iMin = dpg.add_input_float(label=f"{sKey} min", default_value=flMin, width=120)
+        iMax = dpg.add_input_float(label=f"{sKey} max", default_value=flMax, width=120)
+        def _apply_range():
+            dpg.configure_item(dItems[sKey], min_value=dpg.get_value(iMin), max_value=dpg.get_value(iMax))
+        dpg.set_item_callback(iMin, lambda s, a, u: _apply_range())
+        dpg.set_item_callback(iMax, lambda s, a, u: _apply_range())
+    if bInteger:
+        dItems[sKey] = dpg.add_slider_int(label=sKey, default_value=int(vDefault), min_value=int(flMin), max_value=int(flMax), callback=lambda s, a, u: fnOnChange and fnOnChange(int(a)))
+        dpg.add_input_int(label=f"{sKey} value", default_value=int(vDefault), callback=lambda s, a, u: dpg.set_value(dItems[sKey], int(a)))
+    else:
+        dItems[sKey] = dpg.add_slider_float(label=sKey, default_value=float(vDefault), min_value=flMin, max_value=flMax, callback=lambda s, a, u: fnOnChange and fnOnChange(float(a)))
+        dpg.add_input_float(label=f"{sKey} value", default_value=float(vDefault), callback=lambda s, a, u: dpg.set_value(dItems[sKey], float(a)))
 
 
 def _apply_motor_settings(obMotor: MotorInterface, obConfig):
@@ -99,6 +106,12 @@ def _apply_control_algorithm(obTracker: TrackerController, obConfig):
         obAlgo = ProportionalController(obConfig.flControlProportionalGain)
     obTracker.set_control_algorithm(obAlgo)
 
+def _bind_global_scale():
+    try:
+        dpg.set_global_font_scale(1.2)
+    except Exception:
+        pass
+
 
 def start_live_settings_panel(
     obConfigManager: ConfigurationManager,
@@ -110,81 +123,172 @@ def start_live_settings_panel(
     dpg.create_context()
     dpg.create_viewport(title="Live Settings", width=600, height=800)
     dpg.setup_dearpygui()
+    _bind_global_scale()
 
     obConfig = obConfigManager.get_system_configuration()
     dItems: Dict[str, int] = {}
 
     with dpg.window(label="Settings", width=580, height=760):
         dpg.add_text("Motor")
-        _add_slider_with_range("flMotorMaxSpeedStepsPerSecond", obConfig.flMotorMaxSpeedStepsPerSecond, dItems)
-        _add_slider_with_range("flMotorMaxAccelerationStepsPerSecondSquared", obConfig.flMotorMaxAccelerationStepsPerSecondSquared, dItems)
-
-        def _on_apply_motor():
-            obConfig.flMotorMaxSpeedStepsPerSecond = float(dpg.get_value(dItems["flMotorMaxSpeedStepsPerSecond"]))
-            obConfig.flMotorMaxAccelerationStepsPerSecondSquared = float(dpg.get_value(dItems["flMotorMaxAccelerationStepsPerSecondSquared"]))
-            _apply_motor_settings(obMotor, obConfig)
-        dpg.add_button(label="Apply Motor", callback=_on_apply_motor)
+        _add_slider_with_range(
+            "flMotorMaxSpeedStepsPerSecond",
+            obConfig.flMotorMaxSpeedStepsPerSecond,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flMotorMaxSpeedStepsPerSecond', float(v)),
+                _apply_motor_settings(obMotor, obConfig)
+            )
+        )
+        _add_slider_with_range(
+            "flMotorMaxAccelerationStepsPerSecondSquared",
+            obConfig.flMotorMaxAccelerationStepsPerSecondSquared,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flMotorMaxAccelerationStepsPerSecondSquared', float(v)),
+                _apply_motor_settings(obMotor, obConfig)
+            )
+        )
 
         dpg.add_separator()
         dpg.add_text("Angles")
-        _add_slider_with_range("flMotorMinAngleDegrees", obConfig.flMotorMinAngleDegrees, dItems)
-        _add_slider_with_range("flMotorMaxAngleDegrees", obConfig.flMotorMaxAngleDegrees, dItems)
-        def _on_apply_angles():
-            obConfig.flMotorMinAngleDegrees = float(dpg.get_value(dItems["flMotorMinAngleDegrees"]))
-            obConfig.flMotorMaxAngleDegrees = float(dpg.get_value(dItems["flMotorMaxAngleDegrees"]))
-            obTracker.set_angle_limits(obConfig.flMotorMinAngleDegrees, obConfig.flMotorMaxAngleDegrees)
-        dpg.add_button(label="Apply Angle Limits", callback=_on_apply_angles)
+        _add_slider_with_range(
+            "flMotorMinAngleDegrees",
+            obConfig.flMotorMinAngleDegrees,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flMotorMinAngleDegrees', float(v)),
+                obTracker.set_angle_limits(float(v), obConfig.flMotorMaxAngleDegrees)
+            )
+        )
+        _add_slider_with_range(
+            "flMotorMaxAngleDegrees",
+            obConfig.flMotorMaxAngleDegrees,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flMotorMaxAngleDegrees', float(v)),
+                obTracker.set_angle_limits(obConfig.flMotorMinAngleDegrees, float(v))
+            )
+        )
 
         dpg.add_separator()
         dpg.add_text("Control")
-        _add_slider_with_range("flControlDeadbandDegrees", obConfig.flControlDeadbandDegrees, dItems)
-        _add_slider_with_range("flTrackingMinConfidenceForControl", obConfig.flTrackingMinConfidenceForControl, dItems)
-        def _on_apply_control():
-            obConfig.flControlDeadbandDegrees = float(dpg.get_value(dItems["flControlDeadbandDegrees"]))
-            obTracker.set_deadband_degrees(obConfig.flControlDeadbandDegrees)
-            obConfig.flTrackingMinConfidenceForControl = float(dpg.get_value(dItems["flTrackingMinConfidenceForControl"]))
-            obTracker.set_tracking_confidence_threshold(obConfig.flTrackingMinConfidenceForControl)
-        dpg.add_button(label="Apply Control", callback=_on_apply_control)
+        _add_slider_with_range(
+            "flControlDeadbandDegrees",
+            obConfig.flControlDeadbandDegrees,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flControlDeadbandDegrees', float(v)),
+                obTracker.set_deadband_degrees(float(v))
+            )
+        )
+        _add_slider_with_range(
+            "flTrackingMinConfidenceForControl",
+            obConfig.flTrackingMinConfidenceForControl,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flTrackingMinConfidenceForControl', float(v)),
+                obTracker.set_tracking_confidence_threshold(float(v))
+            )
+        )
 
         dpg.add_text("Algorithm")
         iAlgo = dpg.add_radio_button(items=["P", "PID", "Velocity"], default_value=obConfig.sControlAlgorithmType, horizontal=True)
-        _add_slider_with_range("flControlProportionalGain", obConfig.flControlProportionalGain, dItems)
-        _add_slider_with_range("flControlIntegralGain", obConfig.flControlIntegralGain, dItems)
-        _add_slider_with_range("flControlDerivativeGain", obConfig.flControlDerivativeGain, dItems)
-        _add_slider_with_range("flVelocityGain", obConfig.flVelocityGain, dItems)
-        _add_slider_with_range("flMaxVelocityDegreesPerSecond", obConfig.flMaxVelocityDegreesPerSecond, dItems)
-        _add_slider_with_range("flVelocitySmoothingAlpha", obConfig.flVelocitySmoothingAlpha, dItems)
-        def _on_apply_algo():
-            obConfig.sControlAlgorithmType = str(dpg.get_value(iAlgo))
-            obConfig.flControlProportionalGain = float(dpg.get_value(dItems["flControlProportionalGain"]))
-            obConfig.flControlIntegralGain = float(dpg.get_value(dItems["flControlIntegralGain"]))
-            obConfig.flControlDerivativeGain = float(dpg.get_value(dItems["flControlDerivativeGain"]))
-            obConfig.flVelocityGain = float(dpg.get_value(dItems["flVelocityGain"]))
-            obConfig.flMaxVelocityDegreesPerSecond = float(dpg.get_value(dItems["flMaxVelocityDegreesPerSecond"]))
-            obConfig.flVelocitySmoothingAlpha = float(dpg.get_value(dItems["flVelocitySmoothingAlpha"]))
+        dpg.set_item_callback(iAlgo, lambda s, a, u: (
+            setattr(obConfig, 'sControlAlgorithmType', str(a)),
             _apply_control_algorithm(obTracker, obConfig)
-        dpg.add_button(label="Apply Algorithm", callback=_on_apply_algo)
+        ))
+        _add_slider_with_range(
+            "flControlProportionalGain",
+            obConfig.flControlProportionalGain,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flControlProportionalGain', float(v)),
+                isinstance(obTracker.obControlAlgorithm, ProportionalController) and obTracker.obControlAlgorithm.set_proportional_gain(float(v)),
+                isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(float(v), obConfig.flControlIntegralGain, obConfig.flControlDerivativeGain)
+            )
+        )
+        _add_slider_with_range(
+            "flControlIntegralGain",
+            obConfig.flControlIntegralGain,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flControlIntegralGain', float(v)),
+                isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(obConfig.flControlProportionalGain, float(v), obConfig.flControlDerivativeGain)
+            )
+        )
+        _add_slider_with_range(
+            "flControlDerivativeGain",
+            obConfig.flControlDerivativeGain,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flControlDerivativeGain', float(v)),
+                isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(obConfig.flControlProportionalGain, obConfig.flControlIntegralGain, float(v))
+            )
+        )
+        _add_slider_with_range(
+            "flVelocityGain",
+            obConfig.flVelocityGain,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flVelocityGain', float(v)),
+                isinstance(obTracker.obControlAlgorithm, VelocityController) and obTracker.obControlAlgorithm.set_parameters(float(v), obConfig.flMaxVelocityDegreesPerSecond, obConfig.flVelocitySmoothingAlpha)
+            )
+        )
+        _add_slider_with_range(
+            "flMaxVelocityDegreesPerSecond",
+            obConfig.flMaxVelocityDegreesPerSecond,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flMaxVelocityDegreesPerSecond', float(v)),
+                isinstance(obTracker.obControlAlgorithm, VelocityController) and obTracker.obControlAlgorithm.set_parameters(obConfig.flVelocityGain, float(v), obConfig.flVelocitySmoothingAlpha)
+            )
+        )
+        _add_slider_with_range(
+            "flVelocitySmoothingAlpha",
+            obConfig.flVelocitySmoothingAlpha,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flVelocitySmoothingAlpha', float(v)),
+                isinstance(obTracker.obControlAlgorithm, VelocityController) and obTracker.obControlAlgorithm.set_parameters(obConfig.flVelocityGain, obConfig.flMaxVelocityDegreesPerSecond, float(v))
+            )
+        )
 
         dpg.add_separator()
         dpg.add_text("FOV")
-        _add_slider_with_range("flInitialAnglePerPixelDegrees", obConfig.flInitialAnglePerPixelDegrees, dItems)
-        def _on_apply_fov():
-            obConfig.flInitialAnglePerPixelDegrees = float(dpg.get_value(dItems["flInitialAnglePerPixelDegrees"]))
-            obTracker.set_fov_angle_per_pixel(obConfig.flInitialAnglePerPixelDegrees)
-        dpg.add_button(label="Apply FOV", callback=_on_apply_fov)
+        iWidth, _ = obCamera.get_frame_dimensions()
+        flInitialFOV = obFOV.get_estimated_field_of_view_degrees(iWidth)
+        # FOV degrees slider maps to angle-per-pixel internally
+        def _on_fov_change(flFovDegrees: float):
+            flAnglePerPixel = float(flFovDegrees) / float(max(1, iWidth))
+            obConfig.flInitialAnglePerPixelDegrees = flAnglePerPixel
+            obTracker.set_fov_angle_per_pixel(flAnglePerPixel)
+        # Use a dedicated range for FOV degrees
+        dItems["flFieldOfViewDegrees"] = None
+        with dpg.group():
+            iMinFov = dpg.add_input_float(label="flFieldOfViewDegrees min", default_value=10.0, width=120)
+            iMaxFov = dpg.add_input_float(label="flFieldOfViewDegrees max", default_value=180.0, width=120)
+            def _apply_fov_range():
+                dpg.configure_item(dItems["flFieldOfViewDegrees"], min_value=dpg.get_value(iMinFov), max_value=dpg.get_value(iMaxFov))
+            dpg.set_item_callback(iMinFov, lambda s, a, u: _apply_fov_range())
+            dpg.set_item_callback(iMaxFov, lambda s, a, u: _apply_fov_range())
+        dItems["flFieldOfViewDegrees"] = dpg.add_slider_float(label="flFieldOfViewDegrees", default_value=float(flInitialFOV), min_value=10.0, max_value=180.0, callback=lambda s, a, u: _on_fov_change(float(a)))
+        dpg.add_input_float(label="flFieldOfViewDegrees value", default_value=float(flInitialFOV), callback=lambda s, a, u: dpg.set_value(dItems["flFieldOfViewDegrees"], float(a)))
 
         dpg.add_separator()
         dpg.add_text("Visualization")
         iShow = dpg.add_checkbox(label="bShowDebugInfo", default_value=obConfig.bShowDebugInfo)
+        dpg.set_item_callback(iShow, lambda s, a, u: setattr(obConfig, 'bShowDebugInfo', bool(a)))
         iEnableVis = dpg.add_checkbox(label="bEnableVisualization", default_value=obConfig.bEnableVisualization)
+        dpg.set_item_callback(iEnableVis, lambda s, a, u: setattr(obConfig, 'bEnableVisualization', bool(a)))
         iDeadzoneOverlay = dpg.add_checkbox(label="bEnableDeadzoneOverlay", default_value=obConfig.bEnableDeadzoneOverlay)
-        _add_slider_with_range("iCenterDeadzoneRadiusPixels", obConfig.iCenterDeadzoneRadiusPixels, dItems)
-        def _on_apply_vis():
-            obConfig.bShowDebugInfo = bool(dpg.get_value(iShow))
-            obConfig.bEnableVisualization = bool(dpg.get_value(iEnableVis))
-            obConfig.bEnableDeadzoneOverlay = bool(dpg.get_value(iDeadzoneOverlay))
-            obConfig.iCenterDeadzoneRadiusPixels = int(dpg.get_value(dItems["iCenterDeadzoneRadiusPixels"]))
-        dpg.add_button(label="Apply Visualization", callback=_on_apply_vis)
+        dpg.set_item_callback(iDeadzoneOverlay, lambda s, a, u: setattr(obConfig, 'bEnableDeadzoneOverlay', bool(a)))
+        _add_slider_with_range(
+            "iCenterDeadzoneRadiusPixels",
+            obConfig.iCenterDeadzoneRadiusPixels,
+            dItems,
+            fnOnChange=lambda v: setattr(obConfig, 'iCenterDeadzoneRadiusPixels', int(v)),
+            bInteger=True
+        )
 
         dpg.add_separator()
         def _on_save():
