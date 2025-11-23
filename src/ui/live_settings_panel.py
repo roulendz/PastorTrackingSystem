@@ -15,7 +15,7 @@ from control.control_algorithm import ProportionalController, PIDController, Vel
 
 def _ranges() -> Dict[str, Tuple[float, float, float]]:
     return {
-        "flMotorMaxSpeedStepsPerSecond": (1000.0, 50000.0, 100.0),
+        "flMotorMaxSpeedStepsPerSecond": (50.0, 25000.0, 100.0),
         "flMotorMaxAccelerationStepsPerSecondSquared": (1000.0, 50000.0, 100.0),
         "flMotorMinAngleDegrees": (-180.0, 0.0, 0.1),
         "flMotorMaxAngleDegrees": (0.0, 180.0, 0.1),
