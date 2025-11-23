@@ -168,6 +168,7 @@ class DeadzoneUIController:
         self.iImageHeight = 0
         self.bDraggingLeft = False
         self.bDraggingRight = False
+        self.bDraggingCenter = False
         self.iDragThresholdPixels = 8
 
     def update_mapping(self, iHomeLineX: int, flAnglePerPixel: float, iImageHeight: int):
@@ -186,6 +187,8 @@ class DeadzoneUIController:
                 self.bDraggingLeft = True
             elif abs(x - iRightX) <= self.iDragThresholdPixels:
                 self.bDraggingRight = True
+            elif abs(x - self.iHomeLineX) <= self.iDragThresholdPixels:
+                self.bDraggingCenter = True
         elif event == cv2.EVENT_MOUSEMOVE:
             if self.bDraggingLeft:
                 iNewDeadbandPx = abs(self.iHomeLineX - x)
@@ -195,9 +198,19 @@ class DeadzoneUIController:
                 iNewDeadbandPx = abs(x - self.iHomeLineX)
                 flNewDeg = iNewDeadbandPx * self.flAnglePerPixel
                 self.obTrackerController.set_deadband_degrees(flNewDeg)
+            elif self.bDraggingCenter:
+                iCenterX = int(self.obConfig.iCameraWidthPixels // 2)
+                flNewAngle = (iCenterX - x) * self.flAnglePerPixel
+                self.obTrackerController.obMotorInterface.send_move_to_angle_command(flNewAngle)
+                try:
+                    from ui.live_settings_panel import update_center_angle_slider
+                    update_center_angle_slider(flNewAngle)
+                except Exception:
+                    pass
         elif event == cv2.EVENT_LBUTTONUP:
             self.bDraggingLeft = False
             self.bDraggingRight = False
+            self.bDraggingCenter = False
 
     def draw(self, obFrame):
         iHeight, iWidth = obFrame.shape[:2]
