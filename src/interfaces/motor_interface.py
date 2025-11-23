@@ -159,6 +159,10 @@ class MotorInterface:
         """
         iEnableValue = 1 if bEnableDriver else 0
         return self._send_command(f"X,{iEnableValue}\n")
+
+    def send_reset_position_command(self) -> bool:
+        """Set current mechanical position as 0° without moving."""
+        return self._send_command("R\n")
     
     def send_speed_and_acceleration_settings(
         self,
@@ -344,6 +348,11 @@ class NullMotorInterface:
         return True
 
     def send_speed_and_acceleration_settings(self, a, b) -> bool:
+        return True
+
+    def send_reset_position_command(self) -> bool:
+        self._obLatestMotorState.flMotorAngleDegrees = 0.0
+        self._obLatestMotorState.flMotorTargetAngleDegrees = 0.0
         return True
 
     def get_latest_motor_state(self) -> MotorState:

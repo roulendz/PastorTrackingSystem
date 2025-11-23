@@ -1,10 +1,10 @@
 {
   "sMotorSerialPortName": "COM3",
   "iMotorBaudRate": 115200,
-  "flMotorMaxSpeedStepsPerSecond": 25000.0,
+  "flMotorMaxSpeedStepsPerSecond": 10000.0,
   "flMotorMaxAccelerationStepsPerSecondSquared": 12500.0,
-  "flMotorMinAngleDegrees": -90.0,
-  "flMotorMaxAngleDegrees": 90.0,
+  "flMotorMinAngleDegrees": -45.0,
+  "flMotorMaxAngleDegrees": 45.0,
   "iCameraDeviceIndex": 0,
   "iCameraWidthPixels": 1280,
   "iCameraHeightPixels": 720,

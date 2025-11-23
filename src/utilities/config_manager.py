@@ -26,8 +26,8 @@ class SystemConfiguration:
     iMotorBaudRate: int = 115200
     flMotorMaxSpeedStepsPerSecond: float = 25000.0
     flMotorMaxAccelerationStepsPerSecondSquared: float = 12500.0
-    flMotorMinAngleDegrees: float = -90.0
-    flMotorMaxAngleDegrees: float = 90.0
+    flMotorMinAngleDegrees: float = -45.0
+    flMotorMaxAngleDegrees: float = 45.0
     
     # Camera settings
     iCameraDeviceIndex: int = 0
