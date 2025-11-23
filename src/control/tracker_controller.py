@@ -165,6 +165,11 @@ class TrackerController:
         obState = self.obMotorInterface.get_latest_motor_state()
         return obState.flMotorAngleDegrees
     
+    def get_current_motor_speed_steps_per_second(self) -> float:
+        """Get latest motor speed (steps/s)."""
+        obState = self.obMotorInterface.get_latest_motor_state()
+        return obState.flMotorSpeedStepsPerSecond
+    
     
     def get_system_statistics(self) -> dict:
         """
@@ -181,7 +186,8 @@ class TrackerController:
             'frames_processed': self.iFramesProcessedCount,
             'average_fps': flAverageFPS,
             'motor_angle': self.get_current_motor_angle_degrees(),
-            'fov_degrees': self.get_current_field_of_view_degrees()
+            'fov_degrees': self.get_current_field_of_view_degrees(),
+            'motor_speed': self.get_current_motor_speed_steps_per_second()
         }
     
     # Private methods

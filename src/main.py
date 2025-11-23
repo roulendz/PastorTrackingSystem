@@ -254,6 +254,7 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
             f"FPS: {obStats['average_fps']:.1f}",
             f"Motor: {obStats['motor_angle']:.2f}deg",
             f"FOV: {obStats['fov_degrees']:.1f}deg",
+            f"Speed: {obStats['motor_speed']:.1f} steps/s",
         ]
         
         for sLine in vInfoLines:
