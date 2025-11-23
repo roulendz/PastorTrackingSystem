@@ -247,6 +247,19 @@ class TrackerController:
     def get_deadband_degrees(self) -> float:
         return self.flDeadbandDegrees
 
+    def set_angle_limits(self, flMinDegrees: float, flMaxDegrees: float):
+        self.flMinimumMotorAngleDegrees = float(flMinDegrees)
+        self.flMaximumMotorAngleDegrees = float(flMaxDegrees)
+
+    def set_tracking_confidence_threshold(self, flThreshold: float):
+        self.flMinimumTrackingConfidenceForControl = float(flThreshold)
+
+    def set_control_algorithm(self, obAlgorithm: ControlAlgorithm):
+        self.obControlAlgorithm = obAlgorithm
+
+    def set_fov_angle_per_pixel(self, flAnglePerPixelDegrees: float):
+        self.obFieldOfViewEstimator.reset_field_of_view_estimator_with_initial_angle_per_pixel(float(flAnglePerPixelDegrees))
+
     def apply_configuration(self, obConfig):
         self.flDeadbandDegrees = float(getattr(obConfig, 'flControlDeadbandDegrees', self.flDeadbandDegrees))
         self.flDeadbandMinDegrees = float(getattr(obConfig, 'flDeadbandMinDegrees', self.flDeadbandMinDegrees))

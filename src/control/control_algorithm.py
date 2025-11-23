@@ -247,3 +247,7 @@ class VelocityController(ControlAlgorithm):
     def reset_controller(self):
         """Reset time state."""
         self.dPreviousTime = time.time()
+    def set_parameters(self, flVelocityGain: float, flMaximumVelocityDegreesPerSecond: float, flVelocitySmoothingAlpha: float):
+        self.flVelocityGain = float(flVelocityGain)
+        self.flMaximumVelocityDegreesPerSecond = float(flMaximumVelocityDegreesPerSecond)
+        self.flVelocitySmoothingAlpha = float(flVelocitySmoothingAlpha)

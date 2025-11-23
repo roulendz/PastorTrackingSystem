@@ -12,7 +12,7 @@ import json
 import logging
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -184,3 +184,28 @@ class ConfigurationManager:
             bValid = False
         
         return bValid
+
+    def load_configuration_with_overrides(self, vOverridePaths: Optional[List[str]] = None) -> bool:
+        bAnyLoaded = False
+        vPaths: List[str] = [self.sConfigFilePath]
+        if vOverridePaths:
+            vPaths.extend(vOverridePaths)
+        for sPath in vPaths:
+            try:
+                obPath = Path(sPath)
+                if not obPath.exists():
+                    continue
+                with open(obPath, 'r') as file:
+                    dConfigDict = json.load(file)
+                for sKey, value in dConfigDict.items():
+                    if hasattr(self.obCurrentConfig, sKey):
+                        setattr(self.obCurrentConfig, sKey, value)
+                logger.info(f"Configuration loaded from {sPath}")
+                bAnyLoaded = True
+            except Exception as e:
+                logger.error(f"Failed to load configuration: {e}")
+                return False
+        if not bAnyLoaded:
+            logger.warning("No configuration files found")
+            return False
+        return True

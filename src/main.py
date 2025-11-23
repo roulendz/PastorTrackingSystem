@@ -25,6 +25,7 @@ from control.control_algorithm import ProportionalController, PIDController
 from control.tracker_controller import TrackerController
 from utilities.config_manager import ConfigurationManager
 from utilities.text_renderer import TextRenderer
+from ui.live_settings_panel import start_live_settings_panel
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +48,11 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         '--debug',
         action='store_true',
         help='Enable debug logging'
+    )
+    obParser.add_argument(
+        '--edit-config',
+        action='store_true',
+        help='Open configuration editor GUI before starting'
     )
     return obParser
 
@@ -288,9 +294,19 @@ def main():
     # Load configuration
     logger.info("Loading configuration...")
     obConfigManager = ConfigurationManager(obArgs.config)
-    obConfigManager.load_configuration_from_file()
+    obConfigManager.load_configuration_with_overrides(["config/user_config.json"])
     obConfig = obConfigManager.get_system_configuration()
     
+    if obArgs.edit_config:
+        try:
+            from ui.config_editor import launch_config_editor
+            bEdited = launch_config_editor(obArgs.config, "config/user_config.json")
+            if bEdited:
+                obConfigManager.load_configuration_with_overrides(["config/user_config.json"])
+                obConfig = obConfigManager.get_system_configuration()
+        except Exception as e:
+            logger.error(f"Failed to open configuration editor: {e}")
+
     # Initialize system
     obComponents = initialize_system(obConfig)
     if obComponents is None:
@@ -299,6 +315,7 @@ def main():
     
     (obMotorInterface, obCameraInterface, obPoseTracker,
      obFOVEstimator, obControlAlgorithm, obTrackerController) = obComponents
+    start_live_settings_panel(obConfigManager, obTrackerController, obMotorInterface, obCameraInterface, obFOVEstimator)
     
     # Prepare window
     cv2.namedWindow('Pastor Tracking System', cv2.WINDOW_NORMAL)
