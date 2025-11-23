@@ -208,18 +208,13 @@ class TrackerController:
         # Convert to angle error relative to camera center
         flAngleError = flPixelOffset * flAnglePerPixel
 
-        # Absolute person angle relative to home (0°)
         flPersonAngleRelativeToHome = obCurrentSample.flMotorAngleDegrees + flAngleError
-
-        # Home-biased deadzone: if person within ±deadband of home line, move to 0°
         if abs(flPersonAngleRelativeToHome) <= self.flDeadbandDegrees:
             flNewTargetAngle = 0.0
+        elif abs(flPixelOffset) <= int(getattr(self, 'iCenterDeadzoneRadiusPixels', 0)):
+            flNewTargetAngle = obCurrentSample.flMotorAngleDegrees
         else:
-            # Calculate correction using control algorithm (track person)
-            flCorrection = self.obControlAlgorithm.calculate_correction_from_error(
-                flAngleError
-            )
-            # Compute new target angle
+            flCorrection = self.obControlAlgorithm.calculate_correction_from_error(flAngleError)
             flNewTargetAngle = obCurrentSample.flMotorAngleDegrees + flCorrection
         
         # Clamp to safety limits
@@ -253,3 +248,4 @@ class TrackerController:
         self.flMinimumMotorAngleDegrees = float(getattr(obConfig, 'flMotorMinAngleDegrees', self.flMinimumMotorAngleDegrees))
         self.flMaximumMotorAngleDegrees = float(getattr(obConfig, 'flMotorMaxAngleDegrees', self.flMaximumMotorAngleDegrees))
         self.flMinimumTrackingConfidenceForControl = float(getattr(obConfig, 'flTrackingMinConfidenceForControl', self.flMinimumTrackingConfidenceForControl))
+        self.iCenterDeadzoneRadiusPixels = int(getattr(obConfig, 'iCenterDeadzoneRadiusPixels', getattr(self, 'iCenterDeadzoneRadiusPixels', 0)))

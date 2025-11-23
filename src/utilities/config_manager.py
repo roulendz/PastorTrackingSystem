@@ -59,6 +59,10 @@ class SystemConfiguration:
     bShowDebugInfo: bool = True
     bAllowStartWithoutMotor: bool = True
     bEnableDeadzoneOverlay: bool = True
+    iCenterDeadzoneRadiusPixels: int = 40
+    flVelocityGain: float = 5.0
+    flMaxVelocityDegreesPerSecond: float = 45.0
+    flVelocitySmoothingAlpha: float = 0.3
 
 
 class ConfigurationManager:

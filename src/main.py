@@ -117,6 +117,13 @@ def initialize_system(obConfig):
             obConfig.flControlIntegralGain,
             obConfig.flControlDerivativeGain
         )
+    elif obConfig.sControlAlgorithmType == "Velocity":
+        from control.control_algorithm import VelocityController
+        obControlAlgorithm = VelocityController(
+            obConfig.flVelocityGain,
+            obConfig.flMaxVelocityDegreesPerSecond,
+            obConfig.flVelocitySmoothingAlpha
+        )
     else:  # Default to P controller
         obControlAlgorithm = ProportionalController(
             obConfig.flControlProportionalGain
@@ -229,11 +236,10 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
         iPersonX = int(obSample.flPersonCenterXPixels)
         iPersonY = int(obSample.flPersonCenterYPixels)
         
-        # Draw person marker
-        cv2.circle(obFrame, (iPersonX, iPersonY), 15, (0, 0, 255), 3)
+        iCircleRadiusPx = int(getattr(obConfig, 'iCenterDeadzoneRadiusPixels', 40))
+        cv2.circle(obFrame, (iPersonX, iPersonY), max(1, iCircleRadiusPx), (0, 0, 255), 3)
         cv2.line(obFrame, (iCenterX, iPersonY), (iPersonX, iPersonY), (0, 0, 255), 2)
         
-        # Draw offset text
         flPixelOffset = obSample.get_pixel_offset_from_center(iWidth)
         sOffsetText = f"Offset: {flPixelOffset:.0f}px"
         TextRenderer.draw_text(obFrame, sOffsetText, (iPersonX + 20, iPersonY - 20), 0.6, (0, 0, 255), 2)

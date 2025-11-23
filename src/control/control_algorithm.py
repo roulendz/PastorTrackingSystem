@@ -193,7 +193,8 @@ class VelocityController(ControlAlgorithm):
     def __init__(
         self,
         flVelocityGain: float = 5.0,
-        flMaximumVelocityDegreesPerSecond: float = 30.0
+        flMaximumVelocityDegreesPerSecond: float = 30.0,
+        flVelocitySmoothingAlpha: float = 0.3
     ):
         """
         Initialize velocity controller.
@@ -204,7 +205,9 @@ class VelocityController(ControlAlgorithm):
         """
         self.flVelocityGain = flVelocityGain
         self.flMaximumVelocityDegreesPerSecond = flMaximumVelocityDegreesPerSecond
+        self.flVelocitySmoothingAlpha = flVelocitySmoothingAlpha
         self.dPreviousTime = time.time()
+        self._flPreviousVelocity = 0.0
         
         logger.info(
             f"Velocity Controller initialized: "
@@ -233,8 +236,11 @@ class VelocityController(ControlAlgorithm):
             min(self.flMaximumVelocityDegreesPerSecond, flDesiredVelocity)
         )
         
+        # Ease-in/out smoothing on velocity
+        flSmoothedVelocity = self._flPreviousVelocity + self.flVelocitySmoothingAlpha * (flDesiredVelocity - self._flPreviousVelocity)
+        self._flPreviousVelocity = flSmoothedVelocity
         # Convert velocity to position change
-        flPositionChange = flDesiredVelocity * flDeltaTime
+        flPositionChange = flSmoothedVelocity * flDeltaTime
         
         return flPositionChange
     
