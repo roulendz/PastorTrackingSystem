@@ -2,7 +2,7 @@
     "sMotorSerialPortName": "COM6",
     "iMotorBaudRate": 115200,
     "flMotorMaxSpeedStepsPerSecond": 306.68701171875,
-    "flMotorMaxAccelerationStepsPerSecondSquared": 2814.81494140625,
+    "flMotorMaxAccelerationStepsPerSecondSquared": 4528.80712890625,
     "flMotorMinAngleDegrees": -45.0,
     "flMotorMaxAngleDegrees": 45.0,
     "iCameraDeviceIndex": 1,
