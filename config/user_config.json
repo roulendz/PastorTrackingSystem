@@ -1,8 +1,8 @@
 {
     "sMotorSerialPortName": "COM6",
     "iMotorBaudRate": 115200,
-    "flMotorMaxSpeedStepsPerSecond": 306.68701171875,
-    "flMotorMaxAccelerationStepsPerSecondSquared": 4528.80712890625,
+    "flMotorMaxSpeedStepsPerSecond": 563.375,
+    "flMotorMaxAccelerationStepsPerSecondSquared": 22777.77734375,
     "flMotorMinAngleDegrees": -45.0,
     "flMotorMaxAngleDegrees": 45.0,
     "iCameraDeviceIndex": 1,
@@ -13,7 +13,7 @@
     "flPoseMinTrackingConfidence": 0.5,
     "bPoseEnableSegmentation": false,
     "flInitialAnglePerPixelDegrees": 0.005312500149011612,
-    "sControlAlgorithmType": "Velocity",
+    "sControlAlgorithmType": "PID",
     "flControlProportionalGain": 1.0,
     "flControlIntegralGain": 0.0,
     "flControlDerivativeGain": 0.1,
@@ -28,5 +28,20 @@
     "iCenterDeadzoneRadiusPixels": 60,
     "flVelocityGain": 5.0,
     "flMaxVelocityDegreesPerSecond": 45.0,
-    "flVelocitySmoothingAlpha": 0.3
+    "flVelocitySmoothingAlpha": 0.3,
+    "ui": {
+        "controls": {
+            "flManualCenterAngleDegrees": {
+                "min": -45.0,
+                "max": 45.0,
+                "slider_value": 0.0
+            },
+            "flFieldOfViewDegrees": {
+                "min": 10.0,
+                "max": 180.0,
+                "slider_value": 6.800000190734863,
+                "input_value": 6.800000190734863
+            }
+        }
+    }
 }
