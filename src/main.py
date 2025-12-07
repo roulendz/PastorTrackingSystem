@@ -281,7 +281,8 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
             iYPos += iLineHeight
         
         # Controls
-        iYPos = iHeight - 90
+        iControlLineHeight = 20
+        iBottomPadding = 10
         vControlLines = [
             "Controls:",
             "S - Start tracking",
@@ -290,9 +291,10 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
             "H - Move to HOME (0°)",
             "R - Reset current position as HOME (0°)"
         ]
+        iYPos = iHeight - ((len(vControlLines) - 1) * iControlLineHeight) - iBottomPadding
         for sLine in vControlLines:
             TextRenderer.draw_text(obFrame, sLine, (10, iYPos), 0.5, (255, 255, 255), 1)
-            iYPos += 20
+            iYPos += iControlLineHeight
 
     # Background motion visualization removed
 
