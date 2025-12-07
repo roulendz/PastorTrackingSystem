@@ -115,6 +115,30 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
         _attach_double_click_reset(iValue, _reset_float)
 
 
+_g_dItemsMeta: Dict[str, Dict[str, int]] = {}
+
+def _save_full_config(obConfigManager: ConfigurationManager):
+    try:
+        obConfig = obConfigManager.get_system_configuration()
+        dConfig = asdict(obConfig)
+        dUI: Dict[str, Any] = {"controls": {}}
+        for sKey, dMeta in _g_dItemsMeta.items():
+            dEntry: Dict[str, Any] = {}
+            if "min" in dMeta:
+                dEntry["min"] = dpg.get_value(dMeta["min"])
+            if "max" in dMeta:
+                dEntry["max"] = dpg.get_value(dMeta["max"])
+            if "slider" in dMeta:
+                dEntry["slider_value"] = dpg.get_value(dMeta["slider"])
+            if "input" in dMeta:
+                dEntry["input_value"] = dpg.get_value(dMeta["input"])
+            dUI["controls"][sKey] = dEntry
+        dConfig["ui"] = dUI
+        with open("config/user_config.json", "w") as f:
+            json.dump(dConfig, f, indent=4)
+    except Exception:
+        pass
+
 def _apply_motor_settings(obMotor: MotorInterface, obConfig):
     obMotor.send_speed_and_acceleration_settings(
         obConfig.flMotorMaxSpeedStepsPerSecond,
@@ -214,7 +238,7 @@ def start_live_settings_panel(
             def _on_key_s():
                 try:
                     if dpg.is_key_down(dpg.mvKey_Control):
-                        obConfigManager.save_configuration_to_file("config/user_config.json")
+                        _save_full_config(obConfigManager)
                 except Exception:
                     pass
             dpg.add_key_press_handler(key=dpg.mvKey_S, callback=_on_key_s)
@@ -244,6 +268,7 @@ def start_live_settings_panel(
                 dpg.configure_item(_g_iCenterAngleItem, min_value=dpg.get_value(iMinCenter), max_value=dpg.get_value(iMaxCenter))
             dpg.set_item_callback(iMinCenter, lambda s, a, u: _apply_center_range())
             dpg.set_item_callback(iMaxCenter, lambda s, a, u: _apply_center_range())
+        _g_dItemsMeta["flManualCenterAngleDegrees"] = {"min": iMinCenter, "max": iMaxCenter, "slider": _g_iCenterAngleItem}
         def _on_set_current_home():
             obMotor.send_reset_position_command()
             update_center_angle_slider(0.0)
@@ -398,6 +423,7 @@ def start_live_settings_panel(
             _on_fov_change(float(flInitialFOV))
         _attach_double_click_reset(dItems["flFieldOfViewDegrees"], _reset_fov)
         _attach_double_click_reset(iFovValue, _reset_fov)
+        _g_dItemsMeta["flFieldOfViewDegrees"] = {"min": iMinFov, "max": iMaxFov, "slider": dItems["flFieldOfViewDegrees"], "input": iFovValue}
 
         dpg.add_separator()
         dpg.add_text("Visualization")
@@ -418,7 +444,7 @@ def start_live_settings_panel(
 
         dpg.add_separator()
         def _on_save():
-            obConfigManager.save_configuration_to_file("config/user_config.json")
+            _save_full_config(obConfigManager)
         dpg.add_button(label="Save Config", callback=_on_save)
 
     def _run():
