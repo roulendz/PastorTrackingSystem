@@ -286,7 +286,9 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
             "Controls:",
             "S - Start tracking",
             "P - Pause",
-            "Q - Quit"
+            "Q - Quit",
+            "H - Move to HOME (0°)",
+            "R - Reset current position as HOME (0°)"
         ]
         for sLine in vControlLines:
             TextRenderer.draw_text(obFrame, sLine, (10, iYPos), 0.5, (255, 255, 255), 1)
