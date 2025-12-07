@@ -218,6 +218,13 @@ def start_live_settings_panel(
                 except Exception:
                     pass
             dpg.add_key_press_handler(key=dpg.mvKey_S, callback=_on_key_s)
+            def _on_key_r():
+                try:
+                    obMotor.send_reset_position_command()
+                    update_center_angle_slider(0.0)
+                except Exception:
+                    pass
+            dpg.add_key_press_handler(key=dpg.mvKey_R, callback=_on_key_r)
         dpg.add_text("Center")
         # Center angle slider at top; controls absolute motor angle
         flCurrentAngle = obTracker.get_current_motor_angle_degrees()

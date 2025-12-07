@@ -389,6 +389,14 @@ def main():
             elif iKey == ord('h') or iKey == ord('H'):
                 obMotorInterface.send_home_command()
                 logger.info("Homing motor...")
+            elif iKey == ord('r') or iKey == ord('R'):
+                obMotorInterface.send_reset_position_command()
+                try:
+                    from ui.live_settings_panel import update_center_angle_slider
+                    update_center_angle_slider(0.0)
+                except Exception:
+                    pass
+                logger.info("Home reset: current angle set as 0°")
     
     except KeyboardInterrupt:
         logger.info("\nKeyboard interrupt received")
