@@ -1,7 +1,7 @@
 {
     "sMotorSerialPortName": "COM6",
     "iMotorBaudRate": 115200,
-    "flMotorMaxSpeedStepsPerSecond": 101.33699798583984,
+    "flMotorMaxSpeedStepsPerSecond": 306.68701171875,
     "flMotorMaxAccelerationStepsPerSecondSquared": 2814.81494140625,
     "flMotorMinAngleDegrees": -45.0,
     "flMotorMaxAngleDegrees": 45.0,
@@ -12,7 +12,7 @@
     "flPoseMinDetectionConfidence": 0.5,
     "flPoseMinTrackingConfidence": 0.5,
     "bPoseEnableSegmentation": false,
-    "flInitialAnglePerPixelDegrees": 0.019836719334125518,
+    "flInitialAnglePerPixelDegrees": 0.005312500149011612,
     "sControlAlgorithmType": "Velocity",
     "flControlProportionalGain": 1.0,
     "flControlIntegralGain": 0.0,
