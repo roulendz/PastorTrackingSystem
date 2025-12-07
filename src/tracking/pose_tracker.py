@@ -207,38 +207,30 @@ class PoseTracker:
         Returns:
             Tuple of (center_x, center_y) in pixels
         """
-        # Key torso landmarks for stable tracking
-        # 11: Left shoulder, 12: Right shoulder
-        # 23: Left hip, 24: Right hip
+        obLeftShoulder = obLandmarks.landmark[11]
+        obRightShoulder = obLandmarks.landmark[12]
+        if obLeftShoulder.visibility > 0.5 and obRightShoulder.visibility > 0.5:
+            flNormalizedX = (obLeftShoulder.x + obRightShoulder.x) * 0.5
+            flNormalizedY = (obLeftShoulder.y + obRightShoulder.y) * 0.5
+            return flNormalizedX * iImageWidth, flNormalizedY * iImageHeight
+
         vTorsoIndices = [11, 12, 23, 24]
-        
         flSumX = 0.0
         flSumY = 0.0
         iValidCount = 0
-        
         for iIndex in vTorsoIndices:
             obLandmark = obLandmarks.landmark[iIndex]
-            
-            # Check visibility (confidence)
             if obLandmark.visibility > 0.5:
                 flSumX += obLandmark.x
                 flSumY += obLandmark.y
                 iValidCount += 1
-        
-        if iValidCount == 0:
-            # Fallback: use nose (landmark 0)
-            obNose = obLandmarks.landmark[0]
-            return obNose.x * iImageWidth, obNose.y * iImageHeight
-        
-        # Average position (normalized 0-1)
-        flNormalizedX = flSumX / iValidCount
-        flNormalizedY = flSumY / iValidCount
-        
-        # Convert to pixel coordinates
-        flPixelX = flNormalizedX * iImageWidth
-        flPixelY = flNormalizedY * iImageHeight
-        
-        return flPixelX, flPixelY
+        if iValidCount > 0:
+            flNormalizedX = flSumX / iValidCount
+            flNormalizedY = flSumY / iValidCount
+            return flNormalizedX * iImageWidth, flNormalizedY * iImageHeight
+
+        obNose = obLandmarks.landmark[0]
+        return obNose.x * iImageWidth, obNose.y * iImageHeight
     
     def _calculate_overall_confidence(self, obLandmarks) -> float:
         """
