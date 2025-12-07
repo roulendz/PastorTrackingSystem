@@ -170,9 +170,11 @@ class DeadzoneUIController:
         self.bDraggingRight = False
         self.bDraggingCenter = False
         self.iDragThresholdPixels = 8
+        self.iHomeUpdateMinDeltaPixels = 2
 
     def update_mapping(self, iHomeLineX: int, flAnglePerPixel: float, iImageHeight: int):
-        self.iHomeLineX = iHomeLineX
+        if abs(int(iHomeLineX) - int(self.iHomeLineX)) >= int(self.iHomeUpdateMinDeltaPixels) or iImageHeight != self.iImageHeight:
+            self.iHomeLineX = int(iHomeLineX)
         self.flAnglePerPixel = max(1e-9, flAnglePerPixel)
         self.iImageHeight = iImageHeight
 

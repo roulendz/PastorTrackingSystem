@@ -83,6 +83,8 @@ class TrackerController:
         # Statistics
         self.iFramesProcessedCount = 0
         self.dStartTime = time.time()
+        self._flLastCommandedAngle = None
+        self.flCommandMinDeltaDegrees = 0.05
         
         logger.info("TrackerController initialized")
     
@@ -147,8 +149,8 @@ class TrackerController:
     def stop_tracking_mode(self):
         """Disable tracking mode."""
         self.eCurrentState = TrackerState.IDLE
-        # Optionally send stop command
-        self.obMotorInterface.send_emergency_stop_command()
+        flAngle = self.get_current_motor_angle_degrees()
+        self.obMotorInterface.send_move_to_angle_command(flAngle)
         logger.info("Tracking mode STOPPED")
     
     def is_currently_tracking(self) -> bool:
@@ -216,7 +218,7 @@ class TrackerController:
 
         flPersonAngleRelativeToHome = obCurrentSample.flMotorAngleDegrees + flAngleError
         if abs(flPersonAngleRelativeToHome) <= self.flDeadbandDegrees:
-            flNewTargetAngle = 0.0
+            flNewTargetAngle = obCurrentSample.flMotorAngleDegrees
         elif abs(flPixelOffset) <= int(getattr(self, 'iCenterDeadzoneRadiusPixels', 0)):
             flNewTargetAngle = obCurrentSample.flMotorAngleDegrees
         else:
@@ -229,16 +231,14 @@ class TrackerController:
             min(self.flMaximumMotorAngleDegrees, flNewTargetAngle)
         )
         
-        # Send command to motor
+        if self._flLastCommandedAngle is not None and abs(flNewTargetAngle - self._flLastCommandedAngle) < self.flCommandMinDeltaDegrees:
+            return
         bSuccess = self.obMotorInterface.send_move_to_angle_command(flNewTargetAngle)
         
         if not bSuccess:
             logger.error("Failed to send motor command")
         else:
-            logger.debug(
-                f"Control: error={flAngleError:.2f}°, "
-                f"target={flNewTargetAngle:.2f}°"
-            )
+            self._flLastCommandedAngle = flNewTargetAngle
 
     # Public API for UI/config integration
     def set_deadband_degrees(self, flDegrees: float):
