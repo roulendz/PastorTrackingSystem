@@ -25,7 +25,7 @@
     "bShowDebugInfo": true,
     "bAllowStartWithoutMotor": true,
     "bEnableDeadzoneOverlay": true,
-    "iCenterDeadzoneRadiusPixels": 60,
+    "iCenterDeadzoneRadiusPixels": 34,
     "flVelocityGain": 5.0,
     "flMaxVelocityDegreesPerSecond": 45.0,
     "flVelocitySmoothingAlpha": 0.3,
@@ -109,16 +109,16 @@
                 "input_value": 0.30000001192092896
             },
             "flFieldOfViewDegrees": {
-                "min": 6.800000190734863,
-                "max": 70.9000015258789,
+                "min": 10.0,
+                "max": 180.0,
                 "slider_value": 6.800000190734863,
                 "input_value": 6.800000190734863
             },
             "iCenterDeadzoneRadiusPixels": {
                 "min": 0.0,
                 "max": 300.0,
-                "slider_value": 60,
-                "input_value": 60
+                "slider_value": 34,
+                "input_value": 34
             }
         }
     }

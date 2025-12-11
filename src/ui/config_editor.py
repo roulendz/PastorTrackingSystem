@@ -107,20 +107,25 @@ def _get_field_groups() -> Dict[str, str]:
 def _create_numeric_control(sKey: str, value: Any, dRanges: Dict[str, Tuple[float, float, float]], dItems: Dict[str, int]):
     flMin, flMax, flStep = dRanges.get(sKey, (0.0, 100.0, 1.0))
     with dpg.group(horizontal=True):
-        iMinInput = dpg.add_input_float(label=f"{sKey} min", default_value=flMin, width=100)
-        iMaxInput = dpg.add_input_float(label=f"{sKey} max", default_value=flMax, width=100)
+        dpg.add_text("min")
+        iMinInput = dpg.add_input_float(label="", default_value=flMin, width=90)
+        dpg.add_text("max")
+        iMaxInput = dpg.add_input_float(label="", default_value=flMax, width=90)
+        iMaxInfo = dpg.add_button(label="?", width=18)
+        with dpg.tooltip(iMaxInfo):
+            dpg.add_text(f"{sKey}")
     def _update_slider_range():
         flNewMin = dpg.get_value(iMinInput)
         flNewMax = dpg.get_value(iMaxInput)
         if flNewMin > flNewMax:
             return
         dpg.configure_item(dItems[sKey], min_value=flNewMin, max_value=flNewMax)
-    dpg.add_button(label=f"Apply {sKey} range", callback=lambda: _update_slider_range())
+    dpg.add_button(label="Apply range", callback=lambda: _update_slider_range())
     if isinstance(value, int):
-        dItems[sKey] = dpg.add_slider_int(label=sKey, default_value=int(value), min_value=int(flMin), max_value=int(flMax))
+        dItems[sKey] = dpg.add_slider_int(label="", default_value=int(value), min_value=int(flMin), max_value=int(flMax))
     else:
-        dItems[sKey] = dpg.add_slider_float(label=sKey, default_value=float(value), min_value=flMin, max_value=flMax)
-    dpg.add_input_float(label=f"{sKey} value", default_value=float(value), callback=lambda s, a, u: dpg.set_value(dItems[sKey], a))
+        dItems[sKey] = dpg.add_slider_float(label="", default_value=float(value), min_value=flMin, max_value=flMax)
+    dpg.add_input_float(label="value", default_value=float(value), callback=lambda s, a, u: dpg.set_value(dItems[sKey], a))
 
 
 def _create_bool_control(sKey: str, value: bool, dItems: Dict[str, int]):

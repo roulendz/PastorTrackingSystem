@@ -54,16 +54,22 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
         flMax = float(dSaved.get("max", flMax))
     except Exception:
         pass
-    with dpg.group():
-        iMin = dpg.add_input_float(label=f"{sKey} min", default_value=flMin, width=iWidth)
-        iMax = dpg.add_input_float(label=f"{sKey} max", default_value=flMax, width=iWidth)
+    with dpg.group(horizontal=True):
+        iInputWidth = min(120, max(60, int((iWidth - (1 * 32) - 60) // 2)))
+        dpg.add_text("min")
+        iMin = dpg.add_input_float(label="", default_value=flMin, width=iInputWidth)
+        dpg.add_text("max")
+        iMax = dpg.add_input_float(label="", default_value=flMax, width=iInputWidth)
+        iMaxInfo = dpg.add_button(label="?", width=22)
+        with dpg.tooltip(iMaxInfo):
+            dpg.add_text(f"{sKey}")
         def _apply_range():
             dpg.configure_item(dItems[sKey], min_value=dpg.get_value(iMin), max_value=dpg.get_value(iMax))
         dpg.set_item_callback(iMin, lambda s, a, u: _apply_range())
         dpg.set_item_callback(iMax, lambda s, a, u: _apply_range())
     if bInteger:
-        dItems[sKey] = dpg.add_slider_int(label=sKey, default_value=int(vDefault), min_value=int(flMin), max_value=int(flMax), width=iWidth)
-        iValue = dpg.add_input_int(label=f"{sKey} value", default_value=int(vDefault), width=iWidth)
+        dItems[sKey] = dpg.add_slider_int(label="", default_value=int(vDefault), min_value=int(flMin), max_value=int(flMax), width=iWidth)
+        iValue = dpg.add_input_int(label="value", default_value=int(vDefault), width=iWidth)
         bProgrammatic = False
         def _on_slider_change_int(a: int):
             nonlocal bProgrammatic
@@ -92,8 +98,8 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
         _attach_double_click_reset(iValue, _reset_int)
         _g_dItemsMeta[sKey] = {"min": iMin, "max": iMax, "slider": dItems[sKey], "input": iValue}
     else:
-        dItems[sKey] = dpg.add_slider_float(label=sKey, default_value=float(vDefault), min_value=flMin, max_value=flMax, width=iWidth)
-        iValue = dpg.add_input_float(label=f"{sKey} value", default_value=float(vDefault), width=iWidth)
+        dItems[sKey] = dpg.add_slider_float(label="", default_value=float(vDefault), min_value=flMin, max_value=flMax, width=iWidth)
+        iValue = dpg.add_input_float(label="value", default_value=float(vDefault), width=iWidth)
         bProgrammatic = False
         def _on_slider_change_float(a: float):
             nonlocal bProgrammatic
@@ -279,14 +285,20 @@ def start_live_settings_panel(
                 return
             obMotor.send_move_to_angle_command(float(v))
         # Create min/max vertically and slider with 500px width
-        with dpg.group():
-            iMinCenter = dpg.add_input_float(label="flManualCenterAngleDegrees min", default_value=dMin, width=500)
-            iMaxCenter = dpg.add_input_float(label="flManualCenterAngleDegrees max", default_value=dMax, width=500)
-            _g_iCenterAngleItem = dpg.add_slider_float(label="flManualCenterAngleDegrees", default_value=float(flCurrentAngle), min_value=float(dMin), max_value=float(dMax), width=500, callback=lambda s, a, u: _on_center_change(float(a)))
-            def _apply_center_range():
-                dpg.configure_item(_g_iCenterAngleItem, min_value=dpg.get_value(iMinCenter), max_value=dpg.get_value(iMaxCenter))
-            dpg.set_item_callback(iMinCenter, lambda s, a, u: _apply_center_range())
-            dpg.set_item_callback(iMaxCenter, lambda s, a, u: _apply_center_range())
+        with dpg.group(horizontal=True):
+            iCenterWidth = 140
+            dpg.add_text("min")
+            iMinCenter = dpg.add_input_float(label="", default_value=dMin, width=iCenterWidth)
+            dpg.add_text("max")
+            iMaxCenter = dpg.add_input_float(label="", default_value=dMax, width=iCenterWidth)
+            iMaxCenterInfo = dpg.add_button(label="?", width=22)
+            with dpg.tooltip(iMaxCenterInfo):
+                dpg.add_text("flManualCenterAngleDegrees")
+        _g_iCenterAngleItem = dpg.add_slider_float(label="", default_value=float(flCurrentAngle), min_value=float(dMin), max_value=float(dMax), width=500, callback=lambda s, a, u: _on_center_change(float(a)))
+        def _apply_center_range():
+            dpg.configure_item(_g_iCenterAngleItem, min_value=dpg.get_value(iMinCenter), max_value=dpg.get_value(iMaxCenter))
+        dpg.set_item_callback(iMinCenter, lambda s, a, u: _apply_center_range())
+        dpg.set_item_callback(iMaxCenter, lambda s, a, u: _apply_center_range())
         _g_dItemsMeta["flManualCenterAngleDegrees"] = {"min": iMinCenter, "max": iMaxCenter, "slider": _g_iCenterAngleItem}
         def _on_set_current_home():
             obMotor.send_reset_position_command()
@@ -427,15 +439,20 @@ def start_live_settings_panel(
             obTracker.set_fov_angle_per_pixel(flAnglePerPixel)
         # Use a dedicated range for FOV degrees
         dItems["flFieldOfViewDegrees"] = None
-        with dpg.group():
-            iMinFov = dpg.add_input_float(label="flFieldOfViewDegrees min", default_value=10.0, width=500)
-            iMaxFov = dpg.add_input_float(label="flFieldOfViewDegrees max", default_value=180.0, width=500)
+        with dpg.group(horizontal=True):
+            dpg.add_text("min")
+            iMinFov = dpg.add_input_float(label="", default_value=10.0, width=180)
+            dpg.add_text("max")
+            iMaxFov = dpg.add_input_float(label="", default_value=180.0, width=180)
+            iMaxFovInfo = dpg.add_button(label="?", width=22)
+            with dpg.tooltip(iMaxFovInfo):
+                dpg.add_text("flFieldOfViewDegrees")
             def _apply_fov_range():
                 dpg.configure_item(dItems["flFieldOfViewDegrees"], min_value=dpg.get_value(iMinFov), max_value=dpg.get_value(iMaxFov))
             dpg.set_item_callback(iMinFov, lambda s, a, u: _apply_fov_range())
             dpg.set_item_callback(iMaxFov, lambda s, a, u: _apply_fov_range())
-        dItems["flFieldOfViewDegrees"] = dpg.add_slider_float(label="flFieldOfViewDegrees", default_value=float(flInitialFOV), min_value=10.0, max_value=180.0, width=500, callback=lambda s, a, u: _on_fov_change(float(a)))
-        iFovValue = dpg.add_input_float(label="flFieldOfViewDegrees value", default_value=float(flInitialFOV), width=500, callback=lambda s, a, u: (_on_fov_change(float(a)), dpg.set_value(dItems["flFieldOfViewDegrees"], float(a))))
+        dItems["flFieldOfViewDegrees"] = dpg.add_slider_float(label="", default_value=float(flInitialFOV), min_value=10.0, max_value=180.0, width=500, callback=lambda s, a, u: _on_fov_change(float(a)))
+        iFovValue = dpg.add_input_float(label="value", default_value=float(flInitialFOV), width=500, callback=lambda s, a, u: (_on_fov_change(float(a)), dpg.set_value(dItems["flFieldOfViewDegrees"], float(a))))
         def _reset_fov():
             dpg.set_value(dItems["flFieldOfViewDegrees"], float(flInitialFOV))
             dpg.set_value(iFovValue, float(flInitialFOV))
