@@ -46,6 +46,60 @@ def _attach_double_click_reset(iItem: int, fnReset):
     dpg.bind_item_handler_registry(iItem, obReg)
 
 
+def _add_section_header_with_tooltip(sLabel: str, sTooltip: str):
+    with dpg.group(horizontal=True):
+        dpg.add_text(sLabel)
+        iInfo = dpg.add_button(label="?", width=22)
+        with dpg.tooltip(iInfo):
+            dpg.add_text(sTooltip)
+
+
+def _get_section_tooltips() -> Dict[str, str]:
+    return {
+        "Center": (
+            "flManualCenterAngleDegrees: Absolute motor angle in degrees.\n"
+            "Changing this sends an immediate move command to the motor.\n"
+            "Range is limited by flMotorMinAngleDegrees and flMotorMaxAngleDegrees.\n"
+            "Dragging the center line in the video updates this value.\n"
+            "'Set current angle as HOME' sets current position as 0° on the controller."
+        ),
+        "Motor": (
+            "flMotorMaxSpeedStepsPerSecond: Maximum step rate (steps/s) applied to the driver.\n"
+            "flMotorMaxAccelerationStepsPerSecondSquared: Maximum acceleration (steps/s²).\n"
+            "Both parameters are sent to the motor immediately and affect all moves."
+        ),
+        "Angles": (
+            "flMotorMinAngleDegrees & flMotorMaxAngleDegrees: Allowed mechanical angle window.\n"
+            "The controller clamps every commanded target into this range.\n"
+            "Also defines the range of the Center slider and must satisfy min < max."
+        ),
+        "Control": (
+            "flControlDeadbandDegrees: Angular tolerance around the virtual home line;\n"
+            "errors within this are ignored and position is held.\n"
+            "flTrackingMinConfidenceForControl: Minimum detection confidence required\n"
+            "before any correction is applied."
+        ),
+        "Algorithm": (
+            "P: Outputs Kp * error (fast, simple).\n"
+            "PID: Adds integral (Ki) with anti-windup and derivative (Kd) damping.\n"
+            "Velocity: Converts error to velocity, clamps to max velocity, smooths with alpha,\n"
+            "and integrates to position change."
+        ),
+        "FOV": (
+            "flFieldOfViewDegrees: Visual field of view of the camera.\n"
+            "Sets the initial angle-per-pixel used to convert pixel error to angle error.\n"
+            "The tracker learns and updates this mapping during runtime."
+        ),
+        "Visualization": (
+            "bEnableVisualization: Toggles drawing of the overlay on the video.\n"
+            "bShowDebugInfo: Shows status text (FPS, motor angle, controls).\n"
+            "bEnableDeadzoneOverlay: Shows draggable deadzone lines around the home line.\n"
+            "iCenterDeadzoneRadiusPixels: Pixel radius around center where small errors are ignored\n"
+            "and a circle is drawn around the detected person."
+        ),
+    }
+
+
 def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], fnOnChange=None, bInteger: bool = False, iWidth: int = 500):
     flMin, flMax, _ = _ranges().get(sKey, (0.0, 100.0, 1.0))
     try:
@@ -274,7 +328,8 @@ def start_live_settings_panel(
                 except Exception:
                     pass
             dpg.add_key_press_handler(key=dpg.mvKey_R, callback=_on_key_r)
-        dpg.add_text("Center")
+        dTips = _get_section_tooltips()
+        _add_section_header_with_tooltip("Center", dTips.get("Center", ""))
         # Center angle slider at top; controls absolute motor angle
         flCurrentAngle = obTracker.get_current_motor_angle_degrees()
         dMin = obConfig.flMotorMinAngleDegrees
@@ -304,7 +359,7 @@ def start_live_settings_panel(
             obMotor.send_reset_position_command()
             update_center_angle_slider(0.0)
         dpg.add_button(label="Set current angle as HOME (0°)", callback=_on_set_current_home)
-        dpg.add_text("Motor")
+        _add_section_header_with_tooltip("Motor", dTips.get("Motor", ""))
         _add_slider_with_range(
             "flMotorMaxSpeedStepsPerSecond",
             obConfig.flMotorMaxSpeedStepsPerSecond,
@@ -325,7 +380,7 @@ def start_live_settings_panel(
         , iWidth=500)
 
         dpg.add_separator()
-        dpg.add_text("Angles")
+        _add_section_header_with_tooltip("Angles", dTips.get("Angles", ""))
         _add_slider_with_range(
             "flMotorMinAngleDegrees",
             obConfig.flMotorMinAngleDegrees,
@@ -346,7 +401,7 @@ def start_live_settings_panel(
         , iWidth=500)
 
         dpg.add_separator()
-        dpg.add_text("Control")
+        _add_section_header_with_tooltip("Control", dTips.get("Control", ""))
         _add_slider_with_range(
             "flControlDeadbandDegrees",
             obConfig.flControlDeadbandDegrees,
@@ -366,7 +421,7 @@ def start_live_settings_panel(
             )
         , iWidth=500)
 
-        dpg.add_text("Algorithm")
+        _add_section_header_with_tooltip("Algorithm", dTips.get("Algorithm", ""))
         iAlgo = dpg.add_radio_button(items=["P", "PID", "Velocity"], default_value=obConfig.sControlAlgorithmType, horizontal=True)
         dpg.set_item_callback(iAlgo, lambda s, a, u: (
             setattr(obConfig, 'sControlAlgorithmType', str(a)),
@@ -429,9 +484,16 @@ def start_live_settings_panel(
         , iWidth=500)
 
         dpg.add_separator()
-        dpg.add_text("FOV")
+        _add_section_header_with_tooltip("FOV", dTips.get("FOV", ""))
         iWidth, _ = obCamera.get_frame_dimensions()
         flInitialFOV = obFOV.get_estimated_field_of_view_degrees(iWidth)
+        try:
+            dSavedFov = _g_dSavedUI.get("flFieldOfViewDegrees", {})
+            flSavedMin = float(dSavedFov.get("min", 10.0))
+            flSavedMax = float(dSavedFov.get("max", 180.0))
+            flSavedSliderValue = float(dSavedFov.get("slider_value", flInitialFOV))
+        except Exception:
+            flSavedMin, flSavedMax, flSavedSliderValue = 10.0, 180.0, flInitialFOV
         # FOV degrees slider maps to angle-per-pixel internally
         def _on_fov_change(flFovDegrees: float):
             flAnglePerPixel = float(flFovDegrees) / float(max(1, iWidth))
@@ -441,9 +503,9 @@ def start_live_settings_panel(
         dItems["flFieldOfViewDegrees"] = None
         with dpg.group(horizontal=True):
             dpg.add_text("min")
-            iMinFov = dpg.add_input_float(label="", default_value=10.0, width=180)
+            iMinFov = dpg.add_input_float(label="", default_value=float(flSavedMin), width=180)
             dpg.add_text("max")
-            iMaxFov = dpg.add_input_float(label="", default_value=180.0, width=180)
+            iMaxFov = dpg.add_input_float(label="", default_value=float(flSavedMax), width=180)
             iMaxFovInfo = dpg.add_button(label="?", width=22)
             with dpg.tooltip(iMaxFovInfo):
                 dpg.add_text("flFieldOfViewDegrees")
@@ -451,8 +513,8 @@ def start_live_settings_panel(
                 dpg.configure_item(dItems["flFieldOfViewDegrees"], min_value=dpg.get_value(iMinFov), max_value=dpg.get_value(iMaxFov))
             dpg.set_item_callback(iMinFov, lambda s, a, u: _apply_fov_range())
             dpg.set_item_callback(iMaxFov, lambda s, a, u: _apply_fov_range())
-        dItems["flFieldOfViewDegrees"] = dpg.add_slider_float(label="", default_value=float(flInitialFOV), min_value=10.0, max_value=180.0, width=500, callback=lambda s, a, u: _on_fov_change(float(a)))
-        iFovValue = dpg.add_input_float(label="value", default_value=float(flInitialFOV), width=500, callback=lambda s, a, u: (_on_fov_change(float(a)), dpg.set_value(dItems["flFieldOfViewDegrees"], float(a))))
+        dItems["flFieldOfViewDegrees"] = dpg.add_slider_float(label="", default_value=float(flSavedSliderValue), min_value=float(flSavedMin), max_value=float(flSavedMax), width=500, callback=lambda s, a, u: _on_fov_change(float(a)))
+        iFovValue = dpg.add_input_float(label="value", default_value=float(flSavedSliderValue), width=500, callback=lambda s, a, u: (_on_fov_change(float(a)), dpg.set_value(dItems["flFieldOfViewDegrees"], float(a))))
         def _reset_fov():
             dpg.set_value(dItems["flFieldOfViewDegrees"], float(flInitialFOV))
             dpg.set_value(iFovValue, float(flInitialFOV))
@@ -462,7 +524,7 @@ def start_live_settings_panel(
         _g_dItemsMeta["flFieldOfViewDegrees"] = {"min": iMinFov, "max": iMaxFov, "slider": dItems["flFieldOfViewDegrees"], "input": iFovValue}
 
         dpg.add_separator()
-        dpg.add_text("Visualization")
+        _add_section_header_with_tooltip("Visualization", dTips.get("Visualization", ""))
         iShow = dpg.add_checkbox(label="bShowDebugInfo", default_value=obConfig.bShowDebugInfo)
         dpg.set_item_callback(iShow, lambda s, a, u: setattr(obConfig, 'bShowDebugInfo', bool(a)))
         iEnableVis = dpg.add_checkbox(label="bEnableVisualization", default_value=obConfig.bEnableVisualization)
