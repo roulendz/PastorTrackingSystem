@@ -38,7 +38,7 @@
             },
             "flFieldOfViewDegrees": {
                 "min": 10.0,
-                "max": 180.0,
+                "max": 80.0,
                 "slider_value": 6.800000190734863,
                 "input_value": 6.800000190734863
             }
