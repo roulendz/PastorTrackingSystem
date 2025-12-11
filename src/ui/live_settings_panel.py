@@ -48,6 +48,12 @@ def _attach_double_click_reset(iItem: int, fnReset):
 
 def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], fnOnChange=None, bInteger: bool = False, iWidth: int = 500):
     flMin, flMax, _ = _ranges().get(sKey, (0.0, 100.0, 1.0))
+    try:
+        dSaved = _g_dSavedUI.get(sKey, {})
+        flMin = float(dSaved.get("min", flMin))
+        flMax = float(dSaved.get("max", flMax))
+    except Exception:
+        pass
     with dpg.group():
         iMin = dpg.add_input_float(label=f"{sKey} min", default_value=flMin, width=iWidth)
         iMax = dpg.add_input_float(label=f"{sKey} max", default_value=flMax, width=iWidth)
@@ -84,6 +90,7 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
                 fnOnChange(int(vDefault))
         _attach_double_click_reset(dItems[sKey], _reset_int)
         _attach_double_click_reset(iValue, _reset_int)
+        _g_dItemsMeta[sKey] = {"min": iMin, "max": iMax, "slider": dItems[sKey], "input": iValue}
     else:
         dItems[sKey] = dpg.add_slider_float(label=sKey, default_value=float(vDefault), min_value=flMin, max_value=flMax, width=iWidth)
         iValue = dpg.add_input_float(label=f"{sKey} value", default_value=float(vDefault), width=iWidth)
@@ -113,9 +120,20 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
                 fnOnChange(float(vDefault))
         _attach_double_click_reset(dItems[sKey], _reset_float)
         _attach_double_click_reset(iValue, _reset_float)
+        _g_dItemsMeta[sKey] = {"min": iMin, "max": iMax, "slider": dItems[sKey], "input": iValue}
 
 
 _g_dItemsMeta: Dict[str, Dict[str, int]] = {}
+_g_dSavedUI: Dict[str, Any] = {}
+
+def _load_saved_ui_meta():
+    global _g_dSavedUI
+    try:
+        with open("config/user_config.json", "r") as f:
+            d = json.load(f)
+        _g_dSavedUI = d.get("ui", {}).get("controls", {})
+    except Exception:
+        _g_dSavedUI = {}
 
 def _save_full_config(obConfigManager: ConfigurationManager):
     try:
@@ -234,6 +252,7 @@ def start_live_settings_panel(
     dItems: Dict[str, int] = {}
 
     with dpg.window(label="Settings", width=iPanelW - 20, height=iScreenH - 40):
+        _load_saved_ui_meta()
         with dpg.handler_registry():
             def _on_key_s():
                 try:
