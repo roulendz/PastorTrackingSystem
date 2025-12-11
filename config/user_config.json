@@ -32,15 +32,93 @@
     "ui": {
         "controls": {
             "flManualCenterAngleDegrees": {
-                "min": -5.0,
-                "max": 5.0,
-                "slider_value": 0.1850000023841858
+                "min": -45.0,
+                "max": 45.0,
+                "slider_value": 0.0
+            },
+            "flMotorMaxSpeedStepsPerSecond": {
+                "min": 50.0,
+                "max": 25000.0,
+                "slider_value": 563.375,
+                "input_value": 563.375
+            },
+            "flMotorMaxAccelerationStepsPerSecondSquared": {
+                "min": 1000.0,
+                "max": 50000.0,
+                "slider_value": 19609.0546875,
+                "input_value": 19609.0546875
+            },
+            "flMotorMinAngleDegrees": {
+                "min": -90.0,
+                "max": 0.0,
+                "slider_value": -45.0,
+                "input_value": -45.0
+            },
+            "flMotorMaxAngleDegrees": {
+                "min": 0.0,
+                "max": 90.0,
+                "slider_value": 45.0,
+                "input_value": 45.0
+            },
+            "flControlDeadbandDegrees": {
+                "min": 0.0,
+                "max": 20.0,
+                "slider_value": 0.30000001192092896,
+                "input_value": 0.30000001192092896
+            },
+            "flTrackingMinConfidenceForControl": {
+                "min": 0.0,
+                "max": 1.0,
+                "slider_value": 0.30000001192092896,
+                "input_value": 0.30000001192092896
+            },
+            "flControlProportionalGain": {
+                "min": 0.0010000000474974513,
+                "max": 10.0,
+                "slider_value": 1.0,
+                "input_value": 1.0
+            },
+            "flControlIntegralGain": {
+                "min": 0.0,
+                "max": 10.0,
+                "slider_value": 0.0,
+                "input_value": 0.0
+            },
+            "flControlDerivativeGain": {
+                "min": 0.0,
+                "max": 10.0,
+                "slider_value": 0.10000000149011612,
+                "input_value": 0.10000000149011612
+            },
+            "flVelocityGain": {
+                "min": 0.0,
+                "max": 20.0,
+                "slider_value": 5.0,
+                "input_value": 5.0
+            },
+            "flMaxVelocityDegreesPerSecond": {
+                "min": 0.0,
+                "max": 180.0,
+                "slider_value": 45.0,
+                "input_value": 45.0
+            },
+            "flVelocitySmoothingAlpha": {
+                "min": 0.0,
+                "max": 1.0,
+                "slider_value": 0.30000001192092896,
+                "input_value": 0.30000001192092896
             },
             "flFieldOfViewDegrees": {
-                "min": 10.0,
-                "max": 80.0,
+                "min": 6.800000190734863,
+                "max": 70.9000015258789,
                 "slider_value": 6.800000190734863,
                 "input_value": 6.800000190734863
+            },
+            "iCenterDeadzoneRadiusPixels": {
+                "min": 0.0,
+                "max": 300.0,
+                "slider_value": 60,
+                "input_value": 60
             }
         }
     }
