@@ -100,6 +100,99 @@ def _get_section_tooltips() -> Dict[str, str]:
     }
 
 
+def _build_algorithm_tabs(obConfig, obTracker: TrackerController, dItems: Dict[str, int]):
+    def _on_tab_change(sender, app_data, user_data):
+        try:
+            sLabel = dpg.get_item_label(app_data)
+            setattr(obConfig, 'sControlAlgorithmType', str(sLabel))
+            _apply_control_algorithm(obTracker, obConfig)
+        except Exception:
+            pass
+    with dpg.tab_bar(callback=_on_tab_change) as iAlgoBar:
+        with dpg.tab(label="P") as iTabP:
+            _add_slider_with_range(
+                "flControlProportionalGain",
+                obConfig.flControlProportionalGain,
+                dItems,
+                fnOnChange=lambda v: (
+                    setattr(obConfig, 'flControlProportionalGain', float(v)),
+                    isinstance(obTracker.obControlAlgorithm, ProportionalController) and obTracker.obControlAlgorithm.set_proportional_gain(float(v)),
+                    isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(float(v), obConfig.flControlIntegralGain, obConfig.flControlDerivativeGain)
+                ),
+                iWidth=500
+            )
+        with dpg.tab(label="PID") as iTabPID:
+            _add_slider_with_range(
+                "flControlProportionalGain",
+                obConfig.flControlProportionalGain,
+                dItems,
+                fnOnChange=lambda v: (
+                    setattr(obConfig, 'flControlProportionalGain', float(v)),
+                    isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(float(v), obConfig.flControlIntegralGain, obConfig.flControlDerivativeGain)
+                ),
+                iWidth=500
+            )
+            _add_slider_with_range(
+                "flControlIntegralGain",
+                obConfig.flControlIntegralGain,
+                dItems,
+                fnOnChange=lambda v: (
+                    setattr(obConfig, 'flControlIntegralGain', float(v)),
+                    isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(obConfig.flControlProportionalGain, float(v), obConfig.flControlDerivativeGain)
+                ),
+                iWidth=500
+            )
+            _add_slider_with_range(
+                "flControlDerivativeGain",
+                obConfig.flControlDerivativeGain,
+                dItems,
+                fnOnChange=lambda v: (
+                    setattr(obConfig, 'flControlDerivativeGain', float(v)),
+                    isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(obConfig.flControlProportionalGain, obConfig.flControlIntegralGain, float(v))
+                ),
+                iWidth=500
+            )
+        with dpg.tab(label="Velocity") as iTabVel:
+            _add_slider_with_range(
+                "flVelocityGain",
+                obConfig.flVelocityGain,
+                dItems,
+                fnOnChange=lambda v: (
+                    setattr(obConfig, 'flVelocityGain', float(v)),
+                    isinstance(obTracker.obControlAlgorithm, VelocityController) and obTracker.obControlAlgorithm.set_parameters(float(v), obConfig.flMaxVelocityDegreesPerSecond, obConfig.flVelocitySmoothingAlpha)
+                ),
+                iWidth=500
+            )
+            _add_slider_with_range(
+                "flMaxVelocityDegreesPerSecond",
+                obConfig.flMaxVelocityDegreesPerSecond,
+                dItems,
+                fnOnChange=lambda v: (
+                    setattr(obConfig, 'flMaxVelocityDegreesPerSecond', float(v)),
+                    isinstance(obTracker.obControlAlgorithm, VelocityController) and obTracker.obControlAlgorithm.set_parameters(obConfig.flVelocityGain, float(v), obConfig.flVelocitySmoothingAlpha)
+                ),
+                iWidth=500
+            )
+            _add_slider_with_range(
+                "flVelocitySmoothingAlpha",
+                obConfig.flVelocitySmoothingAlpha,
+                dItems,
+                fnOnChange=lambda v: (
+                    setattr(obConfig, 'flVelocitySmoothingAlpha', float(v)),
+                    isinstance(obTracker.obControlAlgorithm, VelocityController) and obTracker.obControlAlgorithm.set_parameters(obConfig.flVelocityGain, obConfig.flMaxVelocityDegreesPerSecond, float(v))
+                ),
+                iWidth=500
+            )
+    try:
+        if obConfig.sControlAlgorithmType == "PID":
+            dpg.set_value(iAlgoBar, iTabPID)
+        elif obConfig.sControlAlgorithmType == "Velocity":
+            dpg.set_value(iAlgoBar, iTabVel)
+        else:
+            dpg.set_value(iAlgoBar, iTabP)
+    except Exception:
+        pass
+
 def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], fnOnChange=None, bInteger: bool = False, iWidth: int = 500):
     flMin, flMax, _ = _ranges().get(sKey, (0.0, 100.0, 1.0))
     try:
@@ -422,66 +515,7 @@ def start_live_settings_panel(
         , iWidth=500)
 
         _add_section_header_with_tooltip("Algorithm", dTips.get("Algorithm", ""))
-        iAlgo = dpg.add_radio_button(items=["P", "PID", "Velocity"], default_value=obConfig.sControlAlgorithmType, horizontal=True)
-        dpg.set_item_callback(iAlgo, lambda s, a, u: (
-            setattr(obConfig, 'sControlAlgorithmType', str(a)),
-            _apply_control_algorithm(obTracker, obConfig)
-        ))
-        _add_slider_with_range(
-            "flControlProportionalGain",
-            obConfig.flControlProportionalGain,
-            dItems,
-            fnOnChange=lambda v: (
-                setattr(obConfig, 'flControlProportionalGain', float(v)),
-                isinstance(obTracker.obControlAlgorithm, ProportionalController) and obTracker.obControlAlgorithm.set_proportional_gain(float(v)),
-                isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(float(v), obConfig.flControlIntegralGain, obConfig.flControlDerivativeGain)
-            )
-        , iWidth=500)
-        _add_slider_with_range(
-            "flControlIntegralGain",
-            obConfig.flControlIntegralGain,
-            dItems,
-            fnOnChange=lambda v: (
-                setattr(obConfig, 'flControlIntegralGain', float(v)),
-                isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(obConfig.flControlProportionalGain, float(v), obConfig.flControlDerivativeGain)
-            )
-        , iWidth=500)
-        _add_slider_with_range(
-            "flControlDerivativeGain",
-            obConfig.flControlDerivativeGain,
-            dItems,
-            fnOnChange=lambda v: (
-                setattr(obConfig, 'flControlDerivativeGain', float(v)),
-                isinstance(obTracker.obControlAlgorithm, PIDController) and obTracker.obControlAlgorithm.set_gains(obConfig.flControlProportionalGain, obConfig.flControlIntegralGain, float(v))
-            )
-        , iWidth=500)
-        _add_slider_with_range(
-            "flVelocityGain",
-            obConfig.flVelocityGain,
-            dItems,
-            fnOnChange=lambda v: (
-                setattr(obConfig, 'flVelocityGain', float(v)),
-                isinstance(obTracker.obControlAlgorithm, VelocityController) and obTracker.obControlAlgorithm.set_parameters(float(v), obConfig.flMaxVelocityDegreesPerSecond, obConfig.flVelocitySmoothingAlpha)
-            )
-        , iWidth=500)
-        _add_slider_with_range(
-            "flMaxVelocityDegreesPerSecond",
-            obConfig.flMaxVelocityDegreesPerSecond,
-            dItems,
-            fnOnChange=lambda v: (
-                setattr(obConfig, 'flMaxVelocityDegreesPerSecond', float(v)),
-                isinstance(obTracker.obControlAlgorithm, VelocityController) and obTracker.obControlAlgorithm.set_parameters(obConfig.flVelocityGain, float(v), obConfig.flVelocitySmoothingAlpha)
-            )
-        , iWidth=500)
-        _add_slider_with_range(
-            "flVelocitySmoothingAlpha",
-            obConfig.flVelocitySmoothingAlpha,
-            dItems,
-            fnOnChange=lambda v: (
-                setattr(obConfig, 'flVelocitySmoothingAlpha', float(v)),
-                isinstance(obTracker.obControlAlgorithm, VelocityController) and obTracker.obControlAlgorithm.set_parameters(obConfig.flVelocityGain, obConfig.flMaxVelocityDegreesPerSecond, float(v))
-            )
-        , iWidth=500)
+        _build_algorithm_tabs(obConfig, obTracker, dItems)
 
         dpg.add_separator()
         _add_section_header_with_tooltip("FOV", dTips.get("FOV", ""))

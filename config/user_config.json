@@ -12,7 +12,7 @@
     "flPoseMinDetectionConfidence": 0.5,
     "flPoseMinTrackingConfidence": 0.5,
     "bPoseEnableSegmentation": false,
-    "flInitialAnglePerPixelDegrees": 0.047437500953674314,
+    "flInitialAnglePerPixelDegrees": 0.005312500149011612,
     "sControlAlgorithmType": "Velocity",
     "flControlProportionalGain": 1.0,
     "flControlIntegralGain": 0.0,
@@ -111,8 +111,8 @@
             "flFieldOfViewDegrees": {
                 "min": 6.800000190734863,
                 "max": 70.9000015258789,
-                "slider_value": 60.720001220703125,
-                "input_value": 60.720001220703125
+                "slider_value": 6.800000190734863,
+                "input_value": 6.800000190734863
             },
             "iCenterDeadzoneRadiusPixels": {
                 "min": 0.0,
