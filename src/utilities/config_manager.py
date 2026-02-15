@@ -41,8 +41,8 @@ class SystemConfiguration:
     bPoseEnableSegmentation: bool = False
     
     # FOV settings
-    flFieldOfViewDegrees: float = 0.0
-    flInitialAnglePerPixelDegrees: float = 0.05
+    flFieldOfViewDegrees: float = 6.77
+    flInitialAnglePerPixelDegrees: float = 0.00529
     
     # Control settings
     sControlAlgorithmType: str = "P"  # "P", "PID", or "Velocity"

@@ -11,6 +11,8 @@ pyserial==3.5
 # Numerical computing
 numpy==1.24.3
 
-# Data handling
-dataclasses-json==0.6.3
+# GUI
 dearpygui==1.11.1
+
+# Testing
+pytest>=8.0.0
