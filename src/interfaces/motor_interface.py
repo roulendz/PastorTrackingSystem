@@ -443,3 +443,225 @@ class NullMotorInterface:
 
     def set_feedback_callback(self, fnCallback):
         self._fnFeedbackCallback = fnCallback
+
+
+class SimulatedMotorInterface:
+    """
+    Simulated motor with trapezoidal velocity profile physics.
+
+    Replaces NullMotorInterface for testing scenarios where realistic
+    motor behavior is needed (motor takes real time to reach target,
+    respects max velocity, decelerates to stop at target position).
+
+    For interactive use (main.py --video), call start_background_simulation()
+    which runs advance_simulation() at ~1000 Hz in a daemon thread.
+    For unit tests, call advance_simulation(dt) directly with explicit time steps.
+    """
+
+    # Gear ratio constant: 200 steps * 180:1 gear * 8 microstep = 288,000 steps/rev
+    _FL_DEGREES_PER_STEP = 360.0 / 288000.0
+
+    def __init__(self):
+        self._flCurrentAngleDegrees = 0.0
+        self._flTargetAngleDegrees = 0.0
+        self._flCurrentVelocityDegreesPerSecond = 0.0
+        self._flMaxSpeedDegreesPerSecond = 30.0
+        self._flAccelerationDegreesPerSecondSquared = 60.0
+        self._dLastUpdateTimestampSeconds = time.perf_counter()
+        self._obStateLock = threading.Lock()
+        self._obMotorStateHistory = deque(maxlen=100)
+        self._iSequenceNumber = 0
+        self._bBackgroundThreadRunning = False
+        self._obBackgroundThread: Optional[threading.Thread] = None
+        self._fnFeedbackCallback: Optional[Callable[[MotorState], None]] = None
+        self._bIsConnected = False
+
+    def connect_to_motor_controller(self) -> bool:
+        self._bIsConnected = True
+        logger.info("SimulatedMotorInterface connected (simulated)")
+        return True
+
+    def disconnect_from_motor_controller(self):
+        self.stop_background_simulation()
+        self._bIsConnected = False
+        logger.info("SimulatedMotorInterface disconnected")
+
+    def is_connected_to_motor_controller(self) -> bool:
+        return self._bIsConnected
+
+    def send_move_to_angle_command(self, flTargetAngleDegrees: float) -> bool:
+        with self._obStateLock:
+            self._flTargetAngleDegrees = float(flTargetAngleDegrees)
+        return True
+
+    def send_emergency_stop_command(self) -> bool:
+        with self._obStateLock:
+            self._flTargetAngleDegrees = self._flCurrentAngleDegrees
+            self._flCurrentVelocityDegreesPerSecond = 0.0
+        return True
+
+    def send_home_command(self) -> bool:
+        with self._obStateLock:
+            self._flTargetAngleDegrees = 0.0
+        return True
+
+    def send_enable_driver_command(self, bEnableDriver: bool) -> bool:
+        return True
+
+    def send_speed_and_acceleration_settings(
+        self,
+        flMaxSpeedStepsPerSecond: float,
+        flMaxAccelerationStepsPerSecondSquared: float
+    ) -> bool:
+        with self._obStateLock:
+            self._flMaxSpeedDegreesPerSecond = float(flMaxSpeedStepsPerSecond) * self._FL_DEGREES_PER_STEP
+            self._flAccelerationDegreesPerSecondSquared = float(flMaxAccelerationStepsPerSecondSquared) * self._FL_DEGREES_PER_STEP
+        return True
+
+    def send_reset_position_command(self) -> bool:
+        with self._obStateLock:
+            self._flCurrentAngleDegrees = 0.0
+            self._flTargetAngleDegrees = 0.0
+            self._flCurrentVelocityDegreesPerSecond = 0.0
+        return True
+
+    def get_latest_motor_state(self) -> MotorState:
+        with self._obStateLock:
+            flVelocity = self._flCurrentVelocityDegreesPerSecond
+            flDistance = abs(self._flTargetAngleDegrees - self._flCurrentAngleDegrees)
+            bIsMoving = abs(flVelocity) > 0.01 or flDistance > 0.001
+            flSpeedStepsPerSecond = abs(flVelocity) / self._FL_DEGREES_PER_STEP
+            return MotorState(
+                flMotorAngleDegrees=self._flCurrentAngleDegrees,
+                flMotorTargetAngleDegrees=self._flTargetAngleDegrees,
+                flMotorSpeedStepsPerSecond=flSpeedStepsPerSecond,
+                bMotorIsMoving=bIsMoving,
+                dMotorTimestampSeconds=self._dLastUpdateTimestampSeconds,
+                iMotorSequenceNumber=self._iSequenceNumber
+            )
+
+    def get_estimated_motor_angle_degrees(self, dAtTimestampSeconds: float) -> float:
+        with self._obStateLock:
+            vHistory = list(self._obMotorStateHistory)
+            if not vHistory:
+                return float(self._flCurrentAngleDegrees)
+
+        if len(vHistory) == 1:
+            return float(vHistory[0].flMotorAngleDegrees)
+
+        dAt = float(dAtTimestampSeconds)
+        if dAt <= float(vHistory[0].dMotorTimestampSeconds):
+            return float(vHistory[0].flMotorAngleDegrees)
+        if dAt >= float(vHistory[-1].dMotorTimestampSeconds):
+            return float(vHistory[-1].flMotorAngleDegrees)
+
+        obPrev = vHistory[0]
+        for obNext in vHistory[1:]:
+            dNext = float(obNext.dMotorTimestampSeconds)
+            if dAt <= dNext:
+                dPrev = float(obPrev.dMotorTimestampSeconds)
+                if dNext <= dPrev:
+                    return float(obNext.flMotorAngleDegrees)
+                dFrac = (dAt - dPrev) / (dNext - dPrev)
+                flA0 = float(obPrev.flMotorAngleDegrees)
+                flA1 = float(obNext.flMotorAngleDegrees)
+                return flA0 + (flA1 - flA0) * float(dFrac)
+            obPrev = obNext
+
+        return float(vHistory[-1].flMotorAngleDegrees)
+
+    def set_feedback_callback(self, fnCallback: Callable[[MotorState], None]):
+        self._fnFeedbackCallback = fnCallback
+
+    def advance_simulation(self, dDeltaTimeSeconds: float):
+        """
+        Advance the motor simulation by one time step using trapezoidal velocity profile.
+
+        Args:
+            dDeltaTimeSeconds: Time step in seconds
+        """
+        with self._obStateLock:
+            flDistance = self._flTargetAngleDegrees - self._flCurrentAngleDegrees
+            flAbsDistance = abs(flDistance)
+            flDirection = 1.0 if flDistance > 0.0 else -1.0
+
+            # Check if we are close enough to snap to target
+            if flAbsDistance < 0.001 and abs(self._flCurrentVelocityDegreesPerSecond) < 0.01:
+                self._flCurrentAngleDegrees = self._flTargetAngleDegrees
+                self._flCurrentVelocityDegreesPerSecond = 0.0
+            else:
+                flAbsVelocity = abs(self._flCurrentVelocityDegreesPerSecond)
+                flAccel = self._flAccelerationDegreesPerSecondSquared
+
+                # Stopping distance: v^2 / (2*a)
+                flStoppingDistance = (flAbsVelocity * flAbsVelocity) / (2.0 * flAccel) if flAccel > 0.0 else 0.0
+
+                if flStoppingDistance >= flAbsDistance:
+                    # Decelerate
+                    flDecel = flAccel * dDeltaTimeSeconds
+                    if flAbsVelocity <= flDecel:
+                        self._flCurrentVelocityDegreesPerSecond = 0.0
+                    else:
+                        # Decelerate in the direction opposite to current velocity
+                        flVelDirection = 1.0 if self._flCurrentVelocityDegreesPerSecond > 0.0 else -1.0
+                        self._flCurrentVelocityDegreesPerSecond -= flVelDirection * flDecel
+                elif flAbsVelocity < self._flMaxSpeedDegreesPerSecond:
+                    # Accelerate toward target
+                    self._flCurrentVelocityDegreesPerSecond += flDirection * flAccel * dDeltaTimeSeconds
+                    # Clamp to max speed
+                    if abs(self._flCurrentVelocityDegreesPerSecond) > self._flMaxSpeedDegreesPerSecond:
+                        flVelDir = 1.0 if self._flCurrentVelocityDegreesPerSecond > 0.0 else -1.0
+                        self._flCurrentVelocityDegreesPerSecond = flVelDir * self._flMaxSpeedDegreesPerSecond
+                # else: cruise at max speed (velocity stays the same)
+
+                # Update position
+                self._flCurrentAngleDegrees += self._flCurrentVelocityDegreesPerSecond * dDeltaTimeSeconds
+
+            # Update timestamp and sequence
+            self._dLastUpdateTimestampSeconds = time.perf_counter()
+            self._iSequenceNumber += 1
+
+            # Record state in history
+            self._obMotorStateHistory.append(MotorState(
+                flMotorAngleDegrees=self._flCurrentAngleDegrees,
+                flMotorTargetAngleDegrees=self._flTargetAngleDegrees,
+                flMotorSpeedStepsPerSecond=abs(self._flCurrentVelocityDegreesPerSecond) / self._FL_DEGREES_PER_STEP,
+                bMotorIsMoving=abs(self._flCurrentVelocityDegreesPerSecond) > 0.01 or abs(self._flTargetAngleDegrees - self._flCurrentAngleDegrees) > 0.001,
+                dMotorTimestampSeconds=self._dLastUpdateTimestampSeconds,
+                iMotorSequenceNumber=self._iSequenceNumber
+            ))
+
+        # Call feedback callback outside the lock
+        if self._fnFeedbackCallback:
+            self._fnFeedbackCallback(self.get_latest_motor_state())
+
+    def start_background_simulation(self):
+        """Start a daemon thread that calls advance_simulation() at ~1000 Hz."""
+        if self._bBackgroundThreadRunning:
+            return
+        self._bBackgroundThreadRunning = True
+        self._obBackgroundThread = threading.Thread(
+            target=self._background_simulation_loop,
+            daemon=True
+        )
+        self._obBackgroundThread.start()
+        logger.info("SimulatedMotorInterface background simulation started")
+
+    def stop_background_simulation(self):
+        """Stop the background simulation thread."""
+        self._bBackgroundThreadRunning = False
+        if self._obBackgroundThread is not None:
+            self._obBackgroundThread.join(timeout=2.0)
+            self._obBackgroundThread = None
+        logger.debug("SimulatedMotorInterface background simulation stopped")
+
+    def _background_simulation_loop(self):
+        """Thread function: advance simulation at ~1000 Hz using perf_counter for delta."""
+        dLastTime = time.perf_counter()
+        while self._bBackgroundThreadRunning:
+            dNow = time.perf_counter()
+            dDelta = dNow - dLastTime
+            dLastTime = dNow
+            if dDelta > 0.0:
+                self.advance_simulation(dDelta)
+            time.sleep(0.001)
