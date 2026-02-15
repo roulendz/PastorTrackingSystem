@@ -9,28 +9,28 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 1 of 5 (Test Foundation and Code Cleanup)
-Plan: 2 of 3 in current phase
-Status: Executing phase 1
-Last activity: 2026-02-15 -- Completed 01-02 (code cleanup and exception handling)
+Phase: 1 of 5 (Test Foundation and Code Cleanup) -- COMPLETE
+Plan: 3 of 3 in current phase (all plans complete)
+Status: Phase 1 complete, ready for Phase 2
+Last activity: 2026-02-15 -- Completed 01-03 (test suite)
 
-Progress: [##........] 20%
+Progress: [###.......] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
+- Total plans completed: 3
 - Average duration: 5 min
-- Total execution time: 0.17 hours
+- Total execution time: 0.25 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-test-foundation | 2 | 10 min | 5 min |
+| 01-test-foundation | 3 | 15 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 01-02 (5 min)
+- Last 5 plans: 01-01 (5 min), 01-02 (5 min), 01-03 (5 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -52,6 +52,9 @@ Recent decisions affecting current work:
 - [01-02]: Log level convention: debug for expected failures, warning for unexpected-but-recoverable, error for attention-required
 - [01-02]: UI/destructor broad catches kept (Exception) but always log at debug level
 - [01-02]: Critical path catches narrowed to specific types (ValueError, TypeError, AttributeError, KeyError)
+- [01-03]: Mock PoseTracker via unittest.mock rather than importing MediaPipe in tests
+- [01-03]: Explicit advance_simulation(dt) in tests for deterministic motor physics
+- [01-03]: Synthetic video generation (90 frames, moving red circle) for camera tests
 
 ### Pending Todos
 
@@ -66,5 +69,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 01-02-PLAN.md (code cleanup and exception handling)
+Stopped at: Completed 01-03-PLAN.md (test suite -- Phase 1 complete)
 Resume file: None
