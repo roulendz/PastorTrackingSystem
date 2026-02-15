@@ -30,11 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. No dead code remains -- every module and function is reachable from main.py or tests
   4. No silent exception swallowing -- all except blocks either handle specific exceptions or log with traceback
   5. FOV is correctly set to ~6.8 degrees for Sony AX700 at max optical zoom (validated by pixel-to-degree conversion matching expected value)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Core interface extensions (SimulatedMotorInterface, CameraInterface video support, FOV fix)
+- [ ] 01-02-PLAN.md -- Code cleanup (silent exception fixing, dead code removal)
+- [ ] 01-03-PLAN.md -- Test infrastructure (pytest setup, fixtures, motor/camera/FOV/pipeline tests)
 
 ### Phase 2: Time Synchronization
 **Goal**: The virtual center line stays locked to the physical background at all motor velocities
@@ -100,7 +101,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Test Foundation and Code Cleanup | 0/TBD | Not started | - |
+| 1. Test Foundation and Code Cleanup | 0/3 | Planning complete | - |
 | 2. Time Synchronization | 0/TBD | Not started | - |
 | 3. Motion Smoothing | 0/TBD | Not started | - |
 | 4. Detection Handling | 0/TBD | Not started | - |
