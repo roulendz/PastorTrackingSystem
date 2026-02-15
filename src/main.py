@@ -20,7 +20,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from interfaces.motor_interface import MotorInterface, NullMotorInterface
 from interfaces.camera_interface import CameraInterface
 from tracking.pose_tracker import PoseTracker, PoseResult
-from tracking.fov_estimator import FieldOfViewEstimator
 from control.control_algorithm import ProportionalController, PIDController
 from control.tracker_controller import TrackerController
 from utilities.config_manager import ConfigurationManager
@@ -62,7 +61,7 @@ def initialize_system(obConfig):
     Initialize all system components.
     
     Returns:
-        Tuple of (motor, camera, pose_tracker, fov_estimator, controller, tracker)
+        Tuple of (motor, camera, pose_tracker, controller, tracker)
     """
     logger.info("Initializing system components...")
     
@@ -109,12 +108,7 @@ def initialize_system(obConfig):
         obConfig.bPoseEnableSegmentation
     )
     
-    # 4. FOV (manual)
-    logger.info("Initializing FOV...")
-    flInitialAnglePerPixel = obConfig.flInitialAnglePerPixelDegrees
-    obFOVEstimator = FieldOfViewEstimator(flInitialAnglePerPixel)
-    
-    # 5. Control Algorithm
+    # 4. Control Algorithm
     logger.info(f"Initializing {obConfig.sControlAlgorithmType} controller...")
     
     if obConfig.sControlAlgorithmType == "PID":
@@ -135,13 +129,12 @@ def initialize_system(obConfig):
             obConfig.flControlProportionalGain
         )
     
-    # 6. Tracker Controller
+    # 5. Tracker Controller
     logger.info("Initializing tracker controller...")
     obTrackerController = TrackerController(
         obMotorInterface,
         obCameraInterface,
         obPoseTracker,
-        obFOVEstimator,
         obControlAlgorithm
     )
     # Apply configuration to controller
@@ -153,7 +146,6 @@ def initialize_system(obConfig):
         obMotorInterface,
         obCameraInterface,
         obPoseTracker,
-        obFOVEstimator,
         obControlAlgorithm,
         obTrackerController
     )
@@ -166,15 +158,17 @@ class DeadzoneUIController:
         self.iHomeLineX = 0
         self.flAnglePerPixel = 0.05
         self.iImageHeight = 0
+        self.iImageWidth = 0
         self.bDraggingLeft = False
         self.bDraggingRight = False
         self.bDraggingCenter = False
         self.iDragThresholdPixels = 8
         self.iHomeUpdateMinDeltaPixels = 2
 
-    def update_mapping(self, iHomeLineX: int, flAnglePerPixel: float, iImageHeight: int):
+    def update_mapping(self, iHomeLineX: int, flAnglePerPixel: float, iImageWidth: int, iImageHeight: int):
         self.iHomeLineX = int(iHomeLineX)
         self.flAnglePerPixel = max(1e-9, flAnglePerPixel)
+        self.iImageWidth = int(iImageWidth)
         self.iImageHeight = iImageHeight
 
     def on_mouse(self, event, x, y, flags, param=None):
@@ -200,7 +194,7 @@ class DeadzoneUIController:
                 flNewDeg = iNewDeadbandPx * self.flAnglePerPixel
                 self.obTrackerController.set_deadband_degrees(flNewDeg)
             elif self.bDraggingCenter:
-                iCenterX = int(self.obConfig.iCameraWidthPixels // 2)
+                iCenterX = int(self.iImageWidth // 2) if self.iImageWidth > 0 else int(self.obConfig.iCameraWidthPixels // 2)
                 flNewAngle = (iCenterX - x) * self.flAnglePerPixel
                 self.obTrackerController.obMotorInterface.send_move_to_angle_command(flNewAngle)
                 try:
@@ -225,7 +219,7 @@ class DeadzoneUIController:
         TextRenderer.draw_text(obFrame, sText, (iRightX + 10 if iRightX + 150 < iWidth else max(10, iLeftX - 150), 30), 0.6, (0, 255, 0), 2)
 
 
-def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneUI: DeadzoneUIController):
+def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obTrackerController: TrackerController, obDeadzoneUI: DeadzoneUIController):
     """
     Draw visualization overlay on frame.
     
@@ -241,16 +235,20 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
     iCenterX = iWidth // 2
     cv2.line(obFrame, (iCenterX, 0), (iCenterX, iHeight), (0, 255, 255), 2)
 
-    # Compute virtual home line based on current motor angle (locked to world plane)
-    flFOVDegrees = float(getattr(obConfig, 'flFieldOfViewDegrees', 0.0)) if hasattr(obConfig, 'flFieldOfViewDegrees') and float(getattr(obConfig, 'flFieldOfViewDegrees', 0.0)) > 0.0 else (obStats['fov_degrees'] if obStats and 'fov_degrees' in obStats else 0.0)
-    flConfiguredApx = float(getattr(obConfig, 'flInitialAnglePerPixelDegrees', 0.0)) if hasattr(obConfig, 'flInitialAnglePerPixelDegrees') else 0.0
-    flAnglePerPixel = flConfiguredApx if flConfiguredApx > 0.0 else ((flFOVDegrees / iWidth) if iWidth > 0 else 0.0)
+    flAnglePerPixel = obTrackerController.get_angle_per_pixel_degrees(iWidth)
+    flFOVDegrees = float(getattr(obConfig, 'flFieldOfViewDegrees', 0.0))
+    if not (flFOVDegrees > 0.0):
+        flFOVDegrees = flAnglePerPixel * float(iWidth) if iWidth > 0 else 0.0
     flMotorAngle = obSample.flMotorAngleDegrees if obSample is not None else (obStats['motor_angle'] if obStats and 'motor_angle' in obStats else 0.0)
-    iHomeLineX = int(iCenterX - (flMotorAngle / (flAnglePerPixel if flAnglePerPixel != 0 else 1e-9)))
-    iHomeLineX = max(0, min(iWidth - 1, iHomeLineX))
+    if flAnglePerPixel != 0 and iWidth > 0:
+        iHomeLineX = int(iCenterX - (flMotorAngle / flAnglePerPixel))
+        iHomeLineX = max(0, min(iWidth - 1, iHomeLineX))
+    else:
+        iHomeLineX = iCenterX
     cv2.line(obFrame, (iHomeLineX, 0), (iHomeLineX, iHeight), (255, 255, 0), 1)
-    obDeadzoneUI.update_mapping(iHomeLineX, flAnglePerPixel if flAnglePerPixel != 0 else 1e-9, iHeight)
-    obDeadzoneUI.draw(obFrame)
+    obDeadzoneUI.update_mapping(iHomeLineX, flAnglePerPixel if flAnglePerPixel != 0 else 1e-9, iWidth, iHeight)
+    if bool(getattr(obConfig, 'bEnableDeadzoneOverlay', True)):
+        obDeadzoneUI.draw(obFrame)
     
     # Draw person center if detected
     if obSample and obSample.bPersonWasDetected:
@@ -290,6 +288,7 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
             "S - Start tracking",
             "P - Pause",
             "Q - Quit",
+            "C - Calibrate FOV (press twice)",
             "H - Move to HOME (0°)",
             "R - Reset current position as HOME (0°)"
         ]
@@ -333,13 +332,14 @@ def main():
         return 1
     
     (obMotorInterface, obCameraInterface, obPoseTracker,
-     obFOVEstimator, obControlAlgorithm, obTrackerController) = obComponents
-    start_live_settings_panel(obConfigManager, obTrackerController, obMotorInterface, obCameraInterface, obFOVEstimator)
+     obControlAlgorithm, obTrackerController) = obComponents
+    start_live_settings_panel(obConfigManager, obTrackerController, obMotorInterface, obCameraInterface)
     
     # Prepare window
     cv2.namedWindow('Pastor Tracking System', cv2.WINDOW_NORMAL)
     obDeadzoneUI = DeadzoneUIController(obTrackerController, obConfig)
     cv2.setMouseCallback('Pastor Tracking System', obDeadzoneUI.on_mouse)
+    dFovCalibration = None
     
     # Main loop
     logger.info("=" * 60)
@@ -372,7 +372,7 @@ def main():
                     obVisFrame = obPoseTracker.draw_pose_on_frame(obVisFrame, obPoseResult)
 
                 # Draw overlay
-                draw_visualization_overlay(obVisFrame, obSample, dStats, obConfig, obDeadzoneUI)
+                draw_visualization_overlay(obVisFrame, obSample, dStats, obConfig, obTrackerController, obDeadzoneUI)
                 
                 # Show frame
                 cv2.imshow('Pastor Tracking System', obVisFrame)
@@ -391,6 +391,38 @@ def main():
                 if obTrackerController.is_currently_tracking():
                     obTrackerController.stop_tracking_mode()
                     logger.info("Tracking PAUSED")
+            elif iKey == ord('c') or iKey == ord('C'):
+                try:
+                    if obSample is None or not bool(getattr(obSample, 'bPersonWasDetected', False)):
+                        logger.info("FOV calibrate: no person detected")
+                    else:
+                        iWidth = int(obSample.obFrameImage.shape[1]) if obSample.obFrameImage is not None else int(obConfig.iCameraWidthPixels)
+                        flAngle = float(obSample.flMotorAngleDegrees)
+                        flX = float(obSample.flPersonCenterXPixels)
+                        if dFovCalibration is None:
+                            dFovCalibration = {"angle": flAngle, "x": flX, "width": iWidth}
+                            logger.info("FOV calibrate: captured first point")
+                        else:
+                            flDeltaAngle = float(flAngle - float(dFovCalibration["angle"]))
+                            flDeltaPx = float(flX - float(dFovCalibration["x"]))
+                            if abs(flDeltaPx) < 5.0 or abs(flDeltaAngle) < 0.05:
+                                logger.info("FOV calibrate: move more before second capture")
+                            else:
+                                flFov = abs(flDeltaAngle) * float(iWidth) / abs(flDeltaPx)
+                                obConfig.flFieldOfViewDegrees = float(flFov)
+                                try:
+                                    obConfig.flInitialAnglePerPixelDegrees = float(flFov) / float(iWidth) if iWidth > 0 else obConfig.flInitialAnglePerPixelDegrees
+                                except Exception:
+                                    pass
+                                try:
+                                    from ui.live_settings_panel import update_fov_degrees_slider
+                                    update_fov_degrees_slider(float(flFov))
+                                except Exception:
+                                    pass
+                                logger.info(f"FOV calibrate: set flFieldOfViewDegrees={flFov:.3f}")
+                                dFovCalibration = None
+                except Exception:
+                    dFovCalibration = None
             
             elif iKey == ord('h') or iKey == ord('H'):
                 obMotorInterface.send_home_command()

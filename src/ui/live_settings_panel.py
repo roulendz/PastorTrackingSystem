@@ -9,7 +9,6 @@ from control.tracker_controller import TrackerController
 from interfaces.motor_interface import MotorInterface
 from interfaces.camera_interface import CameraInterface
 from tracking.pose_tracker import PoseTracker
-from tracking.fov_estimator import FieldOfViewEstimator
 from control.control_algorithm import ProportionalController, PIDController, VelocityController
 
 
@@ -87,8 +86,8 @@ def _get_section_tooltips() -> Dict[str, str]:
         ),
         "FOV": (
             "flFieldOfViewDegrees: Visual field of view of the camera.\n"
-            "Sets the initial angle-per-pixel used to convert pixel error to angle error.\n"
-            "The tracker learns and updates this mapping during runtime."
+            "Used to convert pixel error to angle error (angle-per-pixel = FOV / image width).\n"
+            "This value is treated as fixed during runtime."
         ),
         "Visualization": (
             "bEnableVisualization: Toggles drawing of the overlay on the video.\n"
@@ -379,6 +378,7 @@ def _bind_global_scale():
 
 # Center angle external bridge
 _g_iCenterAngleItem: int | None = None
+_g_iFovDegreesItem: int | None = None
 _g_bProgrammaticUpdate: bool = False
 
 def update_center_angle_slider(flAngleDegrees: float):
@@ -391,13 +391,22 @@ def update_center_angle_slider(flAngleDegrees: float):
     finally:
         _g_bProgrammaticUpdate = False
 
+def update_fov_degrees_slider(flFovDegrees: float):
+    global _g_iFovDegreesItem, _g_bProgrammaticUpdate
+    if _g_iFovDegreesItem is None:
+        return
+    _g_bProgrammaticUpdate = True
+    try:
+        dpg.set_value(_g_iFovDegreesItem, float(flFovDegrees))
+    finally:
+        _g_bProgrammaticUpdate = False
+
 
 def start_live_settings_panel(
     obConfigManager: ConfigurationManager,
     obTracker: TrackerController,
     obMotor: MotorInterface,
-    obCamera: CameraInterface,
-    obFOV: FieldOfViewEstimator
+    obCamera: CameraInterface
 ):
     dpg.create_context()
     # Position the settings viewport to the right side of the primary monitor and full height
@@ -531,7 +540,12 @@ def start_live_settings_panel(
         dpg.add_separator()
         _add_section_header_with_tooltip("FOV", dTips.get("FOV", ""))
         iWidth, _ = obCamera.get_frame_dimensions()
-        flInitialFOV = obFOV.get_estimated_field_of_view_degrees(iWidth)
+        flConfigFov = float(getattr(obConfig, 'flFieldOfViewDegrees', 0.0))
+        if flConfigFov > 0.0:
+            flInitialFOV = flConfigFov
+        else:
+            flApx = float(getattr(obConfig, 'flInitialAnglePerPixelDegrees', 0.0))
+            flInitialFOV = flApx * float(iWidth) if iWidth > 0 else 0.0
         try:
             dSavedFov = _g_dSavedUI.get("flFieldOfViewDegrees", {})
             flSavedMin = float(dSavedFov.get("min", 10.0))
@@ -539,7 +553,6 @@ def start_live_settings_panel(
             flSavedSliderValue = float(dSavedFov.get("slider_value", flInitialFOV))
         except Exception:
             flSavedMin, flSavedMax, flSavedSliderValue = 10.0, 180.0, flInitialFOV
-        # FOV degrees slider maps to angle-per-pixel internally
         def _on_fov_change(flFovDegrees: float):
             try:
                 obConfig.flFieldOfViewDegrees = float(flFovDegrees)
@@ -560,6 +573,8 @@ def start_live_settings_panel(
             dpg.set_item_callback(iMinFov, lambda s, a, u: _apply_fov_range())
             dpg.set_item_callback(iMaxFov, lambda s, a, u: _apply_fov_range())
         dItems["flFieldOfViewDegrees"] = dpg.add_slider_float(label="", default_value=float(flSavedSliderValue), min_value=float(flSavedMin), max_value=float(flSavedMax), width=500, callback=lambda s, a, u: _on_fov_change(float(a)))
+        global _g_iFovDegreesItem
+        _g_iFovDegreesItem = dItems["flFieldOfViewDegrees"]
         iFovValue = dpg.add_input_float(label="value", default_value=float(flSavedSliderValue), width=500, callback=lambda s, a, u: (_on_fov_change(float(a)), dpg.set_value(dItems["flFieldOfViewDegrees"], float(a))))
         def _reset_fov():
             dpg.set_value(dItems["flFieldOfViewDegrees"], float(flInitialFOV))
@@ -572,7 +587,6 @@ def start_live_settings_panel(
         # Angle-per-pixel override slider (direct)
         def _on_apx_change(flAnglePerPixel: float):
             obConfig.flInitialAnglePerPixelDegrees = float(flAnglePerPixel)
-            obTracker.set_fov_angle_per_pixel(float(flAnglePerPixel))
         _add_slider_with_range(
             "flInitialAnglePerPixelDegrees",
             obConfig.flInitialAnglePerPixelDegrees,

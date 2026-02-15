@@ -13,6 +13,7 @@ import serial
 from serial.tools import list_ports
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Optional, Callable
 import logging
@@ -60,9 +61,16 @@ class MotorInterface:
             flMotorTargetAngleDegrees=0.0,
             flMotorSpeedStepsPerSecond=0.0,
             bMotorIsMoving=False,
-            dMotorTimestampSeconds=0.0
+            dMotorTimestampSeconds=time.perf_counter()
         )
+        self._obPreviousMotorState: Optional[MotorState] = None
         self._obStateLock = threading.Lock()
+        self._flLastCommandedTargetAngleDegrees: Optional[float] = None
+        self._dLastCommandTimestampSeconds: Optional[float] = None
+        self._obMotorStateHistory = deque(maxlen=32)
+        self._iArduinoLastTimestampMicros: Optional[int] = None
+        self._iArduinoTimestampRolloverCount: int = 0
+        self._dArduinoToPerfCounterOffsetSeconds: Optional[float] = None
         
         # Feedback reception thread
         self._bFeedbackThreadRunning = False
@@ -139,6 +147,9 @@ class MotorInterface:
         Returns:
             True if command sent successfully
         """
+        with self._obStateLock:
+            self._flLastCommandedTargetAngleDegrees = float(flTargetAngleDegrees)
+            self._dLastCommandTimestampSeconds = time.perf_counter()
         sCommand = f"M,{flTargetAngleDegrees:.2f}\n"
         return self._send_command(sCommand)
     
@@ -148,6 +159,9 @@ class MotorInterface:
     
     def send_home_command(self) -> bool:
         """Move motor to 0 degrees."""
+        with self._obStateLock:
+            self._flLastCommandedTargetAngleDegrees = 0.0
+            self._dLastCommandTimestampSeconds = time.perf_counter()
         return self._send_command("H\n")
     
     def send_enable_driver_command(self, bEnableDriver: bool) -> bool:
@@ -199,6 +213,36 @@ class MotorInterface:
                 dMotorTimestampSeconds=self._obLatestMotorState.dMotorTimestampSeconds,
                 iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
             )
+
+    def get_estimated_motor_angle_degrees(self, dAtTimestampSeconds: float) -> float:
+        with self._obStateLock:
+            vHistory = list(self._obMotorStateHistory)
+            if not vHistory:
+                return float(self._obLatestMotorState.flMotorAngleDegrees)
+
+        if len(vHistory) == 1:
+            return float(vHistory[0].flMotorAngleDegrees)
+
+        dAt = float(dAtTimestampSeconds)
+        if dAt <= float(vHistory[0].dMotorTimestampSeconds):
+            return float(vHistory[0].flMotorAngleDegrees)
+        if dAt >= float(vHistory[-1].dMotorTimestampSeconds):
+            return float(vHistory[-1].flMotorAngleDegrees)
+
+        obPrev = vHistory[0]
+        for obNext in vHistory[1:]:
+            dNext = float(obNext.dMotorTimestampSeconds)
+            if dAt <= dNext:
+                dPrev = float(obPrev.dMotorTimestampSeconds)
+                if dNext <= dPrev:
+                    return float(obNext.flMotorAngleDegrees)
+                dFrac = (dAt - dPrev) / (dNext - dPrev)
+                flA0 = float(obPrev.flMotorAngleDegrees)
+                flA1 = float(obNext.flMotorAngleDegrees)
+                return flA0 + (flA1 - flA0) * float(dFrac)
+            obPrev = obNext
+
+        return float(vHistory[-1].flMotorAngleDegrees)
     
     def set_feedback_callback(self, fnCallback: Callable[[MotorState], None]):
         """
@@ -282,20 +326,49 @@ class MotorInterface:
                 flTargetAngle = float(vParts[1])
                 flSpeed = float(vParts[2])
                 bIsMoving = bool(int(vParts[3]))
-                ulTimestampMicros = int(vParts[4])
                 iSequence = int(vParts[5])
-                
-                # Convert microseconds to seconds
-                dTimestampSeconds = ulTimestampMicros / 1_000_000.0
+                dNow = time.perf_counter()
+                dTimestampSeconds = dNow
+                try:
+                    iTimestampMicros = int(vParts[4])
+                    if self._iArduinoLastTimestampMicros is not None and iTimestampMicros < int(self._iArduinoLastTimestampMicros):
+                        self._iArduinoTimestampRolloverCount += 1
+                    self._iArduinoLastTimestampMicros = iTimestampMicros
+                    iUnwrappedMicros = int(iTimestampMicros) + int(self._iArduinoTimestampRolloverCount) * 4294967296
+                    dArduinoSeconds = float(iUnwrappedMicros) / 1_000_000.0
+                    dMeasuredOffset = float(dNow) - float(dArduinoSeconds)
+                    if self._dArduinoToPerfCounterOffsetSeconds is None:
+                        self._dArduinoToPerfCounterOffsetSeconds = dMeasuredOffset
+                    else:
+                        self._dArduinoToPerfCounterOffsetSeconds = (0.98 * float(self._dArduinoToPerfCounterOffsetSeconds)) + (0.02 * dMeasuredOffset)
+                    dTimestampSeconds = float(dArduinoSeconds) + float(self._dArduinoToPerfCounterOffsetSeconds)
+                except Exception:
+                    dTimestampSeconds = dNow
                 
                 # Update state (thread-safe)
                 with self._obStateLock:
+                    self._obPreviousMotorState = MotorState(
+                        flMotorAngleDegrees=self._obLatestMotorState.flMotorAngleDegrees,
+                        flMotorTargetAngleDegrees=self._obLatestMotorState.flMotorTargetAngleDegrees,
+                        flMotorSpeedStepsPerSecond=self._obLatestMotorState.flMotorSpeedStepsPerSecond,
+                        bMotorIsMoving=self._obLatestMotorState.bMotorIsMoving,
+                        dMotorTimestampSeconds=self._obLatestMotorState.dMotorTimestampSeconds,
+                        iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
+                    )
                     self._obLatestMotorState.flMotorAngleDegrees = flCurrentAngle
                     self._obLatestMotorState.flMotorTargetAngleDegrees = flTargetAngle
                     self._obLatestMotorState.flMotorSpeedStepsPerSecond = flSpeed
                     self._obLatestMotorState.bMotorIsMoving = bIsMoving
                     self._obLatestMotorState.dMotorTimestampSeconds = dTimestampSeconds
                     self._obLatestMotorState.iMotorSequenceNumber = iSequence
+                    self._obMotorStateHistory.append(MotorState(
+                        flMotorAngleDegrees=self._obLatestMotorState.flMotorAngleDegrees,
+                        flMotorTargetAngleDegrees=self._obLatestMotorState.flMotorTargetAngleDegrees,
+                        flMotorSpeedStepsPerSecond=self._obLatestMotorState.flMotorSpeedStepsPerSecond,
+                        bMotorIsMoving=self._obLatestMotorState.bMotorIsMoving,
+                        dMotorTimestampSeconds=self._obLatestMotorState.dMotorTimestampSeconds,
+                        iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
+                    ))
                 
                 # Call callback if registered
                 if self._fnFeedbackCallback:
@@ -318,7 +391,7 @@ class NullMotorInterface:
             flMotorTargetAngleDegrees=0.0,
             flMotorSpeedStepsPerSecond=0.0,
             bMotorIsMoving=False,
-            dMotorTimestampSeconds=time.time()
+            dMotorTimestampSeconds=time.perf_counter()
         )
         self._fnFeedbackCallback = None
 
@@ -361,9 +434,12 @@ class NullMotorInterface:
             flMotorTargetAngleDegrees=self._obLatestMotorState.flMotorTargetAngleDegrees,
             flMotorSpeedStepsPerSecond=self._obLatestMotorState.flMotorSpeedStepsPerSecond,
             bMotorIsMoving=False,
-            dMotorTimestampSeconds=time.time(),
+            dMotorTimestampSeconds=time.perf_counter(),
             iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
         )
+
+    def get_estimated_motor_angle_degrees(self, dAtTimestampSeconds: float) -> float:
+        return float(self._obLatestMotorState.flMotorAngleDegrees)
 
     def set_feedback_callback(self, fnCallback):
         self._fnFeedbackCallback = fnCallback

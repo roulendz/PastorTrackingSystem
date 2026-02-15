@@ -41,6 +41,7 @@ class SystemConfiguration:
     bPoseEnableSegmentation: bool = False
     
     # FOV settings
+    flFieldOfViewDegrees: float = 0.0
     flInitialAnglePerPixelDegrees: float = 0.05
     
     # Control settings

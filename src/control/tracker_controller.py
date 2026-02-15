@@ -2,7 +2,7 @@
 tracker_controller.py - Main orchestration for tracking system
 
 This module ties everything together: camera, motor, pose detection,
-FOV learning, and control.
+FOV configuration, and control.
 
 Follows:
 - SRP: Orchestrates but doesn't implement low-level logic
@@ -18,7 +18,6 @@ from core.tracking_sample import TrackingSample
 from interfaces.motor_interface import MotorInterface
 from interfaces.camera_interface import CameraInterface
 from tracking.pose_tracker import PoseTracker
-from tracking.fov_estimator import FieldOfViewEstimator
 from control.control_algorithm import ControlAlgorithm
 
 logger = logging.getLogger(__name__)
@@ -36,9 +35,8 @@ class TrackerController:
     Main controller that orchestrates all tracking components.
     
     Responsibilities:
-    - Run main tracking loop at camera frame rate
+    - Run main tracking loop at camera frame rate (e.g., 30 FPS).
     - Build TrackingSamples from camera + motor
-    - Update FOV estimator
     - Calculate and send control corrections
     - Manage system state
     """
@@ -48,7 +46,6 @@ class TrackerController:
         obMotorInterface: MotorInterface,
         obCameraInterface: CameraInterface,
         obPoseTracker: PoseTracker,
-        obFieldOfViewEstimator: FieldOfViewEstimator,
         obControlAlgorithm: ControlAlgorithm
     ):
         """
@@ -58,15 +55,14 @@ class TrackerController:
             obMotorInterface: Motor communication interface
             obCameraInterface: Camera capture interface
             obPoseTracker: Pose detection module
-            obFieldOfViewEstimator: FOV learning module
             obControlAlgorithm: Control algorithm (P/PID)
         """
         # Store references to injected dependencies
         self.obMotorInterface = obMotorInterface
         self.obCameraInterface = obCameraInterface
         self.obPoseTracker = obPoseTracker
-        self.obFieldOfViewEstimator = obFieldOfViewEstimator
         self.obControlAlgorithm = obControlAlgorithm
+        self.obConfig = None
         
         # State
         self.eCurrentState = TrackerState.IDLE
@@ -85,8 +81,7 @@ class TrackerController:
         self.dStartTime = time.time()
         self._flLastCommandedAngle = None
         self.flCommandMinDeltaDegrees = 0.05
-        self.flCommandSmoothingAlpha = 0.2
-        self._flSmoothedTargetAngle = None
+        self._dPreviousControlTimestampSeconds = None
         
         logger.info("TrackerController initialized")
     
@@ -109,6 +104,10 @@ class TrackerController:
             
             # STEP 2: Get latest motor state (snapshot at this instant)
             obMotorState = self.obMotorInterface.get_latest_motor_state()
+            try:
+                flEstimatedAngle = float(self.obMotorInterface.get_estimated_motor_angle_degrees(dFrameTimestamp))
+            except Exception:
+                flEstimatedAngle = obMotorState.flMotorAngleDegrees
             
             # STEP 3: Run pose detection
             obPoseResult = self.obPoseTracker.detect_person_in_frame(obFrameImage)
@@ -116,7 +115,7 @@ class TrackerController:
             # STEP 4: Build TrackingSample (atomic measurement)
             obNewSample = TrackingSample(
                 dSampleTimestampSeconds=dFrameTimestamp,
-                flMotorAngleDegrees=obMotorState.flMotorAngleDegrees,
+                flMotorAngleDegrees=flEstimatedAngle,
                 flPersonCenterXPixels=obPoseResult.flPersonCenterXPixels,
                 flPersonCenterYPixels=obPoseResult.flPersonCenterYPixels,
                 bPersonWasDetected=obPoseResult.bPersonWasDetected,
@@ -160,9 +159,12 @@ class TrackerController:
         return self.eCurrentState == TrackerState.TRACKING
     
     def get_current_field_of_view_degrees(self) -> float:
-        """Get current FOV estimate."""
+        """Get current configured FOV (degrees)."""
         iWidth, _ = self.obCameraInterface.get_frame_dimensions()
-        return self.obFieldOfViewEstimator.get_estimated_field_of_view_degrees(iWidth)
+        flFovDegrees = float(getattr(self.obConfig, 'flFieldOfViewDegrees', 0.0)) if self.obConfig is not None else 0.0
+        if flFovDegrees > 0.0:
+            return flFovDegrees
+        return self._get_angle_per_pixel_degrees(iWidth) * float(iWidth)
     
     def get_current_motor_angle_degrees(self) -> float:
         """Get latest motor angle."""
@@ -173,6 +175,9 @@ class TrackerController:
         """Get latest motor speed (steps/s)."""
         obState = self.obMotorInterface.get_latest_motor_state()
         return obState.flMotorSpeedStepsPerSecond
+
+    def get_angle_per_pixel_degrees(self, iImageWidthPixels: int) -> float:
+        return self._get_angle_per_pixel_degrees(iImageWidthPixels)
     
     
     def get_system_statistics(self) -> dict:
@@ -208,21 +213,29 @@ class TrackerController:
             # Could implement search pattern here
             return
         
-        # Get current FOV calibration
-        flAnglePerPixel = self.obFieldOfViewEstimator.get_estimated_angle_per_pixel_ratio()
-        
         # Calculate pixel offset from center
         iImageWidth, _ = self.obCameraInterface.get_frame_dimensions()
         flPixelOffset = obCurrentSample.get_pixel_offset_from_center(iImageWidth)
         
         # Convert to angle error relative to camera center
+        flAnglePerPixel = self._get_angle_per_pixel_degrees(iImageWidth)
         flAngleError = flPixelOffset * flAnglePerPixel
 
         flPersonAngleRelativeToHome = obCurrentSample.flMotorAngleDegrees + flAngleError
+        dNow = float(obCurrentSample.dSampleTimestampSeconds)
+        if self._dPreviousControlTimestampSeconds is None:
+            dDeltaTime = 0.0
+        else:
+            dDeltaTime = dNow - float(self._dPreviousControlTimestampSeconds)
+        self._dPreviousControlTimestampSeconds = dNow
+        if dDeltaTime <= 0.0 or dDeltaTime > 0.5:
+            dDeltaTime = 1.0 / 30.0
+
         if abs(flPersonAngleRelativeToHome) <= self.flDeadbandDegrees:
-            flNewTargetAngle = 0.0
-        elif abs(flPixelOffset) <= int(getattr(self, 'iCenterDeadzoneRadiusPixels', 0)):
-            flNewTargetAngle = obCurrentSample.flMotorAngleDegrees
+            flNewTargetAngle = self._compute_home_return_target_angle(
+                obCurrentSample.flMotorAngleDegrees,
+                dDeltaTime
+            )
         else:
             flCorrection = self.obControlAlgorithm.calculate_correction_from_error(flAngleError)
             flNewTargetAngle = obCurrentSample.flMotorAngleDegrees + flCorrection
@@ -232,11 +245,7 @@ class TrackerController:
             self.flMinimumMotorAngleDegrees,
             min(self.flMaximumMotorAngleDegrees, flNewTargetAngle)
         )
-        if self._flSmoothedTargetAngle is None:
-            self._flSmoothedTargetAngle = flNewTargetAngle
-        else:
-            self._flSmoothedTargetAngle = self._flSmoothedTargetAngle + self.flCommandSmoothingAlpha * (flNewTargetAngle - self._flSmoothedTargetAngle)
-        flCommandAngle = max(self.flMinimumMotorAngleDegrees, min(self.flMaximumMotorAngleDegrees, self._flSmoothedTargetAngle))
+        flCommandAngle = flNewTargetAngle
 
         if self._flLastCommandedAngle is not None and abs(flCommandAngle - self._flLastCommandedAngle) < self.flCommandMinDeltaDegrees:
             return
@@ -246,6 +255,39 @@ class TrackerController:
             logger.error("Failed to send motor command")
         else:
             self._flLastCommandedAngle = flCommandAngle
+
+    def _compute_home_return_target_angle(self, flCurrentMotorAngleDegrees: float, dDeltaTimeSeconds: float) -> float:
+        flMaxVel = 10.0
+        if self.obConfig is not None:
+            try:
+                flMaxVel = float(getattr(self.obConfig, 'flHomeReturnMaxVelocityDegreesPerSecond', flMaxVel))
+            except Exception:
+                pass
+            try:
+                if hasattr(self.obConfig, 'flMaxVelocityDegreesPerSecond'):
+                    flMaxVel = min(flMaxVel, float(getattr(self.obConfig, 'flMaxVelocityDegreesPerSecond')))
+            except Exception:
+                pass
+
+        flMaxDelta = abs(flMaxVel) * max(0.0, float(dDeltaTimeSeconds))
+        flDesiredDelta = 0.0 - float(flCurrentMotorAngleDegrees)
+        if flDesiredDelta > flMaxDelta:
+            flDesiredDelta = flMaxDelta
+        elif flDesiredDelta < -flMaxDelta:
+            flDesiredDelta = -flMaxDelta
+        return float(flCurrentMotorAngleDegrees) + flDesiredDelta
+
+    def _get_angle_per_pixel_degrees(self, iImageWidthPixels: int) -> float:
+        if iImageWidthPixels <= 0:
+            return 0.0
+        if self.obConfig is not None:
+            flFovDegrees = float(getattr(self.obConfig, 'flFieldOfViewDegrees', 0.0))
+            if flFovDegrees > 0.0:
+                return flFovDegrees / float(iImageWidthPixels)
+            flApx = float(getattr(self.obConfig, 'flInitialAnglePerPixelDegrees', 0.0))
+            if flApx > 0.0:
+                return flApx
+        return 0.0
 
     # Public API for UI/config integration
     def set_deadband_degrees(self, flDegrees: float):
@@ -264,10 +306,8 @@ class TrackerController:
     def set_control_algorithm(self, obAlgorithm: ControlAlgorithm):
         self.obControlAlgorithm = obAlgorithm
 
-    def set_fov_angle_per_pixel(self, flAnglePerPixelDegrees: float):
-        self.obFieldOfViewEstimator.reset_field_of_view_estimator_with_initial_angle_per_pixel(float(flAnglePerPixelDegrees))
-
     def apply_configuration(self, obConfig):
+        self.obConfig = obConfig
         self.flDeadbandDegrees = float(getattr(obConfig, 'flControlDeadbandDegrees', self.flDeadbandDegrees))
         self.flDeadbandMinDegrees = float(getattr(obConfig, 'flDeadbandMinDegrees', self.flDeadbandMinDegrees))
         self.flDeadbandMaxDegrees = float(getattr(obConfig, 'flDeadbandMaxDegrees', self.flDeadbandMaxDegrees))
@@ -275,4 +315,3 @@ class TrackerController:
         self.flMaximumMotorAngleDegrees = float(getattr(obConfig, 'flMotorMaxAngleDegrees', self.flMaximumMotorAngleDegrees))
         self.flMinimumTrackingConfidenceForControl = float(getattr(obConfig, 'flTrackingMinConfidenceForControl', self.flMinimumTrackingConfidenceForControl))
         self.iCenterDeadzoneRadiusPixels = int(getattr(obConfig, 'iCenterDeadzoneRadiusPixels', getattr(self, 'iCenterDeadzoneRadiusPixels', 0)))
-        self.flCommandSmoothingAlpha = float(getattr(obConfig, 'flCommandSmoothingAlpha', self.flCommandSmoothingAlpha))

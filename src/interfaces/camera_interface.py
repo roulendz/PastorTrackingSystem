@@ -51,7 +51,6 @@ class CameraInterface:
         
         self.obVideoCapture: Optional[cv2.VideoCapture] = None
         self._bIsOpen = False
-        self._dProgramStartTime = time.time()
     
     def open_camera_device(self) -> bool:
         """
@@ -120,7 +119,7 @@ class CameraInterface:
         bSuccess, obFrame = self.obVideoCapture.read()
         
         # Get timestamp IMMEDIATELY after capture
-        dTimestampSeconds = time.time() - self._dProgramStartTime
+        dTimestampSeconds = time.perf_counter()
         
         if not bSuccess or obFrame is None:
             logger.warning("Failed to capture frame")
