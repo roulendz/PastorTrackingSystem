@@ -63,7 +63,6 @@ class MotorInterface:
             bMotorIsMoving=False,
             dMotorTimestampSeconds=time.perf_counter()
         )
-        self._obPreviousMotorState: Optional[MotorState] = None
         self._obStateLock = threading.Lock()
         self._flLastCommandedTargetAngleDegrees: Optional[float] = None
         self._dLastCommandTimestampSeconds: Optional[float] = None
@@ -348,14 +347,6 @@ class MotorInterface:
                 
                 # Update state (thread-safe)
                 with self._obStateLock:
-                    self._obPreviousMotorState = MotorState(
-                        flMotorAngleDegrees=self._obLatestMotorState.flMotorAngleDegrees,
-                        flMotorTargetAngleDegrees=self._obLatestMotorState.flMotorTargetAngleDegrees,
-                        flMotorSpeedStepsPerSecond=self._obLatestMotorState.flMotorSpeedStepsPerSecond,
-                        bMotorIsMoving=self._obLatestMotorState.bMotorIsMoving,
-                        dMotorTimestampSeconds=self._obLatestMotorState.dMotorTimestampSeconds,
-                        iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
-                    )
                     self._obLatestMotorState.flMotorAngleDegrees = flCurrentAngle
                     self._obLatestMotorState.flMotorTargetAngleDegrees = flTargetAngle
                     self._obLatestMotorState.flMotorSpeedStepsPerSecond = flSpeed

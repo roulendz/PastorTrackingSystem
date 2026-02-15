@@ -170,25 +170,6 @@ class CameraInterface:
         """
         return self.iCameraWidthPixels, self.iCameraHeightPixels
     
-    def set_camera_exposure(self, flExposureValue: float):
-        """
-        Manually set camera exposure.
-        
-        Args:
-            flExposureValue: Exposure value (camera-specific range)
-        """
-        if self.obVideoCapture:
-            # Disable auto-exposure first
-            self.obVideoCapture.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
-            self.obVideoCapture.set(cv2.CAP_PROP_EXPOSURE, flExposureValue)
-            logger.debug(f"Exposure set to {flExposureValue}")
-    
-    def enable_auto_exposure(self):
-        """Enable automatic exposure control."""
-        if self.obVideoCapture:
-            self.obVideoCapture.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
-            logger.debug("Auto-exposure enabled")
-    
     def __del__(self):
         """Cleanup on deletion."""
         self.close_camera_device()
