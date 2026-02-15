@@ -83,34 +83,34 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SYNC-01 | — | Pending |
-| SYNC-02 | — | Pending |
-| SYNC-03 | — | Pending |
-| SYNC-04 | — | Pending |
-| SYNC-05 | — | Pending |
-| SYNC-06 | — | Pending |
-| MOTN-01 | — | Pending |
-| MOTN-02 | — | Pending |
-| MOTN-03 | — | Pending |
-| MOTN-04 | — | Pending |
-| DTCT-01 | — | Pending |
-| DTCT-02 | — | Pending |
-| DTCT-03 | — | Pending |
-| TEST-01 | — | Pending |
-| TEST-02 | — | Pending |
-| TEST-03 | — | Pending |
-| TEST-04 | — | Pending |
-| TEST-05 | — | Pending |
-| TEST-06 | — | Pending |
-| CODE-01 | — | Pending |
-| CODE-02 | — | Pending |
-| CODE-03 | — | Pending |
+| SYNC-01 | Phase 2 | Pending |
+| SYNC-02 | Phase 2 | Pending |
+| SYNC-03 | Phase 2 | Pending |
+| SYNC-04 | Phase 2 | Pending |
+| SYNC-05 | Phase 2 | Pending |
+| SYNC-06 | Phase 2 | Pending |
+| MOTN-01 | Phase 3 | Pending |
+| MOTN-02 | Phase 3 | Pending |
+| MOTN-03 | Phase 3 | Pending |
+| MOTN-04 | Phase 3 | Pending |
+| DTCT-01 | Phase 4 | Pending |
+| DTCT-02 | Phase 4 | Pending |
+| DTCT-03 | Phase 4 | Pending |
+| TEST-01 | Phase 1 | Pending |
+| TEST-02 | Phase 5 | Pending |
+| TEST-03 | Phase 5 | Pending |
+| TEST-04 | Phase 1 | Pending |
+| TEST-05 | Phase 1 | Pending |
+| TEST-06 | Phase 5 | Pending |
+| CODE-01 | Phase 1 | Pending |
+| CODE-02 | Phase 1 | Pending |
+| CODE-03 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22 ⚠️
+- Mapped to phases: 22
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-15*
-*Last updated: 2026-02-15 after initial definition*
+*Last updated: 2026-02-15 after roadmap creation*
