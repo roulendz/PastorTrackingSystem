@@ -25,8 +25,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Nothing (first phase)
 **Requirements**: TEST-01, TEST-04, TEST-05, CODE-01, CODE-02, CODE-03
 **Success Criteria** (what must be TRUE):
-  1. Running `python main.py` with a synthetic video source and NullMotorInterface produces a working tracking loop with no hardware connected
-  2. NullMotorInterface accelerates, decelerates, and respects velocity limits like the real motor -- not instant teleportation to target angle
+  1. Running `python main.py --video` with a synthetic video source and SimulatedMotorInterface produces a working tracking loop with no hardware connected
+  2. SimulatedMotorInterface accelerates, decelerates, and respects velocity limits like the real motor -- not instant teleportation to target angle
   3. No dead code remains -- every module and function is reachable from main.py or tests
   4. No silent exception swallowing -- all except blocks either handle specific exceptions or log with traceback
   5. FOV is correctly set to ~6.8 degrees for Sony AX700 at max optical zoom (validated by pixel-to-degree conversion matching expected value)
