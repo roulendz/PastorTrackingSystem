@@ -12,7 +12,7 @@ This roadmap fixes the core virtual-center-line drift bug, adds human-like motio
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Test Foundation and Code Cleanup** - Synthetic test harness, motor simulation, dead code removal
+- [x] **Phase 1: Test Foundation and Code Cleanup** - Synthetic test harness, motor simulation, dead code removal
 - [ ] **Phase 2: Time Synchronization** - Fix the core timing bug causing virtual center drift
 - [ ] **Phase 3: Motion Smoothing** - Human-like camera motion with S-curve profiles and pose filtering
 - [ ] **Phase 4: Detection Handling** - Graceful behavior when person detection is lost or intermittent
@@ -33,9 +33,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Core interface extensions (SimulatedMotorInterface, CameraInterface video support, FOV fix)
-- [ ] 01-02-PLAN.md -- Code cleanup (silent exception fixing, dead code removal)
-- [ ] 01-03-PLAN.md -- Test infrastructure (pytest setup, fixtures, motor/camera/FOV/pipeline tests)
+- [x] 01-01-PLAN.md -- Core interface extensions (SimulatedMotorInterface, CameraInterface video support, FOV fix)
+- [x] 01-02-PLAN.md -- Code cleanup (silent exception fixing, dead code removal)
+- [x] 01-03-PLAN.md -- Test infrastructure (pytest setup, fixtures, motor/camera/FOV/pipeline tests)
 
 ### Phase 2: Time Synchronization
 **Goal**: The virtual center line stays locked to the physical background at all motor velocities
@@ -101,7 +101,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Test Foundation and Code Cleanup | 0/3 | Planning complete | - |
+| 1. Test Foundation and Code Cleanup | 3/3 | Complete | 2026-02-15 |
 | 2. Time Synchronization | 0/TBD | Not started | - |
 | 3. Motion Smoothing | 0/TBD | Not started | - |
 | 4. Detection Handling | 0/TBD | Not started | - |
