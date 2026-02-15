@@ -1,10 +1,13 @@
 from typing import Dict, Any, Tuple
 import json
+import logging
 from pathlib import Path
 from dataclasses import asdict
 from utilities.config_manager import ConfigurationManager, SystemConfiguration
 
 import dearpygui.dearpygui as dpg
+
+logger = logging.getLogger(__name__)
 
 
 def _get_default_slider_ranges() -> Dict[str, Tuple[float, float, float]]:
@@ -207,8 +210,8 @@ def launch_config_editor(sDefaultConfigPath: str, sUserConfigPath: str) -> bool:
                 obPath.parent.mkdir(parents=True, exist_ok=True)
                 with open(obPath, "w") as f:
                     json.dump(dValues, f, indent=4)
-            except Exception:
-                pass
+            except (IOError, OSError, json.JSONDecodeError) as e:
+                logger.error(f"Failed to save configuration: {e}")
 
         def _on_close():
             dpg.stop_dearpygui()

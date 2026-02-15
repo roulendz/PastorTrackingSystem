@@ -106,7 +106,8 @@ class TrackerController:
             obMotorState = self.obMotorInterface.get_latest_motor_state()
             try:
                 flEstimatedAngle = float(self.obMotorInterface.get_estimated_motor_angle_degrees(dFrameTimestamp))
-            except Exception:
+            except (ValueError, TypeError, AttributeError) as e:
+                logger.debug(f"Motor angle estimation fallback: {e}")
                 flEstimatedAngle = obMotorState.flMotorAngleDegrees
             
             # STEP 3: Run pose detection
@@ -261,13 +262,13 @@ class TrackerController:
         if self.obConfig is not None:
             try:
                 flMaxVel = float(getattr(self.obConfig, 'flHomeReturnMaxVelocityDegreesPerSecond', flMaxVel))
-            except Exception:
-                pass
+            except (AttributeError, TypeError, ValueError) as e:
+                logger.debug(f"Config fallback for home return velocity: {e}")
             try:
                 if hasattr(self.obConfig, 'flMaxVelocityDegreesPerSecond'):
                     flMaxVel = min(flMaxVel, float(getattr(self.obConfig, 'flMaxVelocityDegreesPerSecond')))
-            except Exception:
-                pass
+            except (AttributeError, TypeError, ValueError) as e:
+                logger.debug(f"Config fallback for max velocity: {e}")
 
         flMaxDelta = abs(flMaxVel) * max(0.0, float(dDeltaTimeSeconds))
         flDesiredDelta = 0.0 - float(flCurrentMotorAngleDegrees)

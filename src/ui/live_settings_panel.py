@@ -1,8 +1,11 @@
 import threading
 import json
+import logging
 from dataclasses import asdict
 from typing import Dict, Any, Tuple
 import dearpygui.dearpygui as dpg
+
+logger = logging.getLogger(__name__)
 
 from utilities.config_manager import ConfigurationManager
 from control.tracker_controller import TrackerController
@@ -106,7 +109,7 @@ def _build_algorithm_tabs(obConfig, obTracker: TrackerController, dItems: Dict[s
             setattr(obConfig, 'sControlAlgorithmType', str(sLabel))
             _apply_control_algorithm(obTracker, obConfig)
         except Exception:
-            pass
+            logger.debug("DearPyGui operation skipped")
     with dpg.tab_bar(callback=_on_tab_change) as iAlgoBar:
         with dpg.tab(label="P") as iTabP:
             _add_slider_with_range(
@@ -190,7 +193,7 @@ def _build_algorithm_tabs(obConfig, obTracker: TrackerController, dItems: Dict[s
         else:
             dpg.set_value(iAlgoBar, iTabP)
     except Exception:
-        pass
+        logger.debug("DearPyGui operation skipped")
 
 def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], fnOnChange=None, bInteger: bool = False, iWidth: int = 500):
     flMin, flMax, flStep = _ranges().get(sKey, (0.0, 100.0, 0.0))
@@ -199,7 +202,7 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
         flMin = float(dSaved.get("min", flMin))
         flMax = float(dSaved.get("max", flMax))
     except Exception:
-        pass
+        logger.debug("DearPyGui operation skipped")
     with dpg.group(horizontal=True):
         iInputWidth = min(120, max(60, int((iWidth - (1 * 32) - 60) // 2)))
         dpg.add_text("min")
@@ -255,7 +258,7 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
                 if float(flStep) > 0.0:
                     a = round(float(a) / float(flStep)) * float(flStep)
             except Exception:
-                pass
+                logger.debug("DearPyGui operation skipped")
             dpg.set_value(iValue, float(a))
             if fnOnChange:
                 fnOnChange(float(a))
@@ -269,7 +272,7 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
                 if float(flStep) > 0.0:
                     a = round(float(a) / float(flStep)) * float(flStep)
             except Exception:
-                pass
+                logger.debug("DearPyGui operation skipped")
             dpg.set_value(dItems[sKey], float(a))
             if fnOnChange:
                 fnOnChange(float(a))
@@ -296,6 +299,7 @@ def _load_saved_ui_meta():
             d = json.load(f)
         _g_dSavedUI = d.get("ui", {}).get("controls", {})
     except Exception:
+        logger.debug("DearPyGui operation skipped")
         _g_dSavedUI = {}
 
 def _save_full_config(obConfigManager: ConfigurationManager):
@@ -317,8 +321,8 @@ def _save_full_config(obConfigManager: ConfigurationManager):
         dConfig["ui"] = dUI
         with open("config/user_config.json", "w") as f:
             json.dump(dConfig, f, indent=4)
-    except Exception:
-        pass
+    except (IOError, OSError) as e:
+        logger.error(f"Failed to save config from settings panel: {e}")
 
 def _apply_motor_settings(obMotor: MotorInterface, obConfig):
     obMotor.send_speed_and_acceleration_settings(
@@ -349,7 +353,7 @@ def _apply_pose_settings(obTracker: TrackerController, obConfig):
         try:
             obOld.close_pose_tracker()
         except Exception:
-            pass
+            logger.debug("DearPyGui operation skipped")
 
 
 def _apply_control_algorithm(obTracker: TrackerController, obConfig):
@@ -372,8 +376,8 @@ def _apply_control_algorithm(obTracker: TrackerController, obConfig):
 def _bind_global_scale():
     try:
         dpg.set_global_font_scale(1.2)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Screen metrics fallback: {e}")
 
 
 # Center angle external bridge
@@ -414,7 +418,8 @@ def start_live_settings_panel(
         import ctypes
         iScreenW = ctypes.windll.user32.GetSystemMetrics(0)
         iScreenH = ctypes.windll.user32.GetSystemMetrics(1)
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Screen metrics fallback: {e}")
         iScreenW, iScreenH = 1600, 900
     iPanelW = 560
     dpg.create_viewport(title="Live Settings", width=iPanelW, height=iScreenH, x_pos=max(0, iScreenW - iPanelW), y_pos=0)
@@ -432,14 +437,14 @@ def start_live_settings_panel(
                     if dpg.is_key_down(dpg.mvKey_Control):
                         _save_full_config(obConfigManager)
                 except Exception:
-                    pass
+                    logger.debug("DearPyGui operation skipped")
             dpg.add_key_press_handler(key=dpg.mvKey_S, callback=_on_key_s)
             def _on_key_r():
                 try:
                     obMotor.send_reset_position_command()
                     update_center_angle_slider(0.0)
                 except Exception:
-                    pass
+                    logger.debug("DearPyGui operation skipped")
             dpg.add_key_press_handler(key=dpg.mvKey_R, callback=_on_key_r)
         dTips = _get_section_tooltips()
         _add_section_header_with_tooltip("Center", dTips.get("Center", ""))
@@ -552,12 +557,13 @@ def start_live_settings_panel(
             flSavedMax = float(dSavedFov.get("max", 180.0))
             flSavedSliderValue = float(dSavedFov.get("slider_value", flInitialFOV))
         except Exception:
+            logger.debug("DearPyGui operation skipped")
             flSavedMin, flSavedMax, flSavedSliderValue = 10.0, 180.0, flInitialFOV
         def _on_fov_change(flFovDegrees: float):
             try:
                 obConfig.flFieldOfViewDegrees = float(flFovDegrees)
             except Exception:
-                pass
+                logger.debug("DearPyGui operation skipped")
         # Use a dedicated range for FOV degrees
         dItems["flFieldOfViewDegrees"] = None
         with dpg.group(horizontal=True):
@@ -599,7 +605,7 @@ def start_live_settings_panel(
             if dMeta:
                 _g_dItemsMeta["flInitialAnglePerPixelDegrees"] = dMeta
         except Exception:
-            pass
+            logger.debug("DearPyGui operation skipped")
 
         dpg.add_separator()
         _add_section_header_with_tooltip("Visualization", dTips.get("Visualization", ""))

@@ -122,9 +122,9 @@ class ConfigurationManager:
                     v = dFov.get('input_value', dFov.get('slider_value', None))
                     if v is not None:
                         setattr(self.obCurrentConfig, 'flFieldOfViewDegrees', float(v))
-            except Exception:
-                pass
-            
+            except (KeyError, TypeError, AttributeError) as e:
+                logger.debug(f"No UI/controls FOV override in config: {e}")
+
             logger.info(f"Configuration loaded from {sPathToLoad}")
             return True
             
@@ -221,8 +221,8 @@ class ConfigurationManager:
                         v = dFov.get('input_value', dFov.get('slider_value', None))
                         if v is not None:
                             setattr(self.obCurrentConfig, 'flFieldOfViewDegrees', float(v))
-                except Exception:
-                    pass
+                except (KeyError, TypeError, AttributeError) as e:
+                    logger.debug(f"No UI/controls FOV override in config: {e}")
                 logger.info(f"Configuration loaded from {sPath}")
                 bAnyLoaded = True
             except Exception as e:

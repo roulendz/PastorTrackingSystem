@@ -342,7 +342,8 @@ class MotorInterface:
                     else:
                         self._dArduinoToPerfCounterOffsetSeconds = (0.98 * float(self._dArduinoToPerfCounterOffsetSeconds)) + (0.02 * dMeasuredOffset)
                     dTimestampSeconds = float(dArduinoSeconds) + float(self._dArduinoToPerfCounterOffsetSeconds)
-                except Exception:
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Failed to parse Arduino timestamp: {e}")
                     dTimestampSeconds = dNow
                 
                 # Update state (thread-safe)

@@ -180,11 +180,11 @@ class PoseTracker:
                 try:
                     detector.close()
                 except Exception:
-                    pass
+                    logger.debug("MediaPipe cleanup in destructor")
                 self._bIsInitialized = False
                 logger.info("Pose tracker closed")
         except Exception:
-            pass
+            logger.debug("MediaPipe cleanup in destructor")
     
     # Private methods
     
@@ -267,4 +267,4 @@ class PoseTracker:
             if getattr(self, '_bIsInitialized', False) and getattr(self, 'obPoseDetector', None):
                 self.close_pose_tracker()
         except Exception:
-            pass
+            logger.debug("MediaPipe cleanup in destructor")

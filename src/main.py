@@ -222,8 +222,8 @@ class DeadzoneUIController:
                 try:
                     from ui.live_settings_panel import update_center_angle_slider
                     update_center_angle_slider(flNewAngle)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"UI slider update skipped: {e}")
         elif event == cv2.EVENT_LBUTTONUP:
             self.bDraggingLeft = False
             self.bDraggingRight = False
@@ -434,16 +434,17 @@ def main():
                                 obConfig.flFieldOfViewDegrees = float(flFov)
                                 try:
                                     obConfig.flInitialAnglePerPixelDegrees = float(flFov) / float(iWidth) if iWidth > 0 else obConfig.flInitialAnglePerPixelDegrees
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    logger.debug(f"UI slider update skipped: {e}")
                                 try:
                                     from ui.live_settings_panel import update_fov_degrees_slider
                                     update_fov_degrees_slider(float(flFov))
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    logger.debug(f"UI slider update skipped: {e}")
                                 logger.info(f"FOV calibrate: set flFieldOfViewDegrees={flFov:.3f}")
                                 dFovCalibration = None
-                except Exception:
+                except (ValueError, TypeError, AttributeError, ZeroDivisionError) as e:
+                    logger.error(f"FOV calibration error: {e}")
                     dFovCalibration = None
             
             elif iKey == ord('h') or iKey == ord('H'):
@@ -454,8 +455,8 @@ def main():
                 try:
                     from ui.live_settings_panel import update_center_angle_slider
                     update_center_angle_slider(0.0)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"UI slider update skipped: {e}")
                 logger.info("Home reset: current angle set as 0°")
     
     except KeyboardInterrupt:
