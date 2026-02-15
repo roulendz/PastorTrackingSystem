@@ -33,61 +33,89 @@ class CameraInterface:
         iCameraDeviceIndex: int = 0,
         iCameraWidthPixels: int = 1280,
         iCameraHeightPixels: int = 720,
-        iCameraFramesPerSecond: int = 30
+        iCameraFramesPerSecond: int = 30,
+        sVideoFilePath: str = ""
     ):
         """
         Initialize camera interface.
-        
+
         Args:
             iCameraDeviceIndex: Camera index (0 for default)
             iCameraWidthPixels: Desired frame width
             iCameraHeightPixels: Desired frame height
             iCameraFramesPerSecond: Desired FPS
+            sVideoFilePath: Path to video file (replaces camera if non-empty)
         """
         self.iCameraDeviceIndex = iCameraDeviceIndex
         self.iCameraWidthPixels = iCameraWidthPixels
         self.iCameraHeightPixels = iCameraHeightPixels
         self.iCameraFramesPerSecond = iCameraFramesPerSecond
-        
+        self.sVideoFilePath = sVideoFilePath
+
         self.obVideoCapture: Optional[cv2.VideoCapture] = None
         self._bIsOpen = False
     
     def open_camera_device(self) -> bool:
         """
-        Open camera and configure settings.
-        
+        Open camera device or video file and configure settings.
+
+        When sVideoFilePath is set, opens a video file instead of a live camera.
+        Camera-only properties (resolution, FPS, autofocus) are not set on video files.
+
         Returns:
-            True if camera opened successfully
+            True if camera/video opened successfully
         """
         try:
-            self.obVideoCapture = cv2.VideoCapture(self.iCameraDeviceIndex)
-            
-            if not self.obVideoCapture.isOpened():
-                logger.error(f"Failed to open camera {self.iCameraDeviceIndex}")
-                return False
-            
-            # Configure camera
-            self.obVideoCapture.set(cv2.CAP_PROP_FRAME_WIDTH, self.iCameraWidthPixels)
-            self.obVideoCapture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.iCameraHeightPixels)
-            self.obVideoCapture.set(cv2.CAP_PROP_FPS, self.iCameraFramesPerSecond)
-            
-            # Enable auto-focus if available
-            self.obVideoCapture.set(cv2.CAP_PROP_AUTOFOCUS, 1)
-            
-            # Verify actual settings
-            iActualWidth = int(self.obVideoCapture.get(cv2.CAP_PROP_FRAME_WIDTH))
-            iActualHeight = int(self.obVideoCapture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            iActualFPS = int(self.obVideoCapture.get(cv2.CAP_PROP_FPS))
-            
-            logger.info(f"Camera opened: {iActualWidth}x{iActualHeight} @ {iActualFPS} FPS")
-            
-            # Update dimensions with actual values
-            self.iCameraWidthPixels = iActualWidth
-            self.iCameraHeightPixels = iActualHeight
-            
+            if self.sVideoFilePath:
+                # Open video file
+                self.obVideoCapture = cv2.VideoCapture(self.sVideoFilePath)
+
+                if not self.obVideoCapture.isOpened():
+                    logger.error(f"Failed to open video file: {self.sVideoFilePath}")
+                    return False
+
+                # Read actual dimensions from the file (do NOT set camera-only properties)
+                iActualWidth = int(self.obVideoCapture.get(cv2.CAP_PROP_FRAME_WIDTH))
+                iActualHeight = int(self.obVideoCapture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                iActualFPS = int(self.obVideoCapture.get(cv2.CAP_PROP_FPS))
+
+                logger.info(f"Video file opened: {self.sVideoFilePath} ({iActualWidth}x{iActualHeight} @ {iActualFPS} FPS)")
+
+                # Update dimensions with actual values
+                self.iCameraWidthPixels = iActualWidth
+                self.iCameraHeightPixels = iActualHeight
+                if iActualFPS > 0:
+                    self.iCameraFramesPerSecond = iActualFPS
+            else:
+                # Open live camera
+                self.obVideoCapture = cv2.VideoCapture(self.iCameraDeviceIndex)
+
+                if not self.obVideoCapture.isOpened():
+                    logger.error(f"Failed to open camera {self.iCameraDeviceIndex}")
+                    return False
+
+                # Configure camera
+                self.obVideoCapture.set(cv2.CAP_PROP_FRAME_WIDTH, self.iCameraWidthPixels)
+                self.obVideoCapture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.iCameraHeightPixels)
+                self.obVideoCapture.set(cv2.CAP_PROP_FPS, self.iCameraFramesPerSecond)
+
+                # Enable auto-focus if available
+                self.obVideoCapture.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+
+                # Verify actual settings
+                iActualWidth = int(self.obVideoCapture.get(cv2.CAP_PROP_FRAME_WIDTH))
+                iActualHeight = int(self.obVideoCapture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                iActualFPS = int(self.obVideoCapture.get(cv2.CAP_PROP_FPS))
+
+                logger.info(f"Camera opened: {iActualWidth}x{iActualHeight} @ {iActualFPS} FPS")
+
+                # Update dimensions with actual values
+                self.iCameraWidthPixels = iActualWidth
+                self.iCameraHeightPixels = iActualHeight
+
             self._bIsOpen = True
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to open camera: {e}")
             return False
@@ -117,10 +145,16 @@ class CameraInterface:
         
         # Capture frame
         bSuccess, obFrame = self.obVideoCapture.read()
-        
+
         # Get timestamp IMMEDIATELY after capture
         dTimestampSeconds = time.perf_counter()
-        
+
+        # Video file looping: if read fails on a video file, seek to start and retry
+        if (not bSuccess or obFrame is None) and self.sVideoFilePath:
+            self.obVideoCapture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            bSuccess, obFrame = self.obVideoCapture.read()
+            dTimestampSeconds = time.perf_counter()
+
         if not bSuccess or obFrame is None:
             logger.warning("Failed to capture frame")
             return None, dTimestampSeconds

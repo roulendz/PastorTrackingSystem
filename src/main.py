@@ -17,7 +17,7 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from interfaces.motor_interface import MotorInterface, NullMotorInterface
+from interfaces.motor_interface import MotorInterface, NullMotorInterface, SimulatedMotorInterface
 from interfaces.camera_interface import CameraInterface
 from tracking.pose_tracker import PoseTracker, PoseResult
 from control.control_algorithm import ProportionalController, PIDController
@@ -53,46 +53,68 @@ def setup_argument_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Open configuration editor GUI before starting'
     )
+    obParser.add_argument(
+        '--video',
+        type=str,
+        default='',
+        help='Path to video file for synthetic testing (replaces camera)'
+    )
     return obParser
 
 
-def initialize_system(obConfig):
+def initialize_system(obConfig, sVideoFilePath: str = ""):
     """
     Initialize all system components.
-    
+
+    Args:
+        obConfig: System configuration
+        sVideoFilePath: Optional video file path for synthetic mode (no hardware)
+
     Returns:
         Tuple of (motor, camera, pose_tracker, controller, tracker)
     """
     logger.info("Initializing system components...")
-    
+
     # 1. Motor Interface
-    logger.info("Connecting to motor...")
-    obMotorInterface = MotorInterface(
-        obConfig.sMotorSerialPortName,
-        obConfig.iMotorBaudRate
-    )
-    
-    if not obMotorInterface.connect_to_motor_controller():
-        if obConfig.bAllowStartWithoutMotor:
-            logger.warning("Motor not connected; starting in motor-less mode")
-            obMotorInterface = NullMotorInterface()
-        else:
-            logger.error("Failed to connect to motor!")
-            return None
-    
+    if sVideoFilePath:
+        # Synthetic mode: use simulated motor instead of real hardware
+        logger.info("Synthetic mode: using SimulatedMotorInterface")
+        obMotorInterface = SimulatedMotorInterface()
+        obMotorInterface.connect_to_motor_controller()
+    else:
+        logger.info("Connecting to motor...")
+        obMotorInterface = MotorInterface(
+            obConfig.sMotorSerialPortName,
+            obConfig.iMotorBaudRate
+        )
+
+        if not obMotorInterface.connect_to_motor_controller():
+            if obConfig.bAllowStartWithoutMotor:
+                logger.warning("Motor not connected; starting in motor-less mode")
+                obMotorInterface = SimulatedMotorInterface()
+                obMotorInterface.connect_to_motor_controller()
+            else:
+                logger.error("Failed to connect to motor!")
+                return None
+
     # Configure motor speed/acceleration
     obMotorInterface.send_speed_and_acceleration_settings(
         obConfig.flMotorMaxSpeedStepsPerSecond,
         obConfig.flMotorMaxAccelerationStepsPerSecondSquared
     )
-    
+
+    # Start background simulation for SimulatedMotorInterface
+    if isinstance(obMotorInterface, SimulatedMotorInterface):
+        obMotorInterface.start_background_simulation()
+
     # 2. Camera Interface
     logger.info("Opening camera...")
     obCameraInterface = CameraInterface(
         obConfig.iCameraDeviceIndex,
         obConfig.iCameraWidthPixels,
         obConfig.iCameraHeightPixels,
-        obConfig.iCameraFramesPerSecond
+        obConfig.iCameraFramesPerSecond,
+        sVideoFilePath=sVideoFilePath
     )
     
     if not obCameraInterface.open_camera_device():
@@ -326,7 +348,7 @@ def main():
             logger.error(f"Failed to open configuration editor: {e}")
 
     # Initialize system
-    obComponents = initialize_system(obConfig)
+    obComponents = initialize_system(obConfig, sVideoFilePath=obArgs.video)
     if obComponents is None:
         logger.error("System initialization failed!")
         return 1
