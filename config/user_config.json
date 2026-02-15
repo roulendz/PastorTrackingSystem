@@ -1,8 +1,8 @@
 {
     "sMotorSerialPortName": "COM6",
     "iMotorBaudRate": 115200,
-    "flMotorMaxSpeedStepsPerSecond": 614.7119750976562,
-    "flMotorMaxAccelerationStepsPerSecondSquared": 3218.10693359375,
+    "flMotorMaxSpeedStepsPerSecond": 800.0,
+    "flMotorMaxAccelerationStepsPerSecondSquared": 4500.0,
     "flMotorMinAngleDegrees": -45.0,
     "flMotorMaxAngleDegrees": 45.0,
     "iCameraDeviceIndex": 1,
@@ -12,7 +12,7 @@
     "flPoseMinDetectionConfidence": 0.5,
     "flPoseMinTrackingConfidence": 0.5,
     "bPoseEnableSegmentation": false,
-    "flInitialAnglePerPixelDegrees": 0.005312500149011612,
+    "flInitialAnglePerPixelDegrees": 0.0049,
     "sControlAlgorithmType": "Velocity",
     "flControlProportionalGain": 1.0,
     "flControlIntegralGain": 0.0,
@@ -28,7 +28,7 @@
     "iCenterDeadzoneRadiusPixels": 60,
     "flVelocityGain": 5.0,
     "flMaxVelocityDegreesPerSecond": 45.0,
-    "flVelocitySmoothingAlpha": 0.3,
+    "flVelocitySmoothingAlpha": 0.15,
     "ui": {
         "controls": {
             "flManualCenterAngleDegrees": {
@@ -39,14 +39,14 @@
             "flMotorMaxSpeedStepsPerSecond": {
                 "min": 50.0,
                 "max": 25000.0,
-                "slider_value": 614.7119750976562,
-                "input_value": 614.7119750976562
+                "slider_value": 820.06201171875,
+                "input_value": 800.0
             },
             "flMotorMaxAccelerationStepsPerSecondSquared": {
                 "min": 1000.0,
                 "max": 50000.0,
-                "slider_value": 3218.10693359375,
-                "input_value": 3218.10693359375
+                "slider_value": 4528.80712890625,
+                "input_value": 4500.0
             },
             "flMotorMinAngleDegrees": {
                 "min": -90.0,
@@ -105,14 +105,20 @@
             "flVelocitySmoothingAlpha": {
                 "min": 0.0,
                 "max": 1.0,
-                "slider_value": 0.30000001192092896,
-                "input_value": 0.30000001192092896
+                "slider_value": 0.15000000596046448,
+                "input_value": 0.15000000596046448
             },
             "flFieldOfViewDegrees": {
                 "min": 6.800000190734863,
                 "max": 70.9000015258789,
                 "slider_value": 6.800000190734863,
                 "input_value": 6.800000190734863
+            },
+            "flInitialAnglePerPixelDegrees": {
+                "min": 9.999999747378752e-06,
+                "max": 0.004999999888241291,
+                "slider_value": 0.0049153901636600494,
+                "input_value": 0.004900000058114529
             },
             "iCenterDeadzoneRadiusPixels": {
                 "min": 0.0,

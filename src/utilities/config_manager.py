@@ -112,6 +112,17 @@ class ConfigurationManager:
             for sKey, value in dConfigDict.items():
                 if hasattr(self.obCurrentConfig, sKey):
                     setattr(self.obCurrentConfig, sKey, value)
+            # Also pick UI/controls FOV if present (does not add schema fields)
+            try:
+                dUI = dConfigDict.get('ui', {})
+                dControls = dUI.get('controls', {})
+                dFov = dControls.get('flFieldOfViewDegrees')
+                if isinstance(dFov, dict):
+                    v = dFov.get('input_value', dFov.get('slider_value', None))
+                    if v is not None:
+                        setattr(self.obCurrentConfig, 'flFieldOfViewDegrees', float(v))
+            except Exception:
+                pass
             
             logger.info(f"Configuration loaded from {sPathToLoad}")
             return True
@@ -200,6 +211,17 @@ class ConfigurationManager:
                 for sKey, value in dConfigDict.items():
                     if hasattr(self.obCurrentConfig, sKey):
                         setattr(self.obCurrentConfig, sKey, value)
+                # Also pick UI/controls FOV if present
+                try:
+                    dUI = dConfigDict.get('ui', {})
+                    dControls = dUI.get('controls', {})
+                    dFov = dControls.get('flFieldOfViewDegrees')
+                    if isinstance(dFov, dict):
+                        v = dFov.get('input_value', dFov.get('slider_value', None))
+                        if v is not None:
+                            setattr(self.obCurrentConfig, 'flFieldOfViewDegrees', float(v))
+                except Exception:
+                    pass
                 logger.info(f"Configuration loaded from {sPath}")
                 bAnyLoaded = True
             except Exception as e:

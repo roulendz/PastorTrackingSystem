@@ -85,6 +85,8 @@ class TrackerController:
         self.dStartTime = time.time()
         self._flLastCommandedAngle = None
         self.flCommandMinDeltaDegrees = 0.05
+        self.flCommandSmoothingAlpha = 0.2
+        self._flSmoothedTargetAngle = None
         
         logger.info("TrackerController initialized")
     
@@ -218,7 +220,7 @@ class TrackerController:
 
         flPersonAngleRelativeToHome = obCurrentSample.flMotorAngleDegrees + flAngleError
         if abs(flPersonAngleRelativeToHome) <= self.flDeadbandDegrees:
-            flNewTargetAngle = obCurrentSample.flMotorAngleDegrees
+            flNewTargetAngle = 0.0
         elif abs(flPixelOffset) <= int(getattr(self, 'iCenterDeadzoneRadiusPixels', 0)):
             flNewTargetAngle = obCurrentSample.flMotorAngleDegrees
         else:
@@ -230,15 +232,20 @@ class TrackerController:
             self.flMinimumMotorAngleDegrees,
             min(self.flMaximumMotorAngleDegrees, flNewTargetAngle)
         )
-        
-        if self._flLastCommandedAngle is not None and abs(flNewTargetAngle - self._flLastCommandedAngle) < self.flCommandMinDeltaDegrees:
+        if self._flSmoothedTargetAngle is None:
+            self._flSmoothedTargetAngle = flNewTargetAngle
+        else:
+            self._flSmoothedTargetAngle = self._flSmoothedTargetAngle + self.flCommandSmoothingAlpha * (flNewTargetAngle - self._flSmoothedTargetAngle)
+        flCommandAngle = max(self.flMinimumMotorAngleDegrees, min(self.flMaximumMotorAngleDegrees, self._flSmoothedTargetAngle))
+
+        if self._flLastCommandedAngle is not None and abs(flCommandAngle - self._flLastCommandedAngle) < self.flCommandMinDeltaDegrees:
             return
-        bSuccess = self.obMotorInterface.send_move_to_angle_command(flNewTargetAngle)
+        bSuccess = self.obMotorInterface.send_move_to_angle_command(flCommandAngle)
         
         if not bSuccess:
             logger.error("Failed to send motor command")
         else:
-            self._flLastCommandedAngle = flNewTargetAngle
+            self._flLastCommandedAngle = flCommandAngle
 
     # Public API for UI/config integration
     def set_deadband_degrees(self, flDegrees: float):
@@ -268,3 +275,4 @@ class TrackerController:
         self.flMaximumMotorAngleDegrees = float(getattr(obConfig, 'flMotorMaxAngleDegrees', self.flMaximumMotorAngleDegrees))
         self.flMinimumTrackingConfidenceForControl = float(getattr(obConfig, 'flTrackingMinConfidenceForControl', self.flMinimumTrackingConfidenceForControl))
         self.iCenterDeadzoneRadiusPixels = int(getattr(obConfig, 'iCenterDeadzoneRadiusPixels', getattr(self, 'iCenterDeadzoneRadiusPixels', 0)))
+        self.flCommandSmoothingAlpha = float(getattr(obConfig, 'flCommandSmoothingAlpha', self.flCommandSmoothingAlpha))

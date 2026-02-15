@@ -25,7 +25,7 @@ def _ranges() -> Dict[str, Tuple[float, float, float]]:
         "iCameraFramesPerSecond": (1.0, 120.0, 1.0),
         "flPoseMinDetectionConfidence": (0.0, 1.0, 0.01),
         "flPoseMinTrackingConfidence": (0.0, 1.0, 0.01),
-        "flInitialAnglePerPixelDegrees": (0.001, 1.0, 0.001),
+        "flInitialAnglePerPixelDegrees": (0.00001, 1.0, 0.00005),
         "flControlProportionalGain": (0.001, 10.0, 0.001),
         "flControlIntegralGain": (0.0, 10.0, 0.001),
         "flControlDerivativeGain": (0.0, 10.0, 0.001),
@@ -194,7 +194,7 @@ def _build_algorithm_tabs(obConfig, obTracker: TrackerController, dItems: Dict[s
         pass
 
 def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], fnOnChange=None, bInteger: bool = False, iWidth: int = 500):
-    flMin, flMax, _ = _ranges().get(sKey, (0.0, 100.0, 1.0))
+    flMin, flMax, flStep = _ranges().get(sKey, (0.0, 100.0, 0.0))
     try:
         dSaved = _g_dSavedUI.get(sKey, {})
         flMin = float(dSaved.get("min", flMin))
@@ -245,12 +245,18 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
         _attach_double_click_reset(iValue, _reset_int)
         _g_dItemsMeta[sKey] = {"min": iMin, "max": iMax, "slider": dItems[sKey], "input": iValue}
     else:
-        dItems[sKey] = dpg.add_slider_float(label="", default_value=float(vDefault), min_value=flMin, max_value=flMax, width=iWidth)
+        sFormat = "%.8f" if sKey == "flInitialAnglePerPixelDegrees" else "%.3f"
+        dItems[sKey] = dpg.add_slider_float(label="", default_value=float(vDefault), min_value=flMin, max_value=flMax, width=iWidth, format=sFormat)
         iValue = dpg.add_input_float(label="value", default_value=float(vDefault), width=iWidth)
         bProgrammatic = False
         def _on_slider_change_float(a: float):
             nonlocal bProgrammatic
             bProgrammatic = True
+            try:
+                if float(flStep) > 0.0:
+                    a = round(float(a) / float(flStep)) * float(flStep)
+            except Exception:
+                pass
             dpg.set_value(iValue, float(a))
             if fnOnChange:
                 fnOnChange(float(a))
@@ -260,6 +266,11 @@ def _add_slider_with_range(sKey: str, vDefault: float, dItems: Dict[str, int], f
             if bProgrammatic:
                 return
             bProgrammatic = True
+            try:
+                if float(flStep) > 0.0:
+                    a = round(float(a) / float(flStep)) * float(flStep)
+            except Exception:
+                pass
             dpg.set_value(dItems[sKey], float(a))
             if fnOnChange:
                 fnOnChange(float(a))
@@ -530,9 +541,10 @@ def start_live_settings_panel(
             flSavedMin, flSavedMax, flSavedSliderValue = 10.0, 180.0, flInitialFOV
         # FOV degrees slider maps to angle-per-pixel internally
         def _on_fov_change(flFovDegrees: float):
-            flAnglePerPixel = float(flFovDegrees) / float(max(1, iWidth))
-            obConfig.flInitialAnglePerPixelDegrees = flAnglePerPixel
-            obTracker.set_fov_angle_per_pixel(flAnglePerPixel)
+            try:
+                obConfig.flFieldOfViewDegrees = float(flFovDegrees)
+            except Exception:
+                pass
         # Use a dedicated range for FOV degrees
         dItems["flFieldOfViewDegrees"] = None
         with dpg.group(horizontal=True):
@@ -556,6 +568,24 @@ def start_live_settings_panel(
         _attach_double_click_reset(dItems["flFieldOfViewDegrees"], _reset_fov)
         _attach_double_click_reset(iFovValue, _reset_fov)
         _g_dItemsMeta["flFieldOfViewDegrees"] = {"min": iMinFov, "max": iMaxFov, "slider": dItems["flFieldOfViewDegrees"], "input": iFovValue}
+
+        # Angle-per-pixel override slider (direct)
+        def _on_apx_change(flAnglePerPixel: float):
+            obConfig.flInitialAnglePerPixelDegrees = float(flAnglePerPixel)
+            obTracker.set_fov_angle_per_pixel(float(flAnglePerPixel))
+        _add_slider_with_range(
+            "flInitialAnglePerPixelDegrees",
+            obConfig.flInitialAnglePerPixelDegrees,
+            dItems,
+            fnOnChange=_on_apx_change,
+            iWidth=500
+        )
+        try:
+            dMeta = _g_dItemsMeta.get("flInitialAnglePerPixelDegrees")
+            if dMeta:
+                _g_dItemsMeta["flInitialAnglePerPixelDegrees"] = dMeta
+        except Exception:
+            pass
 
         dpg.add_separator()
         _add_section_header_with_tooltip("Visualization", dTips.get("Visualization", ""))

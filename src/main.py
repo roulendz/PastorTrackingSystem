@@ -173,8 +173,7 @@ class DeadzoneUIController:
         self.iHomeUpdateMinDeltaPixels = 2
 
     def update_mapping(self, iHomeLineX: int, flAnglePerPixel: float, iImageHeight: int):
-        if abs(int(iHomeLineX) - int(self.iHomeLineX)) >= int(self.iHomeUpdateMinDeltaPixels) or iImageHeight != self.iImageHeight:
-            self.iHomeLineX = int(iHomeLineX)
+        self.iHomeLineX = int(iHomeLineX)
         self.flAnglePerPixel = max(1e-9, flAnglePerPixel)
         self.iImageHeight = iImageHeight
 
@@ -243,9 +242,10 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
     cv2.line(obFrame, (iCenterX, 0), (iCenterX, iHeight), (0, 255, 255), 2)
 
     # Compute virtual home line based on current motor angle (locked to world plane)
-    flFOVDegrees = obStats['fov_degrees'] if obStats and 'fov_degrees' in obStats else 0.0
-    flAnglePerPixel = (flFOVDegrees / iWidth) if iWidth > 0 else 0.0
-    flMotorAngle = obStats['motor_angle'] if obStats and 'motor_angle' in obStats else 0.0
+    flFOVDegrees = float(getattr(obConfig, 'flFieldOfViewDegrees', 0.0)) if hasattr(obConfig, 'flFieldOfViewDegrees') and float(getattr(obConfig, 'flFieldOfViewDegrees', 0.0)) > 0.0 else (obStats['fov_degrees'] if obStats and 'fov_degrees' in obStats else 0.0)
+    flConfiguredApx = float(getattr(obConfig, 'flInitialAnglePerPixelDegrees', 0.0)) if hasattr(obConfig, 'flInitialAnglePerPixelDegrees') else 0.0
+    flAnglePerPixel = flConfiguredApx if flConfiguredApx > 0.0 else ((flFOVDegrees / iWidth) if iWidth > 0 else 0.0)
+    flMotorAngle = obSample.flMotorAngleDegrees if obSample is not None else (obStats['motor_angle'] if obStats and 'motor_angle' in obStats else 0.0)
     iHomeLineX = int(iCenterX - (flMotorAngle / (flAnglePerPixel if flAnglePerPixel != 0 else 1e-9)))
     iHomeLineX = max(0, min(iWidth - 1, iHomeLineX))
     cv2.line(obFrame, (iHomeLineX, 0), (iHomeLineX, iHeight), (255, 255, 0), 1)
@@ -274,7 +274,7 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obDeadzoneU
             f"State: {obStats['state']}",
             f"FPS: {obStats['average_fps']:.1f}",
             f"Motor: {obStats['motor_angle']:.2f}deg",
-            f"FOV: {obStats['fov_degrees']:.1f}deg",
+            f"FOV: {flFOVDegrees:.1f}deg",
             f"Speed: {obStats['motor_speed']:.1f} steps/s",
         ]
         
