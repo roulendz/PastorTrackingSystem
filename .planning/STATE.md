@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 2 of 5 (Time Synchronization)
-Plan: 1 of 4 in current phase (02-01 complete)
+Plan: 2 of 4 in current phase (02-02 complete)
 Status: Executing Phase 2
-Last activity: 2026-02-22 -- Completed 02-01 (Clock abstraction)
+Last activity: 2026-02-22 -- Completed 02-02 (Camera timestamping and dt clamping)
 
-Progress: [####......] 40%
+Progress: [#####.....] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 5 min
-- Total execution time: 0.33 hours
+- Total execution time: 0.38 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-test-foundation | 3 | 15 min | 5 min |
-| 02-time-synchronization | 1 | 5 min | 5 min |
+| 02-time-synchronization | 2 | 8 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 01-02 (5 min), 01-03 (5 min), 02-01 (5 min)
+- Last 5 plans: 01-01 (5 min), 01-02 (5 min), 01-03 (5 min), 02-01 (5 min), 02-02 (3 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -61,6 +61,10 @@ Recent decisions affecting current work:
 - [02-01]: Background simulation loop keeps raw time.perf_counter() for real-time sleep delta
 - [02-01]: Optional[Clock] = None defaulting to RealClock() preserves backward compatibility
 - [02-01]: VelocityController.reset_controller() resets _flPreviousVelocity after time state removal
+- [02-02]: Timestamp placed between grab() and retrieve() -- closest proxy to true capture moment
+- [02-02]: dt > flDtMaxSeconds skips control update and updates previous timestamp to prevent cascade
+- [02-02]: dt < flDtMinSeconds clamped up to minimum to avoid division issues
+- [02-02]: First frame uses nominal 1/30s interval rather than zero dt
 
 ### Pending Todos
 
@@ -75,5 +79,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 02-01-PLAN.md (Clock abstraction)
+Stopped at: Completed 02-02-PLAN.md (Camera timestamping and dt clamping)
 Resume file: None
