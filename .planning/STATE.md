@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 2 of 5 (Time Synchronization)
-Plan: 2 of 4 in current phase (02-02 complete)
+Plan: 3 of 4 in current phase (02-03 complete)
 Status: Executing Phase 2
-Last activity: 2026-02-22 -- Completed 02-02 (Camera timestamping and dt clamping)
+Last activity: 2026-02-22 -- Completed 02-03 (Motor interpolation and clock sync)
 
-Progress: [#####.....] 50%
+Progress: [######....] 60%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 5 min
-- Total execution time: 0.38 hours
+- Total plans completed: 6
+- Average duration: 4 min
+- Total execution time: 0.45 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-test-foundation | 3 | 15 min | 5 min |
-| 02-time-synchronization | 2 | 8 min | 4 min |
+| 02-time-synchronization | 3 | 12 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 01-02 (5 min), 01-03 (5 min), 02-01 (5 min), 02-02 (3 min)
+- Last 5 plans: 01-02 (5 min), 01-03 (5 min), 02-01 (5 min), 02-02 (3 min), 02-03 (4 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -65,6 +65,9 @@ Recent decisions affecting current work:
 - [02-02]: dt > flDtMaxSeconds skips control update and updates previous timestamp to prevent cascade
 - [02-02]: dt < flDtMinSeconds clamped up to minimum to avoid division issues
 - [02-02]: First frame uses nominal 1/30s interval rather than zero dt
+- [02-03]: Module-level _hermite_interpolate_from_history() shared by MotorInterface and SimulatedMotorInterface
+- [02-03]: Velocity direction inferred from target-current delta; iAccelerationState=0 forces zero velocity
+- [02-03]: Module-level _FL_DEGREES_PER_STEP constant for velocity conversion in helper functions
 
 ### Pending Todos
 
@@ -79,5 +82,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 02-02-PLAN.md (Camera timestamping and dt clamping)
+Stopped at: Completed 02-03-PLAN.md (Motor interpolation and clock sync)
 Resume file: None
