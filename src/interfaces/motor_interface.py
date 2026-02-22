@@ -17,6 +17,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Optional, Callable
 import logging
+import numpy as np
 
 from utilities.clock import Clock, RealClock
 
@@ -32,6 +33,7 @@ class MotorState:
     bMotorIsMoving: bool
     dMotorTimestampSeconds: float
     iMotorSequenceNumber: int = 0
+    iAccelerationState: int = 0  # 0=stopped, 1=accel, 2=constant, 3=decel
 
 
 class MotorInterface:
@@ -70,10 +72,13 @@ class MotorInterface:
         self._obStateLock = threading.Lock()
         self._flLastCommandedTargetAngleDegrees: Optional[float] = None
         self._dLastCommandTimestampSeconds: Optional[float] = None
-        self._obMotorStateHistory = deque(maxlen=32)
+        self._obMotorStateHistory = deque(maxlen=50)  # 1 second at 50Hz feedback rate
         self._iArduinoLastTimestampMicros: Optional[int] = None
         self._iArduinoTimestampRolloverCount: int = 0
         self._dArduinoToPerfCounterOffsetSeconds: Optional[float] = None
+        self._vClockSyncSamples = deque(maxlen=50)  # 1 second at 50Hz Arduino feedback rate
+        self._flClockSyncSlope = 1.0
+        self._flClockSyncOffset = 0.0
         
         # Feedback reception thread
         self._bFeedbackThreadRunning = False
@@ -214,7 +219,8 @@ class MotorInterface:
                 flMotorSpeedStepsPerSecond=self._obLatestMotorState.flMotorSpeedStepsPerSecond,
                 bMotorIsMoving=self._obLatestMotorState.bMotorIsMoving,
                 dMotorTimestampSeconds=self._obLatestMotorState.dMotorTimestampSeconds,
-                iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
+                iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber,
+                iAccelerationState=self._obLatestMotorState.iAccelerationState
             )
 
     def get_estimated_motor_angle_degrees(self, dAtTimestampSeconds: float) -> float:
@@ -330,6 +336,7 @@ class MotorInterface:
                 flSpeed = float(vParts[2])
                 bIsMoving = bool(int(vParts[3]))
                 iSequence = int(vParts[5])
+                iAccelState = int(vParts[6])
                 dNow = self._obClock.get_time_seconds()
                 dTimestampSeconds = dNow
                 try:
@@ -340,15 +347,27 @@ class MotorInterface:
                     iUnwrappedMicros = int(iTimestampMicros) + int(self._iArduinoTimestampRolloverCount) * 4294967296
                     dArduinoSeconds = float(iUnwrappedMicros) / 1_000_000.0
                     dMeasuredOffset = float(dNow) - float(dArduinoSeconds)
-                    if self._dArduinoToPerfCounterOffsetSeconds is None:
-                        self._dArduinoToPerfCounterOffsetSeconds = dMeasuredOffset
+
+                    # Linear regression over sliding window (SYNC-04)
+                    self._vClockSyncSamples.append((dArduinoSeconds, dNow))
+                    if len(self._vClockSyncSamples) >= 2:
+                        vArduinoTimes = np.array([s[0] for s in self._vClockSyncSamples])
+                        vPcTimes = np.array([s[1] for s in self._vClockSyncSamples])
+                        # Linear fit: pc_time = slope * arduino_time + offset
+                        # slope ~1.0 (clocks run at same rate), offset = clock difference
+                        vCoeffs = np.polyfit(vArduinoTimes, vPcTimes, 1)
+                        self._flClockSyncSlope = float(vCoeffs[0])
+                        self._flClockSyncOffset = float(vCoeffs[1])
+                        dTimestampSeconds = self._flClockSyncSlope * dArduinoSeconds + self._flClockSyncOffset
                     else:
-                        self._dArduinoToPerfCounterOffsetSeconds = (0.98 * float(self._dArduinoToPerfCounterOffsetSeconds)) + (0.02 * dMeasuredOffset)
-                    dTimestampSeconds = float(dArduinoSeconds) + float(self._dArduinoToPerfCounterOffsetSeconds)
+                        # Not enough samples yet, use direct offset
+                        if self._dArduinoToPerfCounterOffsetSeconds is None:
+                            self._dArduinoToPerfCounterOffsetSeconds = dMeasuredOffset
+                        dTimestampSeconds = dArduinoSeconds + float(self._dArduinoToPerfCounterOffsetSeconds)
                 except (ValueError, TypeError) as e:
                     logger.warning(f"Failed to parse Arduino timestamp: {e}")
                     dTimestampSeconds = dNow
-                
+
                 # Update state (thread-safe)
                 with self._obStateLock:
                     self._obLatestMotorState.flMotorAngleDegrees = flCurrentAngle
@@ -357,13 +376,15 @@ class MotorInterface:
                     self._obLatestMotorState.bMotorIsMoving = bIsMoving
                     self._obLatestMotorState.dMotorTimestampSeconds = dTimestampSeconds
                     self._obLatestMotorState.iMotorSequenceNumber = iSequence
+                    self._obLatestMotorState.iAccelerationState = iAccelState
                     self._obMotorStateHistory.append(MotorState(
                         flMotorAngleDegrees=self._obLatestMotorState.flMotorAngleDegrees,
                         flMotorTargetAngleDegrees=self._obLatestMotorState.flMotorTargetAngleDegrees,
                         flMotorSpeedStepsPerSecond=self._obLatestMotorState.flMotorSpeedStepsPerSecond,
                         bMotorIsMoving=self._obLatestMotorState.bMotorIsMoving,
                         dMotorTimestampSeconds=self._obLatestMotorState.dMotorTimestampSeconds,
-                        iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
+                        iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber,
+                        iAccelerationState=iAccelState
                     ))
                 
                 # Call callback if registered
@@ -388,7 +409,8 @@ class NullMotorInterface:
             flMotorTargetAngleDegrees=0.0,
             flMotorSpeedStepsPerSecond=0.0,
             bMotorIsMoving=False,
-            dMotorTimestampSeconds=self._obClock.get_time_seconds()
+            dMotorTimestampSeconds=self._obClock.get_time_seconds(),
+            iAccelerationState=0
         )
         self._fnFeedbackCallback = None
 
@@ -432,7 +454,8 @@ class NullMotorInterface:
             flMotorSpeedStepsPerSecond=self._obLatestMotorState.flMotorSpeedStepsPerSecond,
             bMotorIsMoving=False,
             dMotorTimestampSeconds=self._obClock.get_time_seconds(),
-            iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
+            iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber,
+            iAccelerationState=0
         )
 
     def get_estimated_motor_angle_degrees(self, dAtTimestampSeconds: float) -> float:
@@ -469,6 +492,7 @@ class SimulatedMotorInterface:
         self._obStateLock = threading.Lock()
         self._obMotorStateHistory = deque(maxlen=100)
         self._iSequenceNumber = 0
+        self._iCurrentAccelerationState = 0  # 0=stopped, 1=accel, 2=constant, 3=decel
         self._bBackgroundThreadRunning = False
         self._obBackgroundThread: Optional[threading.Thread] = None
         self._fnFeedbackCallback: Optional[Callable[[MotorState], None]] = None
@@ -535,7 +559,8 @@ class SimulatedMotorInterface:
                 flMotorSpeedStepsPerSecond=flSpeedStepsPerSecond,
                 bMotorIsMoving=bIsMoving,
                 dMotorTimestampSeconds=self._dLastUpdateTimestampSeconds,
-                iMotorSequenceNumber=self._iSequenceNumber
+                iMotorSequenceNumber=self._iSequenceNumber,
+                iAccelerationState=self._iCurrentAccelerationState
             )
 
     def get_estimated_motor_angle_degrees(self, dAtTimestampSeconds: float) -> float:
@@ -615,6 +640,23 @@ class SimulatedMotorInterface:
                 # Update position
                 self._flCurrentAngleDegrees += self._flCurrentVelocityDegreesPerSecond * dDeltaTimeSeconds
 
+            # Determine acceleration state from physics
+            flAbsDistance = abs(self._flTargetAngleDegrees - self._flCurrentAngleDegrees)
+            flAbsVelocity = abs(self._flCurrentVelocityDegreesPerSecond)
+            flAccel = self._flAccelerationDegreesPerSecondSquared
+            flStoppingDistance = (flAbsVelocity * flAbsVelocity) / (2.0 * flAccel) if flAccel > 0.0 else 0.0
+
+            if flAbsDistance < 0.001 and flAbsVelocity < 0.01:
+                iAccelState = 0  # stopped
+            elif flStoppingDistance >= flAbsDistance:
+                iAccelState = 3  # decelerating
+            elif flAbsVelocity < self._flMaxSpeedDegreesPerSecond:
+                iAccelState = 1  # accelerating
+            else:
+                iAccelState = 2  # constant velocity
+
+            self._iCurrentAccelerationState = iAccelState
+
             # Update timestamp and sequence
             self._dLastUpdateTimestampSeconds = self._obClock.get_time_seconds()
             self._iSequenceNumber += 1
@@ -623,10 +665,11 @@ class SimulatedMotorInterface:
             self._obMotorStateHistory.append(MotorState(
                 flMotorAngleDegrees=self._flCurrentAngleDegrees,
                 flMotorTargetAngleDegrees=self._flTargetAngleDegrees,
-                flMotorSpeedStepsPerSecond=abs(self._flCurrentVelocityDegreesPerSecond) / self._FL_DEGREES_PER_STEP,
-                bMotorIsMoving=abs(self._flCurrentVelocityDegreesPerSecond) > 0.01 or abs(self._flTargetAngleDegrees - self._flCurrentAngleDegrees) > 0.001,
+                flMotorSpeedStepsPerSecond=flAbsVelocity / self._FL_DEGREES_PER_STEP,
+                bMotorIsMoving=flAbsVelocity > 0.01 or flAbsDistance > 0.001,
                 dMotorTimestampSeconds=self._dLastUpdateTimestampSeconds,
-                iMotorSequenceNumber=self._iSequenceNumber
+                iMotorSequenceNumber=self._iSequenceNumber,
+                iAccelerationState=self._iCurrentAccelerationState
             ))
 
         # Call feedback callback outside the lock
