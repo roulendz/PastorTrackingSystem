@@ -47,11 +47,13 @@ Plans:
   3. Camera frame timestamps are captured between grab() and retrieve() calls, not after blocking read()
   4. Control algorithms accept delta time as a parameter and produce identical output for identical inputs (deterministically testable)
   5. Motor angle interpolation uses quadratic interpolation during acceleration phases
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- Clock abstraction (RealClock/FakeClock DI), control algorithm dt parameter, time.time() purge
+- [ ] 02-02-PLAN.md -- Camera grab()/retrieve() split, TrackerController dt clamping, config parameters
+- [ ] 02-03-PLAN.md -- Motor interpolation upgrade (MotorState accelState, Hermite interpolation, linear regression clock sync)
+- [ ] 02-04-PLAN.md -- Validation test suite (clock, determinism, interpolation accuracy, SYNC-06 2-pixel RMS) + debug overlay
 
 ### Phase 3: Motion Smoothing
 **Goal**: Camera movements look human-operated -- smooth starts, smooth stops, no jitter from pose detection noise
@@ -102,7 +104,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Test Foundation and Code Cleanup | 3/3 | Complete | 2026-02-15 |
-| 2. Time Synchronization | 0/TBD | Not started | - |
+| 2. Time Synchronization | 0/4 | Not started | - |
 | 3. Motion Smoothing | 0/TBD | Not started | - |
 | 4. Detection Handling | 0/TBD | Not started | - |
 | 5. Scenario Validation | 0/TBD | Not started | - |
