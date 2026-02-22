@@ -137,8 +137,15 @@ class CameraInterface:
     
     def capture_frame_with_timestamp(self) -> Tuple[Optional[np.ndarray], float]:
         """
-        Capture single frame from camera.
-        
+        Capture single frame from camera with precise timestamp.
+
+        Uses grab()/retrieve() split instead of read() for more accurate
+        timestamps. Timestamp is taken between grab() and retrieve() because
+        grab() acquires the raw frame from the camera buffer (fast, ~constant
+        time) while retrieve() decodes the frame (slower, variable time).
+        Placing the clock read between them captures the closest approximation
+        to the true frame capture moment.
+
         Returns:
             Tuple of (frame, timestamp_seconds)
             Frame is None if capture failed
@@ -146,23 +153,34 @@ class CameraInterface:
         if not self.is_camera_device_open():
             logger.error("Cannot capture - camera not open")
             return None, 0.0
-        
-        # Capture frame
-        bSuccess, obFrame = self.obVideoCapture.read()
 
-        # Get timestamp IMMEDIATELY after capture
+        # grab() acquires raw frame from camera buffer (fast)
+        bGrabbed = self.obVideoCapture.grab()
+
+        # Timestamp between grab() and retrieve() captures the closest
+        # approximation to true frame capture time. grab() acquires from
+        # camera buffer (fast); retrieve() decodes (slower, variable).
         dTimestampSeconds = self._obClock.get_time_seconds()
 
-        # Video file looping: if read fails on a video file, seek to start and retry
-        if (not bSuccess or obFrame is None) and self.sVideoFilePath:
-            self.obVideoCapture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            bSuccess, obFrame = self.obVideoCapture.read()
-            dTimestampSeconds = self._obClock.get_time_seconds()
+        if not bGrabbed:
+            # Video file looping: if grab fails on a video file, seek to start and retry
+            if self.sVideoFilePath:
+                self.obVideoCapture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                bGrabbed = self.obVideoCapture.grab()
+                dTimestampSeconds = self._obClock.get_time_seconds()
+                if not bGrabbed:
+                    return None, dTimestampSeconds
+            else:
+                logger.debug("grab() failed on live camera source")
+                return None, dTimestampSeconds
+
+        # retrieve() decodes the grabbed frame (slower, variable time)
+        bSuccess, obFrame = self.obVideoCapture.retrieve()
 
         if not bSuccess or obFrame is None:
-            logger.warning("Failed to capture frame")
+            logger.warning("Failed to decode frame after successful grab")
             return None, dTimestampSeconds
-        
+
         return obFrame, dTimestampSeconds
     
     def get_frame_dimensions(self) -> Tuple[int, int]:
