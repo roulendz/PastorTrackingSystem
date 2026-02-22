@@ -36,6 +36,131 @@ class MotorState:
     iAccelerationState: int = 0  # 0=stopped, 1=accel, 2=constant, 3=decel
 
 
+# Gear ratio constant: 200 steps * 180:1 gear * 8 microstep = 288,000 steps/rev
+_FL_DEGREES_PER_STEP = 360.0 / 288000.0
+
+
+def _hermite_interpolate_angle(
+    dT0: float, flP0: float, flV0DegreesPerSecond: float,
+    dT1: float, flP1: float, flV1DegreesPerSecond: float,
+    dAtTimestamp: float
+) -> float:
+    """
+    Hermite cubic interpolation between two motor state points.
+
+    Uses position and velocity at each endpoint to produce a C1-continuous
+    curve (smooth position AND velocity). This handles direction reversals
+    naturally -- the velocity passes through zero smoothly.
+
+    Args:
+        dT0: Timestamp of first point (seconds)
+        flP0: Position at first point (degrees)
+        flV0DegreesPerSecond: Velocity at first point (degrees/s, signed)
+        dT1: Timestamp of second point (seconds)
+        flP1: Position at second point (degrees)
+        flV1DegreesPerSecond: Velocity at second point (degrees/s, signed)
+        dAtTimestamp: Timestamp to interpolate at
+
+    Returns:
+        Interpolated angle in degrees
+    """
+    dInterval = dT1 - dT0
+    if dInterval <= 0.0:
+        return flP1
+
+    # Normalize t to [0, 1]
+    flT = (dAtTimestamp - dT0) / dInterval
+
+    # Scale velocities to the interval
+    flM0 = flV0DegreesPerSecond * dInterval
+    flM1 = flV1DegreesPerSecond * dInterval
+
+    # Hermite basis functions
+    flT2 = flT * flT
+    flT3 = flT2 * flT
+
+    flH00 = 2.0 * flT3 - 3.0 * flT2 + 1.0
+    flH10 = flT3 - 2.0 * flT2 + flT
+    flH01 = -2.0 * flT3 + 3.0 * flT2
+    flH11 = flT3 - flT2
+
+    return flH00 * flP0 + flH10 * flM0 + flH01 * flP1 + flH11 * flM1
+
+
+def _get_signed_velocity_degrees_per_second(obState: MotorState) -> float:
+    """
+    Get signed velocity in degrees/second from a MotorState.
+
+    Speed is always positive in MotorState. Direction is inferred from
+    the difference between target and current angle.
+    """
+    flSpeedDegreesPerSecond = float(obState.flMotorSpeedStepsPerSecond) * _FL_DEGREES_PER_STEP
+    if obState.iAccelerationState == 0:
+        return 0.0
+    # Direction: toward target
+    flDirection = 1.0 if obState.flMotorTargetAngleDegrees > obState.flMotorAngleDegrees else -1.0
+    if abs(obState.flMotorTargetAngleDegrees - obState.flMotorAngleDegrees) < 0.001:
+        flDirection = 0.0
+    return flSpeedDegreesPerSecond * flDirection
+
+
+def _hermite_interpolate_from_history(
+    vHistory: list, dAtTimestampSeconds: float
+) -> float:
+    """
+    Shared Hermite interpolation logic used by both MotorInterface and
+    SimulatedMotorInterface.
+
+    Per locked decisions:
+    - Interpolation always runs (no rest-detection bypass)
+    - Single smooth curve through direction reversals (C1 continuity)
+
+    Args:
+        vHistory: List of MotorState entries (must have >= 1 entry)
+        dAtTimestampSeconds: Timestamp to interpolate at
+
+    Returns:
+        Interpolated angle in degrees
+    """
+    if len(vHistory) == 1:
+        # Single point: extrapolate using velocity
+        obSingle = vHistory[0]
+        flVel = _get_signed_velocity_degrees_per_second(obSingle)
+        dDt = dAtTimestampSeconds - obSingle.dMotorTimestampSeconds
+        return float(obSingle.flMotorAngleDegrees) + flVel * dDt
+
+    dAt = float(dAtTimestampSeconds)
+
+    # Before history: extrapolate from first point
+    if dAt <= float(vHistory[0].dMotorTimestampSeconds):
+        obFirst = vHistory[0]
+        flVel = _get_signed_velocity_degrees_per_second(obFirst)
+        dDt = dAt - obFirst.dMotorTimestampSeconds
+        return float(obFirst.flMotorAngleDegrees) + flVel * dDt
+
+    # After history: extrapolate from last point
+    if dAt >= float(vHistory[-1].dMotorTimestampSeconds):
+        obLast = vHistory[-1]
+        flVel = _get_signed_velocity_degrees_per_second(obLast)
+        dDt = dAt - obLast.dMotorTimestampSeconds
+        return float(obLast.flMotorAngleDegrees) + flVel * dDt
+
+    # Between history points: Hermite interpolation
+    obPrev = vHistory[0]
+    for obNext in vHistory[1:]:
+        if dAt <= float(obNext.dMotorTimestampSeconds):
+            flV0 = _get_signed_velocity_degrees_per_second(obPrev)
+            flV1 = _get_signed_velocity_degrees_per_second(obNext)
+            return _hermite_interpolate_angle(
+                obPrev.dMotorTimestampSeconds, obPrev.flMotorAngleDegrees, flV0,
+                obNext.dMotorTimestampSeconds, obNext.flMotorAngleDegrees, flV1,
+                dAt
+            )
+        obPrev = obNext
+
+    return float(vHistory[-1].flMotorAngleDegrees)
+
+
 class MotorInterface:
     """
     Interface for communicating with Arduino motor controller.
@@ -224,39 +349,30 @@ class MotorInterface:
             )
 
     def get_estimated_motor_angle_degrees(self, dAtTimestampSeconds: float) -> float:
+        """
+        Estimate motor angle at a given timestamp using Hermite cubic interpolation.
+
+        Uses position and velocity from the motor state history to produce a
+        C1-continuous curve. Handles direction reversals smoothly. Per locked
+        decisions: interpolation always runs (no rest-detection bypass).
+
+        Args:
+            dAtTimestampSeconds: Timestamp to estimate angle at
+
+        Returns:
+            Estimated motor angle in degrees
+        """
         with self._obStateLock:
             vHistory = list(self._obMotorStateHistory)
             if not vHistory:
                 return float(self._obLatestMotorState.flMotorAngleDegrees)
 
-        if len(vHistory) == 1:
-            return float(vHistory[0].flMotorAngleDegrees)
+        return _hermite_interpolate_from_history(vHistory, dAtTimestampSeconds)
 
-        dAt = float(dAtTimestampSeconds)
-        if dAt <= float(vHistory[0].dMotorTimestampSeconds):
-            return float(vHistory[0].flMotorAngleDegrees)
-        if dAt >= float(vHistory[-1].dMotorTimestampSeconds):
-            return float(vHistory[-1].flMotorAngleDegrees)
-
-        obPrev = vHistory[0]
-        for obNext in vHistory[1:]:
-            dNext = float(obNext.dMotorTimestampSeconds)
-            if dAt <= dNext:
-                dPrev = float(obPrev.dMotorTimestampSeconds)
-                if dNext <= dPrev:
-                    return float(obNext.flMotorAngleDegrees)
-                dFrac = (dAt - dPrev) / (dNext - dPrev)
-                flA0 = float(obPrev.flMotorAngleDegrees)
-                flA1 = float(obNext.flMotorAngleDegrees)
-                return flA0 + (flA1 - flA0) * float(dFrac)
-            obPrev = obNext
-
-        return float(vHistory[-1].flMotorAngleDegrees)
-    
     def set_feedback_callback(self, fnCallback: Callable[[MotorState], None]):
         """
         Set callback function to be called on each feedback message.
-        
+
         Args:
             fnCallback: Function taking MotorState as argument
         """
@@ -564,34 +680,25 @@ class SimulatedMotorInterface:
             )
 
     def get_estimated_motor_angle_degrees(self, dAtTimestampSeconds: float) -> float:
+        """
+        Estimate motor angle at a given timestamp using Hermite cubic interpolation.
+
+        Uses the same shared Hermite interpolation as MotorInterface for
+        consistency. Per locked decisions: interpolation always runs, single
+        smooth curve through direction reversals.
+
+        Args:
+            dAtTimestampSeconds: Timestamp to estimate angle at
+
+        Returns:
+            Estimated motor angle in degrees
+        """
         with self._obStateLock:
             vHistory = list(self._obMotorStateHistory)
             if not vHistory:
                 return float(self._flCurrentAngleDegrees)
 
-        if len(vHistory) == 1:
-            return float(vHistory[0].flMotorAngleDegrees)
-
-        dAt = float(dAtTimestampSeconds)
-        if dAt <= float(vHistory[0].dMotorTimestampSeconds):
-            return float(vHistory[0].flMotorAngleDegrees)
-        if dAt >= float(vHistory[-1].dMotorTimestampSeconds):
-            return float(vHistory[-1].flMotorAngleDegrees)
-
-        obPrev = vHistory[0]
-        for obNext in vHistory[1:]:
-            dNext = float(obNext.dMotorTimestampSeconds)
-            if dAt <= dNext:
-                dPrev = float(obPrev.dMotorTimestampSeconds)
-                if dNext <= dPrev:
-                    return float(obNext.flMotorAngleDegrees)
-                dFrac = (dAt - dPrev) / (dNext - dPrev)
-                flA0 = float(obPrev.flMotorAngleDegrees)
-                flA1 = float(obNext.flMotorAngleDegrees)
-                return flA0 + (flA1 - flA0) * float(dFrac)
-            obPrev = obNext
-
-        return float(vHistory[-1].flMotorAngleDegrees)
+        return _hermite_interpolate_from_history(vHistory, dAtTimestampSeconds)
 
     def set_feedback_callback(self, fnCallback: Callable[[MotorState], None]):
         self._fnFeedbackCallback = fnCallback
