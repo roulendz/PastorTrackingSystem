@@ -10,7 +10,6 @@ Follows:
 """
 
 from abc import ABC, abstractmethod
-import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,13 +19,14 @@ class ControlAlgorithm(ABC):
     """Abstract base class for control algorithms."""
     
     @abstractmethod
-    def calculate_correction_from_error(self, flErrorDegrees: float) -> float:
+    def calculate_correction_from_error(self, flErrorDegrees: float, flDeltaTimeSeconds: float) -> float:
         """
         Calculate control correction from error.
-        
+
         Args:
             flErrorDegrees: Angular error (positive = person right of center)
-            
+            flDeltaTimeSeconds: Time elapsed since last call in seconds
+
         Returns:
             Correction angle in degrees
         """
@@ -57,8 +57,8 @@ class ProportionalController(ControlAlgorithm):
         self.flProportionalGain = flProportionalGain
         logger.info(f"P Controller initialized: Kp={flProportionalGain}")
     
-    def calculate_correction_from_error(self, flErrorDegrees: float) -> float:
-        """Calculate proportional correction."""
+    def calculate_correction_from_error(self, flErrorDegrees: float, flDeltaTimeSeconds: float) -> float:
+        """Calculate proportional correction (dt unused -- P controller has no time dependency)."""
         return self.flProportionalGain * flErrorDegrees
     
     def reset_controller(self):
@@ -104,66 +104,61 @@ class PIDController(ControlAlgorithm):
         # State variables
         self.flIntegralAccumulator = 0.0
         self.flPreviousError = 0.0
-        self.dPreviousTime = time.time()
         
         logger.info(
             f"PID Controller initialized: "
             f"Kp={flProportionalGain}, Ki={flIntegralGain}, Kd={flDerivativeGain}"
         )
     
-    def calculate_correction_from_error(self, flErrorDegrees: float) -> float:
+    def calculate_correction_from_error(self, flErrorDegrees: float, flDeltaTimeSeconds: float) -> float:
         """
         Calculate PID correction.
-        
+
         Args:
             flErrorDegrees: Current error
-            
+            flDeltaTimeSeconds: Time elapsed since last call in seconds
+
         Returns:
             Control correction
         """
-        dCurrentTime = time.time()
-        flDeltaTime = dCurrentTime - self.dPreviousTime
-        
         # Avoid division by zero
-        if flDeltaTime <= 0.0:
-            flDeltaTime = 0.001
-        
+        if flDeltaTimeSeconds <= 0.0:
+            flDeltaTimeSeconds = 0.001
+
         # Proportional term
         flProportionalTerm = self.flProportionalGain * flErrorDegrees
-        
+
         # Integral term with anti-windup
-        self.flIntegralAccumulator += flErrorDegrees * flDeltaTime
+        self.flIntegralAccumulator += flErrorDegrees * flDeltaTimeSeconds
         # Clamp integral to prevent windup
         self.flIntegralAccumulator = max(
             -self.flMaximumIntegralValue,
             min(self.flMaximumIntegralValue, self.flIntegralAccumulator)
         )
         flIntegralTerm = self.flIntegralGain * self.flIntegralAccumulator
-        
+
         # Derivative term
-        flErrorDerivative = (flErrorDegrees - self.flPreviousError) / flDeltaTime
+        flErrorDerivative = (flErrorDegrees - self.flPreviousError) / flDeltaTimeSeconds
         flDerivativeTerm = self.flDerivativeGain * flErrorDerivative
-        
+
         # Total output
         flTotalCorrection = flProportionalTerm + flIntegralTerm + flDerivativeTerm
-        
-        # Update state
+
+        # Update state (flPreviousError still needed for derivative term)
         self.flPreviousError = flErrorDegrees
-        self.dPreviousTime = dCurrentTime
-        
+
         logger.debug(
             f"PID: P={flProportionalTerm:.2f}, "
             f"I={flIntegralTerm:.2f}, "
             f"D={flDerivativeTerm:.2f}"
         )
-        
+
         return flTotalCorrection
     
     def reset_controller(self):
         """Reset integral and derivative state."""
         self.flIntegralAccumulator = 0.0
         self.flPreviousError = 0.0
-        self.dPreviousTime = time.time()
         logger.debug("PID controller reset")
     
     def set_gains(
@@ -206,7 +201,6 @@ class VelocityController(ControlAlgorithm):
         self.flVelocityGain = flVelocityGain
         self.flMaximumVelocityDegreesPerSecond = flMaximumVelocityDegreesPerSecond
         self.flVelocitySmoothingAlpha = flVelocitySmoothingAlpha
-        self.dPreviousTime = time.time()
         self._flPreviousVelocity = 0.0
         
         logger.info(
@@ -214,39 +208,41 @@ class VelocityController(ControlAlgorithm):
             f"Kv={flVelocityGain}, max_vel={flMaximumVelocityDegreesPerSecond}"
         )
     
-    def calculate_correction_from_error(self, flErrorDegrees: float) -> float:
+    def calculate_correction_from_error(self, flErrorDegrees: float, flDeltaTimeSeconds: float) -> float:
         """
         Calculate velocity-based correction.
-        
-        Returns position change based on desired velocity.
+
+        Args:
+            flErrorDegrees: Angular error in degrees
+            flDeltaTimeSeconds: Time elapsed since last call in seconds
+
+        Returns:
+            Position change based on desired velocity.
         """
-        dCurrentTime = time.time()
-        flDeltaTime = dCurrentTime - self.dPreviousTime
-        self.dPreviousTime = dCurrentTime
-        
-        if flDeltaTime <= 0.0:
-            flDeltaTime = 0.001
-        
+        if flDeltaTimeSeconds <= 0.0:
+            flDeltaTimeSeconds = 0.001
+
         # Calculate desired velocity
         flDesiredVelocity = self.flVelocityGain * flErrorDegrees
-        
+
         # Clamp to maximum
         flDesiredVelocity = max(
             -self.flMaximumVelocityDegreesPerSecond,
             min(self.flMaximumVelocityDegreesPerSecond, flDesiredVelocity)
         )
-        
+
         # Ease-in/out smoothing on velocity
         flSmoothedVelocity = self._flPreviousVelocity + self.flVelocitySmoothingAlpha * (flDesiredVelocity - self._flPreviousVelocity)
         self._flPreviousVelocity = flSmoothedVelocity
         # Convert velocity to position change
-        flPositionChange = flSmoothedVelocity * flDeltaTime
-        
+        flPositionChange = flSmoothedVelocity * flDeltaTimeSeconds
+
         return flPositionChange
     
     def reset_controller(self):
-        """Reset time state."""
-        self.dPreviousTime = time.time()
+        """Reset velocity state."""
+        self._flPreviousVelocity = 0.0
+
     def set_parameters(self, flVelocityGain: float, flMaximumVelocityDegreesPerSecond: float, flVelocitySmoothingAlpha: float):
         self.flVelocityGain = float(flVelocityGain)
         self.flMaximumVelocityDegreesPerSecond = float(flMaximumVelocityDegreesPerSecond)

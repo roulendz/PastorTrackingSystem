@@ -14,6 +14,7 @@ from interfaces.motor_interface import SimulatedMotorInterface
 from interfaces.camera_interface import CameraInterface
 from tracking.pose_tracker import PoseResult
 from utilities.config_manager import SystemConfiguration
+from utilities.clock import FakeClock
 
 
 def generate_test_video(
@@ -63,6 +64,24 @@ def generate_test_video(
 
     obWriter.release()
     return sOutputPath
+
+
+@pytest.fixture
+def obFakeClock():
+    """Create a FakeClock starting at time 0.0 for deterministic tests."""
+    return FakeClock(dStartTimeSeconds=0.0)
+
+
+@pytest.fixture
+def obSimulatedMotorWithClock(obFakeClock):
+    """
+    Create a SimulatedMotorInterface with an injected FakeClock.
+
+    Uses FakeClock for deterministic timestamp control in tests.
+    """
+    obMotor = SimulatedMotorInterface(obClock=obFakeClock)
+    obMotor.connect_to_motor_controller()
+    return obMotor
 
 
 @pytest.fixture
