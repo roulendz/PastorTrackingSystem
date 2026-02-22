@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Virtual center line stays perfectly locked to physical background at all motor velocities
-**Current focus:** Phase 1 - Test Foundation and Code Cleanup
+**Current focus:** Phase 2 - Time Synchronization
 
 ## Current Position
 
-Phase: 1 of 5 (Test Foundation and Code Cleanup) -- COMPLETE
-Plan: 3 of 3 in current phase (all plans complete)
-Status: Phase 1 complete, ready for Phase 2
-Last activity: 2026-02-15 -- Completed 01-03 (test suite)
+Phase: 2 of 5 (Time Synchronization)
+Plan: 1 of 4 in current phase (02-01 complete)
+Status: Executing Phase 2
+Last activity: 2026-02-22 -- Completed 02-01 (Clock abstraction)
 
-Progress: [###.......] 30%
+Progress: [####......] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 5 min
-- Total execution time: 0.25 hours
+- Total execution time: 0.33 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-test-foundation | 3 | 15 min | 5 min |
+| 02-time-synchronization | 1 | 5 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 01-02 (5 min), 01-03 (5 min)
+- Last 5 plans: 01-01 (5 min), 01-02 (5 min), 01-03 (5 min), 02-01 (5 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -55,6 +56,11 @@ Recent decisions affecting current work:
 - [01-03]: Mock PoseTracker via unittest.mock rather than importing MediaPipe in tests
 - [01-03]: Explicit advance_simulation(dt) in tests for deterministic motor physics
 - [01-03]: Synthetic video generation (90 frames, moving red circle) for camera tests
+- [02-01]: Clock ABC with abc.ABC (not Protocol) for explicit interface contract
+- [02-01]: RealClock wraps time.perf_counter() exclusively (monotonic, high-resolution)
+- [02-01]: Background simulation loop keeps raw time.perf_counter() for real-time sleep delta
+- [02-01]: Optional[Clock] = None defaulting to RealClock() preserves backward compatibility
+- [02-01]: VelocityController.reset_controller() resets _flPreviousVelocity after time state removal
 
 ### Pending Todos
 
@@ -68,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-15
-Stopped at: Completed 01-03-PLAN.md (test suite -- Phase 1 complete)
+Last session: 2026-02-22
+Stopped at: Completed 02-01-PLAN.md (Clock abstraction)
 Resume file: None
