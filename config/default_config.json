@@ -3,8 +3,8 @@
   "iMotorBaudRate": 115200,
   "flMotorMaxSpeedStepsPerSecond": 10000.0,
   "flMotorMaxAccelerationStepsPerSecondSquared": 12500.0,
-  "flMotorMinAngleDegrees": -45.0,
-  "flMotorMaxAngleDegrees": 45.0,
+  "flMotorMinAngleDegrees": -25.0,
+  "flMotorMaxAngleDegrees": 25.0,
   "iCameraDeviceIndex": 1,
   "iCameraWidthPixels": 1280,
   "iCameraHeightPixels": 720,
@@ -31,5 +31,11 @@
   "flVelocityGain": 5.0,
   "flMaxVelocityDegreesPerSecond": 45.0,
   "flVelocitySmoothingAlpha": 0.3,
+
+  "flDtMaxSeconds": 0.066,
+  "flDtMinSeconds": 0.001,
+  "flDriftRmsWindowSeconds": 1.0,
+  "flReversalSettlingWindowSeconds": 0.75,
+
   "_sFovNote": "FOV 6.77deg = Sony AX700 at max optical zoom (111.6mm focal, 13.2mm sensor width)"
 }

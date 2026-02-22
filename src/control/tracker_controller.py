@@ -79,6 +79,10 @@ class TrackerController:
         self.flMaximumMotorAngleDegrees = 90.0
         self.flMinimumTrackingConfidenceForControl = 0.5
         
+        # Timing: dt clamp bounds (overridden by config via apply_configuration)
+        self.flDtMaxSeconds = 0.066
+        self.flDtMinSeconds = 0.001
+
         # Statistics
         self.iFramesProcessedCount = 0
         self.dStartTime = self._obClock.get_time_seconds()
@@ -226,22 +230,41 @@ class TrackerController:
         flAngleError = flPixelOffset * flAnglePerPixel
 
         flPersonAngleRelativeToHome = obCurrentSample.flMotorAngleDegrees + flAngleError
+
+        # Compute delta time from absolute timestamps (per locked decision: dt computed at pipeline boundary)
         dNow = float(obCurrentSample.dSampleTimestampSeconds)
         if self._dPreviousControlTimestampSeconds is None:
-            dDeltaTime = 0.0
+            # First frame: use nominal frame interval, do not skip
+            flDeltaTimeSeconds = 1.0 / 30.0
+            self._dPreviousControlTimestampSeconds = dNow
         else:
-            dDeltaTime = dNow - float(self._dPreviousControlTimestampSeconds)
+            flDeltaTimeSeconds = dNow - float(self._dPreviousControlTimestampSeconds)
+
+        # dt clamping at pipeline boundary (per locked decisions)
+        if flDeltaTimeSeconds > self.flDtMaxSeconds:
+            # Dropped frame: skip control update entirely
+            # Per locked decision: motor telemetry still recorded in history buffer,
+            # but control update skipped for that cycle.
+            # Update timestamp so next frame gets a fresh dt (prevent cascade skip)
+            logger.debug(
+                f"Control update skipped: dt={flDeltaTimeSeconds:.4f}s exceeds "
+                f"max={self.flDtMaxSeconds:.4f}s (dropped frame)"
+            )
+            self._dPreviousControlTimestampSeconds = dNow
+            return
+        if flDeltaTimeSeconds < self.flDtMinSeconds:
+            # Near-zero dt: clamp up to minimum to avoid division issues
+            flDeltaTimeSeconds = self.flDtMinSeconds
+
         self._dPreviousControlTimestampSeconds = dNow
-        if dDeltaTime <= 0.0 or dDeltaTime > 0.5:
-            dDeltaTime = 1.0 / 30.0
 
         if abs(flPersonAngleRelativeToHome) <= self.flDeadbandDegrees:
             flNewTargetAngle = self._compute_home_return_target_angle(
                 obCurrentSample.flMotorAngleDegrees,
-                dDeltaTime
+                flDeltaTimeSeconds
             )
         else:
-            flCorrection = self.obControlAlgorithm.calculate_correction_from_error(flAngleError, dDeltaTime)
+            flCorrection = self.obControlAlgorithm.calculate_correction_from_error(flAngleError, flDeltaTimeSeconds)
             flNewTargetAngle = obCurrentSample.flMotorAngleDegrees + flCorrection
         
         # Clamp to safety limits
@@ -319,3 +342,5 @@ class TrackerController:
         self.flMaximumMotorAngleDegrees = float(getattr(obConfig, 'flMotorMaxAngleDegrees', self.flMaximumMotorAngleDegrees))
         self.flMinimumTrackingConfidenceForControl = float(getattr(obConfig, 'flTrackingMinConfidenceForControl', self.flMinimumTrackingConfidenceForControl))
         self.iCenterDeadzoneRadiusPixels = int(getattr(obConfig, 'iCenterDeadzoneRadiusPixels', getattr(self, 'iCenterDeadzoneRadiusPixels', 0)))
+        self.flDtMaxSeconds = float(getattr(obConfig, 'flDtMaxSeconds', self.flDtMaxSeconds))
+        self.flDtMinSeconds = float(getattr(obConfig, 'flDtMinSeconds', self.flDtMinSeconds))
