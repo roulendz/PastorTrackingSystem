@@ -9,7 +9,6 @@ Follows:
 - All business logic delegated to specialized modules
 """
 
-import time
 from enum import Enum
 from typing import Optional
 import logging
@@ -19,6 +18,7 @@ from interfaces.motor_interface import MotorInterface
 from interfaces.camera_interface import CameraInterface
 from tracking.pose_tracker import PoseTracker
 from control.control_algorithm import ControlAlgorithm
+from utilities.clock import Clock, RealClock
 
 logger = logging.getLogger(__name__)
 
@@ -46,22 +46,25 @@ class TrackerController:
         obMotorInterface: MotorInterface,
         obCameraInterface: CameraInterface,
         obPoseTracker: PoseTracker,
-        obControlAlgorithm: ControlAlgorithm
+        obControlAlgorithm: ControlAlgorithm,
+        obClock: Optional[Clock] = None
     ):
         """
         Initialize tracker controller.
-        
+
         Args:
             obMotorInterface: Motor communication interface
             obCameraInterface: Camera capture interface
             obPoseTracker: Pose detection module
             obControlAlgorithm: Control algorithm (P/PID)
+            obClock: Injected clock for timestamps (defaults to RealClock)
         """
         # Store references to injected dependencies
         self.obMotorInterface = obMotorInterface
         self.obCameraInterface = obCameraInterface
         self.obPoseTracker = obPoseTracker
         self.obControlAlgorithm = obControlAlgorithm
+        self._obClock = obClock or RealClock()
         self.obConfig = None
         
         # State
@@ -78,7 +81,7 @@ class TrackerController:
         
         # Statistics
         self.iFramesProcessedCount = 0
-        self.dStartTime = time.time()
+        self.dStartTime = self._obClock.get_time_seconds()
         self._flLastCommandedAngle = None
         self.flCommandMinDeltaDegrees = 0.05
         self._dPreviousControlTimestampSeconds = None
@@ -188,7 +191,7 @@ class TrackerController:
         Returns:
             Dictionary with statistics
         """
-        dElapsedTime = time.time() - self.dStartTime
+        dElapsedTime = self._obClock.get_time_seconds() - self.dStartTime
         flAverageFPS = self.iFramesProcessedCount / dElapsedTime if dElapsedTime > 0 else 0.0
         
         return {
@@ -238,7 +241,7 @@ class TrackerController:
                 dDeltaTime
             )
         else:
-            flCorrection = self.obControlAlgorithm.calculate_correction_from_error(flAngleError)
+            flCorrection = self.obControlAlgorithm.calculate_correction_from_error(flAngleError, dDeltaTime)
             flNewTargetAngle = obCurrentSample.flMotorAngleDegrees + flCorrection
         
         # Clamp to safety limits

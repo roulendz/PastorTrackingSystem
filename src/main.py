@@ -12,6 +12,7 @@ import cv2
 import argparse
 import logging
 import sys
+import time
 from pathlib import Path
 
 # Add src to path
@@ -19,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from interfaces.motor_interface import MotorInterface, NullMotorInterface, SimulatedMotorInterface
 from interfaces.camera_interface import CameraInterface
+from utilities.clock import RealClock
 from tracking.pose_tracker import PoseTracker, PoseResult
 from control.control_algorithm import ProportionalController, PIDController
 from control.tracker_controller import TrackerController
@@ -75,23 +77,27 @@ def initialize_system(obConfig, sVideoFilePath: str = ""):
     """
     logger.info("Initializing system components...")
 
+    # Shared clock for all components
+    obClock = RealClock()
+
     # 1. Motor Interface
     if sVideoFilePath:
         # Synthetic mode: use simulated motor instead of real hardware
         logger.info("Synthetic mode: using SimulatedMotorInterface")
-        obMotorInterface = SimulatedMotorInterface()
+        obMotorInterface = SimulatedMotorInterface(obClock=obClock)
         obMotorInterface.connect_to_motor_controller()
     else:
         logger.info("Connecting to motor...")
         obMotorInterface = MotorInterface(
             obConfig.sMotorSerialPortName,
-            obConfig.iMotorBaudRate
+            obConfig.iMotorBaudRate,
+            obClock=obClock
         )
 
         if not obMotorInterface.connect_to_motor_controller():
             if obConfig.bAllowStartWithoutMotor:
                 logger.warning("Motor not connected; starting in motor-less mode")
-                obMotorInterface = SimulatedMotorInterface()
+                obMotorInterface = SimulatedMotorInterface(obClock=obClock)
                 obMotorInterface.connect_to_motor_controller()
             else:
                 logger.error("Failed to connect to motor!")
@@ -114,7 +120,8 @@ def initialize_system(obConfig, sVideoFilePath: str = ""):
         obConfig.iCameraWidthPixels,
         obConfig.iCameraHeightPixels,
         obConfig.iCameraFramesPerSecond,
-        sVideoFilePath=sVideoFilePath
+        sVideoFilePath=sVideoFilePath,
+        obClock=obClock
     )
     
     if not obCameraInterface.open_camera_device():
@@ -157,7 +164,8 @@ def initialize_system(obConfig, sVideoFilePath: str = ""):
         obMotorInterface,
         obCameraInterface,
         obPoseTracker,
-        obControlAlgorithm
+        obControlAlgorithm,
+        obClock=obClock
     )
     # Apply configuration to controller
     obTrackerController.apply_configuration(obConfig)
@@ -474,7 +482,6 @@ def main():
         
         # Home motor
         obMotorInterface.send_home_command()
-        import time
         time.sleep(2)
         
         # Disable motor

@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from typing import Optional, Callable
 import logging
 
+from utilities.clock import Clock, RealClock
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,25 +45,27 @@ class MotorInterface:
     - Handle connection/reconnection
     """
     
-    def __init__(self, sSerialPortName: str, iBaudRate: int = 115200):
+    def __init__(self, sSerialPortName: str, iBaudRate: int = 115200, obClock: Optional[Clock] = None):
         """
         Initialize motor interface.
-        
+
         Args:
             sSerialPortName: Serial port (e.g., '/dev/ttyUSB0' or 'COM3')
             iBaudRate: Serial baud rate (default 115200)
+            obClock: Injected clock for timestamps (defaults to RealClock)
         """
         self.sSerialPortName = sSerialPortName
         self.iBaudRate = iBaudRate
         self.obSerial: Optional[serial.Serial] = None
-        
+        self._obClock = obClock or RealClock()
+
         # Thread-safe state storage
         self._obLatestMotorState = MotorState(
             flMotorAngleDegrees=0.0,
             flMotorTargetAngleDegrees=0.0,
             flMotorSpeedStepsPerSecond=0.0,
             bMotorIsMoving=False,
-            dMotorTimestampSeconds=time.perf_counter()
+            dMotorTimestampSeconds=self._obClock.get_time_seconds()
         )
         self._obStateLock = threading.Lock()
         self._flLastCommandedTargetAngleDegrees: Optional[float] = None
@@ -148,7 +152,7 @@ class MotorInterface:
         """
         with self._obStateLock:
             self._flLastCommandedTargetAngleDegrees = float(flTargetAngleDegrees)
-            self._dLastCommandTimestampSeconds = time.perf_counter()
+            self._dLastCommandTimestampSeconds = self._obClock.get_time_seconds()
         sCommand = f"M,{flTargetAngleDegrees:.2f}\n"
         return self._send_command(sCommand)
     
@@ -160,7 +164,7 @@ class MotorInterface:
         """Move motor to 0 degrees."""
         with self._obStateLock:
             self._flLastCommandedTargetAngleDegrees = 0.0
-            self._dLastCommandTimestampSeconds = time.perf_counter()
+            self._dLastCommandTimestampSeconds = self._obClock.get_time_seconds()
         return self._send_command("H\n")
     
     def send_enable_driver_command(self, bEnableDriver: bool) -> bool:
@@ -326,7 +330,7 @@ class MotorInterface:
                 flSpeed = float(vParts[2])
                 bIsMoving = bool(int(vParts[3]))
                 iSequence = int(vParts[5])
-                dNow = time.perf_counter()
+                dNow = self._obClock.get_time_seconds()
                 dTimestampSeconds = dNow
                 try:
                     iTimestampMicros = int(vParts[4])
@@ -377,13 +381,14 @@ class MotorInterface:
 
 
 class NullMotorInterface:
-    def __init__(self):
+    def __init__(self, obClock: Optional[Clock] = None):
+        self._obClock = obClock or RealClock()
         self._obLatestMotorState = MotorState(
             flMotorAngleDegrees=0.0,
             flMotorTargetAngleDegrees=0.0,
             flMotorSpeedStepsPerSecond=0.0,
             bMotorIsMoving=False,
-            dMotorTimestampSeconds=time.perf_counter()
+            dMotorTimestampSeconds=self._obClock.get_time_seconds()
         )
         self._fnFeedbackCallback = None
 
@@ -426,7 +431,7 @@ class NullMotorInterface:
             flMotorTargetAngleDegrees=self._obLatestMotorState.flMotorTargetAngleDegrees,
             flMotorSpeedStepsPerSecond=self._obLatestMotorState.flMotorSpeedStepsPerSecond,
             bMotorIsMoving=False,
-            dMotorTimestampSeconds=time.perf_counter(),
+            dMotorTimestampSeconds=self._obClock.get_time_seconds(),
             iMotorSequenceNumber=self._obLatestMotorState.iMotorSequenceNumber
         )
 
@@ -453,13 +458,14 @@ class SimulatedMotorInterface:
     # Gear ratio constant: 200 steps * 180:1 gear * 8 microstep = 288,000 steps/rev
     _FL_DEGREES_PER_STEP = 360.0 / 288000.0
 
-    def __init__(self):
+    def __init__(self, obClock: Optional[Clock] = None):
+        self._obClock = obClock or RealClock()
         self._flCurrentAngleDegrees = 0.0
         self._flTargetAngleDegrees = 0.0
         self._flCurrentVelocityDegreesPerSecond = 0.0
         self._flMaxSpeedDegreesPerSecond = 30.0
         self._flAccelerationDegreesPerSecondSquared = 60.0
-        self._dLastUpdateTimestampSeconds = time.perf_counter()
+        self._dLastUpdateTimestampSeconds = self._obClock.get_time_seconds()
         self._obStateLock = threading.Lock()
         self._obMotorStateHistory = deque(maxlen=100)
         self._iSequenceNumber = 0
@@ -610,7 +616,7 @@ class SimulatedMotorInterface:
                 self._flCurrentAngleDegrees += self._flCurrentVelocityDegreesPerSecond * dDeltaTimeSeconds
 
             # Update timestamp and sequence
-            self._dLastUpdateTimestampSeconds = time.perf_counter()
+            self._dLastUpdateTimestampSeconds = self._obClock.get_time_seconds()
             self._iSequenceNumber += 1
 
             # Record state in history
@@ -648,7 +654,13 @@ class SimulatedMotorInterface:
         logger.debug("SimulatedMotorInterface background simulation stopped")
 
     def _background_simulation_loop(self):
-        """Thread function: advance simulation at ~1000 Hz using perf_counter for delta."""
+        """Thread function: advance simulation at ~1000 Hz using perf_counter for delta.
+
+        NOTE: This loop intentionally uses raw time.perf_counter() instead of the
+        injected clock. The background loop needs real wall-clock time for its
+        sleep interval calculation. The injected clock is used for timestamps
+        recorded inside advance_simulation() instead.
+        """
         dLastTime = time.perf_counter()
         while self._bBackgroundThreadRunning:
             dNow = time.perf_counter()

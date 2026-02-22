@@ -9,10 +9,11 @@ Follows:
 """
 
 import cv2
-import time
 import numpy as np
 from typing import Optional, Tuple
 import logging
+
+from utilities.clock import Clock, RealClock
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,8 @@ class CameraInterface:
         iCameraWidthPixels: int = 1280,
         iCameraHeightPixels: int = 720,
         iCameraFramesPerSecond: int = 30,
-        sVideoFilePath: str = ""
+        sVideoFilePath: str = "",
+        obClock: Optional[Clock] = None
     ):
         """
         Initialize camera interface.
@@ -45,12 +47,14 @@ class CameraInterface:
             iCameraHeightPixels: Desired frame height
             iCameraFramesPerSecond: Desired FPS
             sVideoFilePath: Path to video file (replaces camera if non-empty)
+            obClock: Injected clock for timestamps (defaults to RealClock)
         """
         self.iCameraDeviceIndex = iCameraDeviceIndex
         self.iCameraWidthPixels = iCameraWidthPixels
         self.iCameraHeightPixels = iCameraHeightPixels
         self.iCameraFramesPerSecond = iCameraFramesPerSecond
         self.sVideoFilePath = sVideoFilePath
+        self._obClock = obClock or RealClock()
 
         self.obVideoCapture: Optional[cv2.VideoCapture] = None
         self._bIsOpen = False
@@ -147,13 +151,13 @@ class CameraInterface:
         bSuccess, obFrame = self.obVideoCapture.read()
 
         # Get timestamp IMMEDIATELY after capture
-        dTimestampSeconds = time.perf_counter()
+        dTimestampSeconds = self._obClock.get_time_seconds()
 
         # Video file looping: if read fails on a video file, seek to start and retry
         if (not bSuccess or obFrame is None) and self.sVideoFilePath:
             self.obVideoCapture.set(cv2.CAP_PROP_POS_FRAMES, 0)
             bSuccess, obFrame = self.obVideoCapture.read()
-            dTimestampSeconds = time.perf_counter()
+            dTimestampSeconds = self._obClock.get_time_seconds()
 
         if not bSuccess or obFrame is None:
             logger.warning("Failed to capture frame")
