@@ -327,7 +327,28 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obTrackerCo
             TextRenderer.draw_text(obFrame, sLine, (10, iYPos), 0.5, (255, 255, 255), 1)
             iYPos += iControlLineHeight
 
-    # Background motion visualization removed
+    # Timing debug overlay (Phase 2 locked decision: gated behind debug flag)
+    if obConfig.bShowDebugInfo and obSample is not None:
+        flRawMotorAngle = obStats.get('motor_angle', 0.0)
+        flInterpolatedAngle = obSample.flMotorAngleDegrees  # Already interpolated in tracking loop
+        flAngleDelta = flInterpolatedAngle - flRawMotorAngle
+
+        # Compute pixel error (signed): how far is virtual center from where it should be
+        flPixelError = 0.0
+        if flAnglePerPixel > 0:
+            flPixelError = flAngleDelta / flAnglePerPixel
+
+        vTimingLines = [
+            f"Raw Motor: {flRawMotorAngle:.3f} deg",
+            f"Interp Motor: {flInterpolatedAngle:.3f} deg",
+            f"Delta: {flAngleDelta:.4f} deg",
+            f"Pixel Err: {flPixelError:.1f} px",
+        ]
+
+        iTimingY = 180  # Below existing debug info
+        for sLine in vTimingLines:
+            TextRenderer.draw_text(obFrame, sLine, (10, iTimingY), 0.6, (255, 200, 0), 2)
+            iTimingY += 25
 
 
 def main():
