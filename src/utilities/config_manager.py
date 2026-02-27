@@ -26,8 +26,8 @@ class SystemConfiguration:
     iMotorBaudRate: int = 115200
     flMotorMaxSpeedStepsPerSecond: float = 25000.0
     flMotorMaxAccelerationStepsPerSecondSquared: float = 12500.0
-    flMotorMinAngleDegrees: float = -45.0
-    flMotorMaxAngleDegrees: float = 45.0
+    flMotorMinAngleDegrees: float = -25.0
+    flMotorMaxAngleDegrees: float = 25.0
     
     # Camera settings
     iCameraDeviceIndex: int = 0
@@ -64,6 +64,28 @@ class SystemConfiguration:
     flVelocityGain: float = 5.0
     flMaxVelocityDegreesPerSecond: float = 45.0
     flVelocitySmoothingAlpha: float = 0.3
+
+    # Motion profiling (MOTN-01)
+    flMotionAccelerationTimeSeconds: float = 0.4
+    flMotionDecelerationTimeSeconds: float = 0.5
+    flMotionMaxVelocityDegreesPerSecond: float = 30.0
+
+    # Home return (MOTN-02)
+    flHomeReturnDelaySeconds: float = 1.5
+    flHomeReturnMaxVelocityDegreesPerSecond: float = 10.0
+    flHomeReturnAccelerationTimeSeconds: float = 0.5
+    flHomeReturnDecelTimeSeconds: float = 0.5
+    flHomeReturnReengagementTimeSeconds: float = 0.3
+
+    # Jitter filtering (MOTN-03)
+    flPoseFilterMinCutoffHz: float = 0.01
+    flPoseFilterBeta: float = 0.007
+    flPoseFilterDerivativeCutoffHz: float = 0.1
+
+    # Confidence scaling (MOTN-04)
+    flConfidenceHoldThreshold: float = 0.3
+    flConfidenceFullThreshold: float = 0.7
+    flConfidenceLowTimeoutSeconds: float = 5.0
 
 
 class ConfigurationManager:

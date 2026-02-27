@@ -39,7 +39,7 @@ class TestHomeReturnController:
         )
 
     def test_safe_zone_delay_to_returning_home(self):
-        """Person stays in safe zone for > delay seconds -> RETURNING_HOME."""
+        """Person stays in safe zone for > delay seconds -> transitions through RETURNING_HOME."""
         obController = HomeReturnController(
             flDelaySeconds=1.5,
             flReturnMaxVelocity=10.0,
@@ -55,8 +55,8 @@ class TestHomeReturnController:
             flCurrentMotorAngleDegrees=2.0,
         )
 
-        # Stay in safe zone for > 1.5 seconds
-        eState = HomeReturnState.SAFE_ZONE_DELAY
+        # Stay in safe zone and track states we pass through
+        bReachedReturningHome = False
         for _ in range(60):  # 2 seconds at 30 FPS
             eState = obController.update(
                 flPersonAngleRelativeToHome=2.0,
@@ -64,9 +64,15 @@ class TestHomeReturnController:
                 flDeltaTimeSeconds=flDt,
                 flCurrentMotorAngleDegrees=2.0,
             )
+            if eState == HomeReturnState.RETURNING_HOME:
+                bReachedReturningHome = True
 
-        assert eState == HomeReturnState.RETURNING_HOME, (
-            f"Expected RETURNING_HOME after delay, got {eState}"
+        assert bReachedReturningHome, (
+            "Expected to transition through RETURNING_HOME after delay"
+        )
+        # Final state may be RETURNING_HOME or AT_HOME (return can complete quickly)
+        assert eState in (HomeReturnState.RETURNING_HOME, HomeReturnState.AT_HOME), (
+            f"Expected RETURNING_HOME or AT_HOME after delay, got {eState}"
         )
 
     def test_safe_zone_delay_cancelled_on_exit(self):
@@ -150,7 +156,7 @@ class TestHomeReturnController:
 
     def test_returning_home_cancelled_on_exit(self):
         """Person leaves safe zone during return. State goes to TRACKING.
-        Profiler velocity should NOT be reset."""
+        Profiler velocity should NOT be reset (preserved for smooth transition)."""
         obController = HomeReturnController(
             flDelaySeconds=0.1,  # short delay for test
             flReturnMaxVelocity=10.0,
@@ -159,32 +165,37 @@ class TestHomeReturnController:
         )
 
         flDt = 1.0 / 30.0
-        flMotorAngle = 5.0
+        flMotorAngle = 20.0  # Large angle so return takes many frames
 
         # Enter safe zone and pass through delay to RETURNING_HOME
         for _ in range(10):
             obController.update(
                 flPersonAngleRelativeToHome=1.0,
-                flSafeZoneThresholdDegrees=5.0,
+                flSafeZoneThresholdDegrees=25.0,
                 flDeltaTimeSeconds=flDt,
                 flCurrentMotorAngleDegrees=flMotorAngle,
             )
 
         assert obController.get_state() == HomeReturnState.RETURNING_HOME
 
-        # Run a few return frames to build up profiler velocity
-        for _ in range(15):
+        # Run just a few return frames (still far from home at 20 deg)
+        for _ in range(5):
             obController.update(
                 flPersonAngleRelativeToHome=1.0,
-                flSafeZoneThresholdDegrees=5.0,
+                flSafeZoneThresholdDegrees=25.0,
                 flDeltaTimeSeconds=flDt,
                 flCurrentMotorAngleDegrees=flMotorAngle,
             )
 
+        # Verify still returning (not yet at home from 20 deg away)
+        assert obController.get_state() == HomeReturnState.RETURNING_HOME, (
+            f"Should still be RETURNING_HOME, got {obController.get_state()}"
+        )
+
         # Person leaves safe zone
         eState = obController.update(
-            flPersonAngleRelativeToHome=10.0,
-            flSafeZoneThresholdDegrees=5.0,
+            flPersonAngleRelativeToHome=30.0,
+            flSafeZoneThresholdDegrees=25.0,
             flDeltaTimeSeconds=flDt,
             flCurrentMotorAngleDegrees=flMotorAngle,
         )

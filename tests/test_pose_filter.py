@@ -30,9 +30,6 @@ class TestOneEuroFilter:
         obFilter = OneEuroFilter(
             dInitialTimestamp=dTimestamp,
             flInitialValue=flCenter,
-            flMinCutoffHz=1.0,
-            flBeta=0.007,
-            flDerivativeCutoffHz=1.0,
         )
 
         vFilteredAfterWarmup = []
@@ -59,9 +56,6 @@ class TestOneEuroFilter:
         obFilter = OneEuroFilter(
             dInitialTimestamp=dTimestamp,
             flInitialValue=flStart,
-            flMinCutoffHz=1.0,
-            flBeta=0.007,
-            flDerivativeCutoffHz=1.0,
         )
 
         flFiltered = flStart
