@@ -39,6 +39,24 @@ def _ranges() -> Dict[str, Tuple[float, float, float]]:
         "flVelocityGain": (0.0, 20.0, 0.01),
         "flMaxVelocityDegreesPerSecond": (0.0, 180.0, 0.1),
         "flVelocitySmoothingAlpha": (0.0, 1.0, 0.01),
+        # Motion Smoothing (Phase 3)
+        "flMotionAccelerationTimeSeconds": (0.05, 2.0, 0.01),
+        "flMotionDecelerationTimeSeconds": (0.05, 2.0, 0.01),
+        "flMotionMaxVelocityDegreesPerSecond": (1.0, 90.0, 0.5),
+        # Home Return (Phase 3)
+        "flHomeReturnDelaySeconds": (0.0, 10.0, 0.1),
+        "flHomeReturnMaxVelocityDegreesPerSecond": (1.0, 45.0, 0.5),
+        "flHomeReturnAccelerationTimeSeconds": (0.05, 2.0, 0.01),
+        "flHomeReturnDecelTimeSeconds": (0.05, 2.0, 0.01),
+        "flHomeReturnReengagementTimeSeconds": (0.05, 2.0, 0.01),
+        # Jitter Filter (Phase 3)
+        "flPoseFilterMinCutoffHz": (0.001, 10.0, 0.001),
+        "flPoseFilterBeta": (0.0, 0.1, 0.001),
+        "flPoseFilterDerivativeCutoffHz": (0.01, 10.0, 0.01),
+        # Confidence Scaling (Phase 3)
+        "flConfidenceHoldThreshold": (0.0, 1.0, 0.01),
+        "flConfidenceFullThreshold": (0.0, 1.0, 0.01),
+        "flConfidenceLowTimeoutSeconds": (0.0, 30.0, 0.5),
     }
 
 
@@ -98,6 +116,30 @@ def _get_section_tooltips() -> Dict[str, str]:
             "bEnableDeadzoneOverlay: Shows draggable deadzone lines around the home line.\n"
             "iCenterDeadzoneRadiusPixels: Pixel radius around center where small errors are ignored\n"
             "and a circle is drawn around the detected person."
+        ),
+        "Motion Smoothing": (
+            "S-curve velocity profiling for smooth camera movement.\n"
+            "flMotionAccelerationTimeSeconds: Time to ramp up to full speed (longer = gentler start).\n"
+            "flMotionDecelerationTimeSeconds: Time to ramp down to stop (longer = more coast).\n"
+            "Double-click any slider to reset to default."
+        ),
+        "Home Return": (
+            "Controls camera behavior when pastor is in the safe zone (deadband).\n"
+            "flHomeReturnDelaySeconds: Wait time before starting return to home.\n"
+            "flHomeReturnMaxVelocityDegreesPerSecond: Maximum speed during return.\n"
+            "Camera cancels return immediately if pastor leaves safe zone."
+        ),
+        "Jitter Filter": (
+            "OneEuroFilter: adaptive low-pass filter on pose detection.\n"
+            "flPoseFilterMinCutoffHz: Lower = more smoothing when stationary (less jitter).\n"
+            "flPoseFilterBeta: Higher = more responsive to fast movements (less lag).\n"
+            "Goal: absolutely zero visible camera movement when pastor stands still."
+        ),
+        "Confidence": (
+            "Scales tracking strength based on detection confidence.\n"
+            "flConfidenceHoldThreshold: Below this, camera holds position (no correction).\n"
+            "flConfidenceFullThreshold: Above this, full tracking correction applied.\n"
+            "Between thresholds: smooth blend using cubic smoothstep."
         ),
     }
 
@@ -621,6 +663,137 @@ def start_live_settings_panel(
             dItems,
             fnOnChange=lambda v: setattr(obConfig, 'iCenterDeadzoneRadiusPixels', int(v)),
             bInteger=True,
+            iWidth=500
+        )
+
+        # Phase 3: Motion Smoothing sections
+        dpg.add_separator()
+        _add_section_header_with_tooltip("Motion Smoothing", dTips.get("Motion Smoothing", ""))
+        _add_slider_with_range(
+            "flMotionAccelerationTimeSeconds",
+            obConfig.flMotionAccelerationTimeSeconds,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flMotionAccelerationTimeSeconds', float(v)),
+                setattr(obTracker.obMotionProfiler, 'flAccelerationTimeSeconds', float(v))
+            ),
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flMotionDecelerationTimeSeconds",
+            obConfig.flMotionDecelerationTimeSeconds,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flMotionDecelerationTimeSeconds', float(v)),
+                setattr(obTracker.obMotionProfiler, 'flDecelerationTimeSeconds', float(v))
+            ),
+            iWidth=500
+        )
+
+        dpg.add_separator()
+        _add_section_header_with_tooltip("Home Return", dTips.get("Home Return", ""))
+        _add_slider_with_range(
+            "flHomeReturnDelaySeconds",
+            obConfig.flHomeReturnDelaySeconds,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flHomeReturnDelaySeconds', float(v)),
+                setattr(obTracker.obHomeReturnController, 'flDelaySeconds', float(v))
+            ),
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flHomeReturnMaxVelocityDegreesPerSecond",
+            obConfig.flHomeReturnMaxVelocityDegreesPerSecond,
+            dItems,
+            fnOnChange=lambda v: setattr(obConfig, 'flHomeReturnMaxVelocityDegreesPerSecond', float(v)),
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flHomeReturnAccelerationTimeSeconds",
+            obConfig.flHomeReturnAccelerationTimeSeconds,
+            dItems,
+            fnOnChange=lambda v: setattr(obConfig, 'flHomeReturnAccelerationTimeSeconds', float(v)),
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flHomeReturnDecelTimeSeconds",
+            obConfig.flHomeReturnDecelTimeSeconds,
+            dItems,
+            fnOnChange=lambda v: setattr(obConfig, 'flHomeReturnDecelTimeSeconds', float(v)),
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flHomeReturnReengagementTimeSeconds",
+            obConfig.flHomeReturnReengagementTimeSeconds,
+            dItems,
+            fnOnChange=lambda v: setattr(obConfig, 'flHomeReturnReengagementTimeSeconds', float(v)),
+            iWidth=500
+        )
+
+        dpg.add_separator()
+        _add_section_header_with_tooltip("Jitter Filter", dTips.get("Jitter Filter", ""))
+        _add_slider_with_range(
+            "flPoseFilterMinCutoffHz",
+            obConfig.flPoseFilterMinCutoffHz,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flPoseFilterMinCutoffHz', float(v)),
+                setattr(obTracker.obPoseFilter, '_flMinCutoffHz', float(v)) if obTracker.obPoseFilter is not None else None
+            ),
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flPoseFilterBeta",
+            obConfig.flPoseFilterBeta,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flPoseFilterBeta', float(v)),
+                setattr(obTracker.obPoseFilter, '_flBeta', float(v)) if obTracker.obPoseFilter is not None else None
+            ),
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flPoseFilterDerivativeCutoffHz",
+            obConfig.flPoseFilterDerivativeCutoffHz,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flPoseFilterDerivativeCutoffHz', float(v)),
+                setattr(obTracker.obPoseFilter, '_flDerivativeCutoffHz', float(v)) if obTracker.obPoseFilter is not None else None
+            ),
+            iWidth=500
+        )
+
+        dpg.add_separator()
+        _add_section_header_with_tooltip("Confidence", dTips.get("Confidence", ""))
+        _add_slider_with_range(
+            "flConfidenceHoldThreshold",
+            obConfig.flConfidenceHoldThreshold,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flConfidenceHoldThreshold', float(v)),
+                setattr(obTracker, 'flConfidenceHoldThreshold', float(v))
+            ),
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flConfidenceFullThreshold",
+            obConfig.flConfidenceFullThreshold,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flConfidenceFullThreshold', float(v)),
+                setattr(obTracker, 'flConfidenceFullThreshold', float(v))
+            ),
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flConfidenceLowTimeoutSeconds",
+            obConfig.flConfidenceLowTimeoutSeconds,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flConfidenceLowTimeoutSeconds', float(v)),
+                setattr(obTracker, 'flConfidenceLowTimeoutSeconds', float(v))
+            ),
             iWidth=500
         )
 
