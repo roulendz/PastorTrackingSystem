@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Virtual center line stays perfectly locked to physical background at all motor velocities
-**Current focus:** Phase 3 - Motion Smoothing
+**Current focus:** Phase 4 - Detection Handling
 
 ## Current Position
 
-Phase: 3 of 5 (Motion Smoothing)
-Plan: 1 of 2 in current phase (03-01 complete)
-Status: In Progress
-Last activity: 2026-02-27 -- Completed 03-01 (Core motion smoothing modules)
+Phase: 4 of 5 (Detection Handling)
+Plan: 0 of TBD in current phase
+Status: Ready for Phase 4 planning
+Last activity: 2026-02-27 -- Completed 03-02 (Pipeline integration and settings panel)
 
 Progress: [########..] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 5 min
-- Total execution time: 0.72 hours
+- Total plans completed: 9
+- Average duration: 6 min
+- Total execution time: 0.88 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [########..] 80%
 |-------|-------|-------|----------|
 | 01-test-foundation | 3 | 15 min | 5 min |
 | 02-time-synchronization | 4 | 21 min | 5 min |
-| 03-motion-smoothing | 1 | 8 min | 8 min |
+| 03-motion-smoothing | 2 | 18 min | 9 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (5 min), 02-02 (3 min), 02-03 (4 min), 02-04 (9 min), 03-01 (8 min)
+- Last 5 plans: 02-02 (3 min), 02-03 (4 min), 02-04 (9 min), 03-01 (8 min), 03-02 (10 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -75,6 +75,11 @@ Recent decisions affecting current work:
 - [03-01]: OneEuroFilter tuned to minCutoff=0.01Hz, derivativeCutoff=0.1Hz (plan spec 1.0Hz could not satisfy <1px jitter suppression)
 - [03-01]: HomeReturnController resets profiler velocity on overshoot clamp to prevent oscillation around home
 - [03-01]: Overshoot detection uses sign-flip of target angle rather than distance-to-home comparison
+- [03-02]: OneEuroFilter lazy-initialized on first valid detection frame (needs initial timestamp/value)
+- [03-02]: _send_profiled_motor_command helper extracted to share S-curve + clamp + send logic
+- [03-02]: Low-confidence timer feeds HomeReturnController with angle 0.0 to trigger safe-zone transitions
+- [03-02]: DearPyGui slider callbacks update both config and live module attributes (GIL makes float assignment atomic)
+- [03-02]: Integration tests track _flLastCommandedAngle to isolate pipeline logic from motor physics
 
 ### Pending Todos
 
@@ -89,5 +94,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 03-01-PLAN.md (Core motion smoothing modules)
+Stopped at: Completed 03-02-PLAN.md (Pipeline integration and settings panel) -- Phase 3 complete
 Resume file: None
