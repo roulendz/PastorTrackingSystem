@@ -67,7 +67,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Core motion smoothing modules (OneEuroFilter, MotionProfiler, HomeReturnController, confidence scaling) with TDD tests and config fields
+- [x] 03-01-PLAN.md -- Core motion smoothing modules (OneEuroFilter, MotionProfiler, HomeReturnController, confidence scaling) with TDD tests and config fields
 - [ ] 03-02-PLAN.md -- Integration into TrackerController pipeline and DearPyGui settings panel sliders for runtime tuning
 
 ### Phase 4: Detection Handling
@@ -105,6 +105,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Test Foundation and Code Cleanup | 3/3 | Complete | 2026-02-15 |
 | 2. Time Synchronization | 4/4 | Complete | 2026-02-22 |
-| 3. Motion Smoothing | 0/2 | Not started | - |
+| 3. Motion Smoothing | 1/2 | In progress | - |
 | 4. Detection Handling | 0/TBD | Not started | - |
 | 5. Scenario Validation | 0/TBD | Not started | - |

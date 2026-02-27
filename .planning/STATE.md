@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Virtual center line stays perfectly locked to physical background at all motor velocities
-**Current focus:** Phase 2 - Time Synchronization
+**Current focus:** Phase 3 - Motion Smoothing
 
 ## Current Position
 
-Phase: 2 of 5 (Time Synchronization)
-Plan: 4 of 4 in current phase (02-04 complete -- Phase 2 finished)
-Status: Phase 2 Complete
-Last activity: 2026-02-22 -- Completed 02-04 (Validation test suite and debug overlay)
+Phase: 3 of 5 (Motion Smoothing)
+Plan: 1 of 2 in current phase (03-01 complete)
+Status: In Progress
+Last activity: 2026-02-27 -- Completed 03-01 (Core motion smoothing modules)
 
 Progress: [########..] 80%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: 5 min
-- Total execution time: 0.58 hours
+- Total execution time: 0.72 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [########..] 80%
 |-------|-------|-------|----------|
 | 01-test-foundation | 3 | 15 min | 5 min |
 | 02-time-synchronization | 4 | 21 min | 5 min |
+| 03-motion-smoothing | 1 | 8 min | 8 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (5 min), 02-01 (5 min), 02-02 (3 min), 02-03 (4 min), 02-04 (9 min)
-- Trend: Consistent (02-04 longer due to test debugging)
+- Last 5 plans: 02-01 (5 min), 02-02 (3 min), 02-03 (4 min), 02-04 (9 min), 03-01 (8 min)
+- Trend: Consistent
 
 *Updated after each plan completion*
 
@@ -71,6 +72,9 @@ Recent decisions affecting current work:
 - [02-04]: Clock must advance before simulation step for timestamp alignment in deterministic tests
 - [02-04]: Interpolation accuracy measured at midpoints between coarsely-spaced history entries
 - [02-04]: SYNC-06 validated with synchronized clock+sim producing zero interpolation error at frame times
+- [03-01]: OneEuroFilter tuned to minCutoff=0.01Hz, derivativeCutoff=0.1Hz (plan spec 1.0Hz could not satisfy <1px jitter suppression)
+- [03-01]: HomeReturnController resets profiler velocity on overshoot clamp to prevent oscillation around home
+- [03-01]: Overshoot detection uses sign-flip of target angle rather than distance-to-home comparison
 
 ### Pending Todos
 
@@ -84,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-22
-Stopped at: Completed 02-04-PLAN.md (Validation test suite and debug overlay -- Phase 2 finished)
+Last session: 2026-02-27
+Stopped at: Completed 03-01-PLAN.md (Core motion smoothing modules)
 Resume file: None
