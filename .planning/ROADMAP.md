@@ -64,11 +64,11 @@ Plans:
   2. When the pastor enters the home safe zone, the camera glides to home position with decelerating S-curve -- not a linear clamp or sudden stop
   3. When MediaPipe pose detection jitters by a few pixels frame-to-frame on a stationary person, the camera does not visibly move
   4. Low-confidence detections (partially occluded pastor) produce noticeably gentler camera corrections than high-confidence detections
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- Core motion smoothing modules (OneEuroFilter, MotionProfiler, HomeReturnController, confidence scaling) with TDD tests and config fields
+- [ ] 03-02-PLAN.md -- Integration into TrackerController pipeline and DearPyGui settings panel sliders for runtime tuning
 
 ### Phase 4: Detection Handling
 **Goal**: Camera behaves gracefully when the pastor walks out of frame, is briefly occluded, or detection drops intermittently
@@ -105,6 +105,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Test Foundation and Code Cleanup | 3/3 | Complete | 2026-02-15 |
 | 2. Time Synchronization | 4/4 | Complete | 2026-02-22 |
-| 3. Motion Smoothing | 0/TBD | Not started | - |
+| 3. Motion Smoothing | 0/2 | Not started | - |
 | 4. Detection Handling | 0/TBD | Not started | - |
 | 5. Scenario Validation | 0/TBD | Not started | - |
