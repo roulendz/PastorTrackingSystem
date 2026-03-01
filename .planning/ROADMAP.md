@@ -92,10 +92,11 @@ Plans:
   1. Scripted test scenarios exist for: walk left, walk right, pause at lectern, walk outside FOV, varying speeds -- and all pass
   2. Synthetic video includes a visible V-marker lectern at center, and the virtual center line visually aligns with it when the motor is at home position
   3. Automated test suite validates that virtual center stays within 2-pixel tolerance (SYNC-06) across all scripted scenarios without manual inspection
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md -- Scenario test infrastructure, all scripted scenario tests (walk left/right/pause/FOV/speeds), and RMS validation
+- [ ] 05-02-PLAN.md -- V-marker lectern overlay in debug visualization and programmatic alignment test
 
 ## Progress
 
@@ -108,4 +109,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. Time Synchronization | 4/4 | Complete | 2026-02-22 |
 | 3. Motion Smoothing | 2/2 | Complete | 2026-02-27 |
 | 4. Detection Handling | 1/2 | In progress | - |
-| 5. Scenario Validation | 0/TBD | Not started | - |
+| 5. Scenario Validation | 0/2 | Not started | - |
