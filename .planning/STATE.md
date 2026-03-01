@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-01T09:40:42.709Z"
+status: in-progress
+last_updated: "2026-03-01T10:41:23Z"
 progress:
-  total_phases: 4
+  total_phases: 5
   completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 13
+  completed_plans: 12
 ---
 
 # Project State
@@ -18,23 +18,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Virtual center line stays perfectly locked to physical background at all motor velocities
-**Current focus:** Phase 4 - Detection Handling
+**Current focus:** Phase 5 - Scenario Validation
 
 ## Current Position
 
-Phase: 4 of 5 (Detection Handling) -- COMPLETE
+Phase: 5 of 5 (Scenario Validation)
 Plan: 2 of 2 in current phase
-Status: Phase 4 complete, ready for Phase 5
-Last activity: 2026-03-01 -- Completed 04-02 (Detection handling UI sliders and debug overlay)
+Status: Completed 05-02 (V-marker alignment)
+Last activity: 2026-03-01 -- Completed 05-02 (V-marker lectern overlay and alignment tests)
 
-Progress: [#########.] 92%
+Progress: [##########] 92%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
+- Total plans completed: 12
 - Average duration: 6 min
-- Total execution time: 1.01 hours
+- Total execution time: 1.04 hours
 
 **By Phase:**
 
@@ -44,10 +44,11 @@ Progress: [#########.] 92%
 | 02-time-synchronization | 4 | 21 min | 5 min |
 | 03-motion-smoothing | 2 | 18 min | 9 min |
 | 04-detection-handling | 2 | 8 min | 4 min |
+| 05-scenario-validation | 1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-04 (9 min), 03-01 (8 min), 03-02 (10 min), 04-01 (6 min), 04-02 (2 min)
-- Trend: Consistent (UI-only plan was fastest)
+- Last 5 plans: 03-01 (8 min), 03-02 (10 min), 04-01 (6 min), 04-02 (2 min), 05-02 (2 min)
+- Trend: Consistent (overlay + test plans fastest)
 
 *Updated after each plan completion*
 
@@ -102,6 +103,7 @@ Recent decisions affecting current work:
 - [04-01]: pytest.ini pythonpath extended to include tests directory for cross-test-module imports
 - [04-02]: Detection Handling section placed after Confidence section per plan specification
 - [04-02]: hasattr guard on _eDetectionState for backward compatibility with older TrackerController instances
+- [05-02]: V-marker test uses formula-level assertion (int truncation consistency) rather than pixel-rendering verification
 
 ### Pending Todos
 
@@ -116,5 +118,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 04-02-PLAN.md (Detection handling UI)
-Resume file: .planning/phases/04-detection-handling/04-02-SUMMARY.md
+Stopped at: Completed 05-02-PLAN.md (V-marker alignment)
+Resume file: .planning/phases/05-scenario-validation/05-02-SUMMARY.md
