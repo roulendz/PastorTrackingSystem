@@ -305,6 +305,12 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obTrackerCo
             f"FOV: {flFOVDegrees:.1f}deg",
             f"Speed: {obStats['motor_speed']:.1f} steps/s",
         ]
+
+        # Detection state (Phase 4) -- debug overlay only
+        sDetectionState = "TRACKING"
+        if hasattr(obTrackerController, '_eDetectionState'):
+            sDetectionState = obTrackerController._eDetectionState.value
+        vInfoLines.append(f"Detection: {sDetectionState}")
         
         for sLine in vInfoLines:
             TextRenderer.draw_text(obFrame, sLine, (10, iYPos), 0.7, (0, 255, 0), 2)

@@ -57,6 +57,9 @@ def _ranges() -> Dict[str, Tuple[float, float, float]]:
         "flConfidenceHoldThreshold": (0.0, 1.0, 0.01),
         "flConfidenceFullThreshold": (0.0, 1.0, 0.01),
         "flConfidenceLowTimeoutSeconds": (0.0, 30.0, 0.5),
+        # Detection Handling (Phase 4)
+        "iDetectionDropoutFrameThreshold": (1.0, 15.0, 1.0),
+        "flRecoveryEasingDurationSeconds": (0.0, 2.0, 0.05),
     }
 
 
@@ -140,6 +143,13 @@ def _get_section_tooltips() -> Dict[str, str]:
             "flConfidenceHoldThreshold: Below this, camera holds position (no correction).\n"
             "flConfidenceFullThreshold: Above this, full tracking correction applied.\n"
             "Between thresholds: smooth blend using cubic smoothstep."
+        ),
+        "Detection Handling": (
+            "Controls behavior when person detection drops out.\n"
+            "iDetectionDropoutFrameThreshold: Consecutive frames without detection\n"
+            "before declaring detection lost (higher = more tolerant of brief gaps).\n"
+            "flRecoveryEasingDurationSeconds: How long corrections ramp back up\n"
+            "when detection returns after a gap (smoothstep blend)."
         ),
     }
 
@@ -793,6 +803,30 @@ def start_live_settings_panel(
             fnOnChange=lambda v: (
                 setattr(obConfig, 'flConfidenceLowTimeoutSeconds', float(v)),
                 setattr(obTracker, 'flConfidenceLowTimeoutSeconds', float(v))
+            ),
+            iWidth=500
+        )
+
+        dpg.add_separator()
+        _add_section_header_with_tooltip("Detection Handling", dTips.get("Detection Handling", ""))
+        _add_slider_with_range(
+            "iDetectionDropoutFrameThreshold",
+            obConfig.iDetectionDropoutFrameThreshold,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'iDetectionDropoutFrameThreshold', int(v)),
+                setattr(obTracker, 'iDetectionDropoutFrameThreshold', int(v))
+            ),
+            bInteger=True,
+            iWidth=500
+        )
+        _add_slider_with_range(
+            "flRecoveryEasingDurationSeconds",
+            obConfig.flRecoveryEasingDurationSeconds,
+            dItems,
+            fnOnChange=lambda v: (
+                setattr(obConfig, 'flRecoveryEasingDurationSeconds', float(v)),
+                setattr(obTracker, 'flRecoveryEasingDurationSeconds', float(v))
             ),
             iWidth=500
         )
