@@ -13,6 +13,11 @@ Phase 3 additions:
 - Confidence-based gain scaling on control output (MOTN-04)
 - S-curve velocity profiling on motor commands (MOTN-01)
 - HomeReturnController state machine for safe zone behavior (MOTN-02)
+
+Phase 4 additions:
+- DetectionState enum and state machine for detection handling (DTCT-01, DTCT-02, DTCT-03)
+- Frame-counter dropout filter to absorb brief detection gaps
+- Recovery easing ramp (smoothstep) when tracking resumes after hold/return
 """
 
 from enum import Enum
@@ -39,6 +44,17 @@ class TrackerState(Enum):
     IDLE = "idle"
     TRACKING = "tracking"
     ERROR = "error"
+
+
+class DetectionState(Enum):
+    """Sub-states of the TRACKING state for detection handling (Phase 4).
+
+    Governs behavior in _execute_centering_control_algorithm() when
+    detection is lost, held, or recovering.
+    """
+    TRACKING = "TRACKING"             # Person detected, normal control active
+    HOLDING = "HOLDING"               # Detection lost, holding position, timer running
+    RETURNING_HOME = "RETURNING_HOME"  # Timeout expired, S-curve return in progress
 
 
 class TrackerController:
@@ -114,6 +130,13 @@ class TrackerController:
         self.flConfidenceLowTimeoutSeconds = 5.0
         self._flLowConfidenceTimer = 0.0
 
+        # Detection handling (Phase 4)
+        self._eDetectionState = DetectionState.TRACKING
+        self._iConsecutiveDroppedFrames = 0
+        self._dRecoveryStartTimestamp: Optional[float] = None
+        self.iDetectionDropoutFrameThreshold = 3
+        self.flRecoveryEasingDurationSeconds = 0.4
+
         logger.info("TrackerController initialized")
 
     def execute_main_tracking_loop_tick(self) -> Optional[TrackingSample]:
@@ -182,6 +205,10 @@ class TrackerController:
         self._obHomeReturnController.reset()
         self._obPoseFilter = None  # Re-initialize on first frame
         self._flLowConfidenceTimer = 0.0
+        # Reset Phase 4 detection state
+        self._eDetectionState = DetectionState.TRACKING
+        self._iConsecutiveDroppedFrames = 0
+        self._dRecoveryStartTimestamp = None
         logger.info("Tracking mode STARTED")
 
     def stop_tracking_mode(self):
@@ -259,10 +286,11 @@ class TrackerController:
         """
         Execute control algorithm to center person with full motion smoothing pipeline.
 
-        Pipeline order (Phase 3):
-        1. Skip if no person detected
+        Pipeline order (Phase 3 + Phase 4):
+        1. Detection handling: dropout filter and detection state machine (DTCT-01/02/03)
         2. Compute dt (preserved from Phase 2)
         3. Confidence gate with low-confidence timer (MOTN-04)
+        3b. Recovery easing ramp (Phase 4)
         4. Filter pose input with OneEuroFilter (MOTN-03)
         5. Convert to angle error
         6. Home return state machine (MOTN-02)
@@ -273,14 +301,74 @@ class TrackerController:
         Args:
             obCurrentSample: Current tracking sample
         """
-        # STEP 1: Skip if no person detected
-        # Phase 4 will add hold logic here
+        # STEP 1: Detection handling (Phase 4)
+        # Dropout filter and detection state machine
+        dNow = float(obCurrentSample.dSampleTimestampSeconds)
+
         if not obCurrentSample.bPersonWasDetected:
+            self._iConsecutiveDroppedFrames += 1
+            if self._iConsecutiveDroppedFrames < self.iDetectionDropoutFrameThreshold:
+                # Brief dropout: hold position silently, preserve filter state
+                # Do NOT update _dPreviousControlTimestampSeconds (handled on recovery)
+                return
+
+            # Genuine detection loss: hard freeze on first transition
+            if self._eDetectionState == DetectionState.TRACKING:
+                self._eDetectionState = DetectionState.HOLDING
+                self._obMotionProfiler.reset()  # Prevent stale velocity on recovery
+                logger.debug("Detection lost: entering HOLDING state")
+
+            # During HOLDING or RETURNING_HOME: accumulate low-confidence timer
+            # Compute dt for timer accumulation
+            if self._dPreviousControlTimestampSeconds is None:
+                flDeltaTimeSeconds = 1.0 / 30.0
+                self._dPreviousControlTimestampSeconds = dNow
+            else:
+                flDeltaTimeSeconds = dNow - float(self._dPreviousControlTimestampSeconds)
+                if flDeltaTimeSeconds > self.flDtMaxSeconds:
+                    flDeltaTimeSeconds = 1.0 / 30.0  # Use nominal for timer
+                if flDeltaTimeSeconds < self.flDtMinSeconds:
+                    flDeltaTimeSeconds = self.flDtMinSeconds
+            # Do NOT update _dPreviousControlTimestampSeconds during hold
+            # (handled on recovery per Pitfall 5)
+
+            self._flLowConfidenceTimer += flDeltaTimeSeconds
+            if self._flLowConfidenceTimer >= self.flConfidenceLowTimeoutSeconds:
+                # Sustained detection loss exceeded timeout -- trigger home return
+                self._eDetectionState = DetectionState.RETURNING_HOME
+                eHomeState = self._obHomeReturnController.update(
+                    0.0,  # Treat as if person is at home (in safe zone)
+                    self.flDeadbandDegrees,
+                    flDeltaTimeSeconds,
+                    obCurrentSample.flMotorAngleDegrees
+                )
+                if eHomeState == HomeReturnState.RETURNING_HOME:
+                    flReturnTarget = self._obHomeReturnController.get_target_angle()
+                    self._send_profiled_motor_command(
+                        flReturnTarget,
+                        obCurrentSample.flMotorAngleDegrees,
+                        flDeltaTimeSeconds
+                    )
+                elif eHomeState == HomeReturnState.AT_HOME:
+                    pass  # Camera locked at home -- output nothing
             return
+        else:
+            # Detection present: handle recovery if was in HOLDING or RETURNING_HOME
+            if self._iConsecutiveDroppedFrames > 0:
+                self._iConsecutiveDroppedFrames = 0
+            if self._eDetectionState in (DetectionState.HOLDING, DetectionState.RETURNING_HOME):
+                # Recovery: ease back into tracking
+                self._dRecoveryStartTimestamp = dNow
+                self._dPreviousControlTimestampSeconds = dNow  # Prevent dt gap (Pitfall 5)
+                if self._eDetectionState == DetectionState.RETURNING_HOME:
+                    self._obHomeReturnController.reset()  # Cancel return
+                    self._obPoseFilter = None  # Reset filter (state too stale)
+                self._eDetectionState = DetectionState.TRACKING
+                self._flLowConfidenceTimer = 0.0
+                logger.debug("Detection recovered: entering TRACKING state with easing ramp")
 
         # STEP 2: Compute delta time from absolute timestamps
         # (preserved verbatim from Phase 2 -- dt computed at pipeline boundary)
-        dNow = float(obCurrentSample.dSampleTimestampSeconds)
         if self._dPreviousControlTimestampSeconds is None:
             # First frame: use nominal frame interval, do not skip
             flDeltaTimeSeconds = 1.0 / 30.0
@@ -339,6 +427,18 @@ class TrackerController:
             return
         # Person detected with usable confidence -- reset low-confidence timer
         self._flLowConfidenceTimer = 0.0
+
+        # STEP 3b: Recovery easing ramp (Phase 4)
+        # When recovering from HOLDING or RETURNING_HOME, multiply confidence scale
+        # by a smoothstep ramp from 0.0 to 1.0 over flRecoveryEasingDurationSeconds
+        if self._dRecoveryStartTimestamp is not None:
+            flRecoveryElapsed = dNow - self._dRecoveryStartTimestamp
+            if flRecoveryElapsed < self.flRecoveryEasingDurationSeconds:
+                flT = flRecoveryElapsed / self.flRecoveryEasingDurationSeconds
+                flRecoveryScale = flT * flT * (3.0 - 2.0 * flT)  # smoothstep
+                flConfidenceScale *= flRecoveryScale
+            else:
+                self._dRecoveryStartTimestamp = None  # Ramp complete
 
         # STEP 4: Filter pose input (MOTN-03)
         iImageWidth, _ = self.obCameraInterface.get_frame_dimensions()
@@ -486,3 +586,7 @@ class TrackerController:
         self.flConfidenceHoldThreshold = float(getattr(obConfig, 'flConfidenceHoldThreshold', 0.3))
         self.flConfidenceFullThreshold = float(getattr(obConfig, 'flConfidenceFullThreshold', 0.7))
         self.flConfidenceLowTimeoutSeconds = float(getattr(obConfig, 'flConfidenceLowTimeoutSeconds', 5.0))
+
+        # Detection handling config (Phase 4)
+        self.iDetectionDropoutFrameThreshold = int(getattr(obConfig, 'iDetectionDropoutFrameThreshold', 3))
+        self.flRecoveryEasingDurationSeconds = float(getattr(obConfig, 'flRecoveryEasingDurationSeconds', 0.4))
