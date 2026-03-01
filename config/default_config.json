@@ -14,6 +14,7 @@
   "bPoseEnableSegmentation": false,
   "flFieldOfViewDegrees": 6.77,
   "flInitialAnglePerPixelDegrees": 0.00529,
+  "flCameraMotorOffsetDegrees": 0.0,
 
   "sControlAlgorithmType": "Velocity",
   "flControlProportionalGain": 1.0,

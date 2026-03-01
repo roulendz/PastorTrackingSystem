@@ -270,8 +270,9 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obTrackerCo
     if not (flFOVDegrees > 0.0):
         flFOVDegrees = flAnglePerPixel * float(iWidth) if iWidth > 0 else 0.0
     flMotorAngle = obSample.flMotorAngleDegrees if obSample is not None else (obStats['motor_angle'] if obStats and 'motor_angle' in obStats else 0.0)
+    flCameraMotorOffsetDegrees = float(getattr(obConfig, 'flCameraMotorOffsetDegrees', 0.0))
     if flAnglePerPixel != 0 and iWidth > 0:
-        iHomeLineX = int(iCenterX - (flMotorAngle / flAnglePerPixel))
+        iHomeLineX = int(iCenterX - ((flMotorAngle - flCameraMotorOffsetDegrees) / flAnglePerPixel))
         iHomeLineX = max(0, min(iWidth - 1, iHomeLineX))
     else:
         iHomeLineX = iCenterX
