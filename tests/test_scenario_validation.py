@@ -546,3 +546,215 @@ def test_walk_outside_fov():
             f"{len(vHoldAngles)} hold frames (limit: 0.5 deg). "
             f"Camera should not drift significantly when detection is lost."
         )
+
+
+# ===========================================================================
+# Test functions - Second batch
+# ===========================================================================
+
+
+def test_combined_multi_segment_scenario():
+    """
+    Chain multiple movements into one end-to-end sequence:
+    start center -> walk left to -2 deg -> pause 2s -> walk back to center ->
+    pause at lectern 3s -> walk right to +3 deg -> hold.
+
+    Validates that the full pipeline handles multi-segment scenarios with
+    mixed stationary and moving periods without accumulating error.
+    """
+    vWaypoints = [
+        (0.0, 0.5),              # Hold at center for 0.5s
+        (0.0, 2.0),              # Walk from center to -2 deg over 2.0s
+        (-2.0, 2.0),             # Pause at -2 deg for 2.0s
+        (-2.0, 1.5),             # Walk from -2 deg to center over 1.5s
+        (0.0, 3.0),              # Pause at lectern (center) for 3.0s
+        (0.0, 2.0),              # Walk from center to +3 deg over 2.0s
+        (3.0, 0.5),              # Hold at +3 deg for 0.5s
+    ]
+    obResult = _run_scenario(vWaypoints)
+    obRms = _compute_scenario_rms(
+        obResult['vMotorAngles'],
+        obResult['vExpectedAngles'],
+        obResult['vDetected'],
+        obResult['vSettled'],
+        sScenarioName="combined_multi_segment",
+    )
+    # The fastest segment is 3 deg over 2s = 1.5 deg/s and -2 deg over 2s
+    # = 1.0 deg/s.  Use the faster speed for tolerance since it dominates.
+    _assert_rms_within_tolerance(
+        obRms,
+        sScenarioName="combined_multi_segment",
+        flTolerancePixels=_compute_tracking_tolerance(1.5),
+    )
+
+
+def test_detection_dropout_during_movement():
+    """
+    Person walks steadily from 0 to +3 degrees over 3 seconds, but every
+    10th frame has confidence 0.0 (simulating intermittent flickering from
+    partial occlusion or detection noise).
+
+    Validates that DTCT-03 (dropout filter) and the control pipeline handle
+    flickering gracefully without tracking disruption or large jumps.
+    """
+    obConfig = _build_scenario_config()
+    obTracker, obMotor, obMockPose, obMockCamera, obFakeClock, obCfg = (
+        _build_test_controller(
+            flProportionalGain=1.0,
+            obConfig=obConfig,
+        )
+    )
+    obTracker.flCommandMinDeltaDegrees = 0.001
+
+    # Warmup at center
+    iWarmupFrames = 15
+    _run_frames(
+        obTracker, obMockPose, obMockCamera, obFakeClock, obMotor,
+        iFrameCount=iWarmupFrames,
+        flPersonX=_FL_CENTER_PIXEL,
+        flConfidence=0.9,
+        bDetected=True,
+    )
+
+    # Run 90 frames (3 seconds) with intermittent dropout
+    iTotalFrames = 90
+    flStartAngle = 0.0
+    flEndAngle = 3.0
+    vMotorAngles = []
+    vExpectedAngles = []
+    vDetected = []
+
+    for i in range(iTotalFrames):
+        # Sub-step motor at 1000 Hz
+        for _ in range(_I_SIM_STEPS_PER_FRAME):
+            obFakeClock.advance_time_seconds(_FL_SIM_STEP)
+            obMotor.advance_simulation(_FL_SIM_STEP)
+
+        dNow = obFakeClock.get_time_seconds()
+
+        # Linear interpolation of person position
+        flT = i / iTotalFrames
+        flPersonAngle = flStartAngle + flT * (flEndAngle - flStartAngle)
+        vExpectedAngles.append(flPersonAngle)
+
+        # Every 10th frame has a detection dropout (flickering)
+        bDropout = (i % 10 == 0) and (i > 0)
+        flConf = 0.0 if bDropout else 0.9
+        bDet = not bDropout
+        vDetected.append(bDet)
+
+        # Camera-relative pixel
+        obMotorState = obMotor.get_latest_motor_state()
+        flMotorAngle = obMotorState.flMotorAngleDegrees
+        flCameraRelativeAngle = flPersonAngle - flMotorAngle
+        flPixelX = _FL_CENTER_PIXEL + flCameraRelativeAngle * _FL_PIXELS_PER_DEGREE
+        flPixelX = max(0.0, min(float(_I_WIDTH_PIXELS), flPixelX))
+
+        obMockPose.detect_person_in_frame.return_value = PoseResult(
+            flPersonCenterXPixels=flPixelX,
+            flPersonCenterYPixels=360.0,
+            bPersonWasDetected=bDet,
+            flPersonConfidenceScore=flConf,
+            vLandmarks=None,
+        )
+        obMockCamera.capture_frame_with_timestamp.return_value = (
+            np.zeros((720, 1280, 3), dtype=np.uint8),
+            dNow,
+        )
+
+        obTracker.execute_main_tracking_loop_tick()
+        vMotorAngles.append(obMotor.get_latest_motor_state().flMotorAngleDegrees)
+
+    # 1. Assert the motor is tracking the person (not stuck at 0)
+    flFinalMotorAngle = vMotorAngles[-1]
+    assert flFinalMotorAngle > 1.0, (
+        f"Motor should be tracking the person near +3 deg, "
+        f"but final angle is {flFinalMotorAngle:.4f} deg. "
+        f"Dropout flickering may have disrupted tracking."
+    )
+
+    # 2. Assert no large jumps from dropout recovery
+    # Check that consecutive motor angle changes are bounded
+    flMaxJump = 0.0
+    iMaxJumpFrame = 0
+    for i in range(1, len(vMotorAngles)):
+        flJump = abs(vMotorAngles[i] - vMotorAngles[i - 1])
+        if flJump > flMaxJump:
+            flMaxJump = flJump
+            iMaxJumpFrame = i
+    # At 30 fps with max motor speed, a single-frame angle change should
+    # not exceed ~1 degree (30 deg/s max / 30 fps)
+    assert flMaxJump < 1.0, (
+        f"Motor jump too large: {flMaxJump:.4f} deg at frame {iMaxJumpFrame}. "
+        f"Dropout recovery should not cause large angle jumps."
+    )
+
+    # 3. Compute RMS on detection-active frames only (excluding first 15
+    #    frames for settling), assert within velocity-dependent tolerance.
+    #    Walking speed is 3 deg / 3s = 1.0 deg/s.
+    vSettled = [i >= 15 for i in range(iTotalFrames)]
+    obRms = _compute_scenario_rms(
+        vMotorAngles, vExpectedAngles, vDetected, vSettled,
+        sScenarioName="detection_dropout_during_movement",
+    )
+    _assert_rms_within_tolerance(
+        obRms,
+        sScenarioName="detection_dropout_during_movement",
+        flTolerancePixels=_compute_tracking_tolerance(1.0),
+    )
+
+
+def test_full_service_scenario():
+    """
+    Comprehensive scenario modeling a typical 30-second church service segment:
+    start center -> walk to lectern (0 deg) -> pause 3s -> walk left to -2 deg
+    over 3s -> pause 1s -> walk right to +2 deg over 3s -> detection drops
+    (person walks behind pillar) for 2s -> person reappears -> return to
+    center over 2s -> hold.
+
+    This is the combined end-to-end test that validates all pipeline components
+    working together across varied movement patterns including detection loss.
+    """
+    vWaypoints = [
+        (0.0, 1.0, 0.9),          # Hold at center (warm in)
+        (0.0, 3.0, 0.9),          # Pause at lectern for 3s
+        (0.0, 3.0, 0.9),          # Walk left to -2 deg over 3s
+        (-2.0, 1.0, 0.9),         # Pause at -2 deg for 1s
+        (-2.0, 3.0, 0.9),         # Walk right from -2 to +2 deg over 3s
+        (2.0, 0.5, 0.9),          # Brief hold at +2 deg
+        (2.0, 2.0, 0.0),          # Detection drops (behind pillar) for 2s
+        (2.0, 0.5, 0.9),          # Person reappears at +2 deg
+        (2.0, 2.0, 0.9),          # Walk from +2 back to center over 2s
+        (0.0, 0.5, 0.9),          # Hold at center
+    ]
+    obResult = _run_scenario(vWaypoints)
+
+    # RMS on detected, settled frames.
+    # Fastest segment: 4 deg over 3s = 1.33 deg/s.
+    obRms = _compute_scenario_rms(
+        obResult['vMotorAngles'],
+        obResult['vExpectedAngles'],
+        obResult['vDetected'],
+        obResult['vSettled'],
+        sScenarioName="full_service_scenario",
+    )
+    _assert_rms_within_tolerance(
+        obRms,
+        sScenarioName="full_service_scenario",
+        flTolerancePixels=_compute_tracking_tolerance(1.33),
+    )
+
+    # Verify that detection dropout frames had stable motor (no drift)
+    vHoldAngles = []
+    for i in range(len(obResult['vDetected'])):
+        if not obResult['vDetected'][i]:
+            vHoldAngles.append(obResult['vMotorAngles'][i])
+
+    if len(vHoldAngles) > 1:
+        flHoldStd = float(np.std(vHoldAngles))
+        assert flHoldStd < 0.5, (
+            f"Hold stability FAILED during full_service_scenario: "
+            f"motor angle std = {flHoldStd:.6f} deg during "
+            f"{len(vHoldAngles)} hold frames (limit: 0.5 deg). "
+            f"Camera should not drift during detection dropout."
+        )
