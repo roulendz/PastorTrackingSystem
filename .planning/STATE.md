@@ -38,7 +38,7 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 Phase: 5 of 5 (Scenario Validation)
 Plan: 2 of 2 in current phase
 Status: Completed 05-02 (V-marker alignment)
-Last activity: 2026-03-01 -- Completed 05-02 (V-marker lectern overlay and alignment tests)
+Last activity: 2026-03-01 - Completed quick task 1: Align blue virtual center line with yellow real-world center line
 
 Progress: [##########] 92%
 
@@ -128,6 +128,12 @@ None yet.
 - [Research]: DearPyGui Python 3.12 compatibility not verified -- may need version update or replacement
 - [Research]: Ruckig + AccelStepper interaction (two motion planners in series) needs empirical testing in Phase 3
 - [Research]: Python 3.10 EOL in October 2026 -- upgrade deferred but should happen eventually
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | Align blue virtual center line with yellow real-world center line so motor home position matches actual camera center | 2026-03-01 | 6cc40b7 | [1-align-blue-virtual-center-line-with-yell](./quick/1-align-blue-virtual-center-line-with-yell/) |
 
 ## Session Continuity
 
