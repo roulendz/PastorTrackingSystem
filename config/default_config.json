@@ -55,5 +55,8 @@
   "flConfidenceFullThreshold": 0.7,
   "flConfidenceLowTimeoutSeconds": 5.0,
 
+  "iDetectionDropoutFrameThreshold": 3,
+  "flRecoveryEasingDurationSeconds": 0.4,
+
   "_sFovNote": "FOV 6.77deg = Sony AX700 at max optical zoom (111.6mm focal, 13.2mm sensor width)"
 }
