@@ -15,8 +15,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Test Foundation and Code Cleanup** - Synthetic test harness, motor simulation, dead code removal
 - [x] **Phase 2: Time Synchronization** - Fix the core timing bug causing virtual center drift
 - [x] **Phase 3: Motion Smoothing** - Human-like camera motion with S-curve profiles and pose filtering
-- [ ] **Phase 4: Detection Handling** - Graceful behavior when person detection is lost or intermittent
-- [ ] **Phase 5: Scenario Validation** - Scripted test scenarios and automated tolerance verification
+- [x] **Phase 4: Detection Handling** - Graceful behavior when person detection is lost or intermittent
+- [x] **Phase 5: Scenario Validation** - Scripted test scenarios and automated tolerance verification
 
 ## Phase Details
 
@@ -82,7 +82,7 @@ Plans:
 
 Plans:
 - [x] 04-01-PLAN.md -- Detection state machine, dropout filter, recovery easing (TDD: core logic + config + tests)
-- [ ] 04-02-PLAN.md -- Settings panel sliders and debug overlay for detection handling
+- [x] 04-02-PLAN.md -- Settings panel sliders and debug overlay for detection handling
 
 ### Phase 5: Scenario Validation
 **Goal**: The full tracking system passes automated tests across a library of realistic pastor movement scenarios
@@ -95,8 +95,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md -- Scenario test infrastructure, all scripted scenario tests (walk left/right/pause/FOV/speeds), and RMS validation
-- [ ] 05-02-PLAN.md -- V-marker lectern overlay in debug visualization and programmatic alignment test
+- [x] 05-01-PLAN.md -- Scenario test infrastructure, all scripted scenario tests (walk left/right/pause/FOV/speeds), and RMS validation
+- [x] 05-02-PLAN.md -- V-marker lectern overlay in debug visualization and programmatic alignment test
 
 ## Progress
 
@@ -108,5 +108,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Test Foundation and Code Cleanup | 3/3 | Complete | 2026-02-15 |
 | 2. Time Synchronization | 4/4 | Complete | 2026-02-22 |
 | 3. Motion Smoothing | 2/2 | Complete | 2026-02-27 |
-| 4. Detection Handling | 1/2 | In progress | - |
-| 5. Scenario Validation | 0/2 | Not started | - |
+| 4. Detection Handling | 2/2 | Complete | 2026-02-28 |
+| 5. Scenario Validation | 2/2 | Complete | 2026-03-01 |

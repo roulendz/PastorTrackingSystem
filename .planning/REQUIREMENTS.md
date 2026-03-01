@@ -32,11 +32,11 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Testing Infrastructure
 
 - [ ] **TEST-01**: Synthetic video source replaces live camera with scripted scenarios — CameraInterface accepts video file paths
-- [ ] **TEST-02**: Scripted scenarios include: pastor walks left, walks right, pauses at lectern, walks outside FOV (±20°), varying walking speeds
+- [x] **TEST-02**: Scripted scenarios include: pastor walks left, walks right, pauses at lectern, walks outside FOV (±20°), varying walking speeds
 - [x] **TEST-03**: Synthetic video includes static lectern with V marker at center for visual verification of virtual center lock
 - [ ] **TEST-04**: NullMotorInterface simulates realistic motor physics — acceleration limits, velocity limits, position ramping (not instant teleportation)
 - [ ] **TEST-05**: Full tracking pipeline runs without any physical hardware (synthetic camera + simulated motor)
-- [ ] **TEST-06**: Test harness validates virtual center stays within tolerance (SYNC-06) across all scripted scenarios
+- [x] **TEST-06**: Test harness validates virtual center stays within tolerance (SYNC-06) across all scripted scenarios
 
 ### Code Quality
 
@@ -97,11 +97,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DTCT-02 | Phase 4 | Complete |
 | DTCT-03 | Phase 4 | Complete |
 | TEST-01 | Phase 1 | Pending |
-| TEST-02 | Phase 5 | Pending |
+| TEST-02 | Phase 5 | Complete |
 | TEST-03 | Phase 5 | Complete |
 | TEST-04 | Phase 1 | Pending |
 | TEST-05 | Phase 1 | Pending |
-| TEST-06 | Phase 5 | Pending |
+| TEST-06 | Phase 5 | Complete |
 | CODE-01 | Phase 1 | Pending |
 | CODE-02 | Phase 1 | Pending |
 | CODE-03 | Phase 1 | Pending |

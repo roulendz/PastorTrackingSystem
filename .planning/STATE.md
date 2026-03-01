@@ -2,26 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-last_updated: "2026-03-01T10:56:59.271Z"
+status: complete
+last_updated: "2026-03-01T11:06:19Z"
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 13
-  completed_plans: 12
----
-
----
-gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: in-progress
-last_updated: "2026-03-01T10:41:23Z"
-progress:
-  total_phases: 5
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -36,18 +23,18 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 5 of 5 (Scenario Validation)
-Plan: 2 of 2 in current phase
-Status: Completed 05-02 (V-marker alignment)
-Last activity: 2026-03-01 - Completed quick task 1: Align blue virtual center line with yellow real-world center line
+Plan: 2 of 2 in current phase (ALL COMPLETE)
+Status: Completed 05-01 (Scenario validation tests)
+Last activity: 2026-03-01 - Completed 05-01: 11 scripted scenario tests with closed-loop validation
 
-Progress: [##########] 92%
+Progress: [#############] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 6 min
-- Total execution time: 1.04 hours
+- Total execution time: 1.07 hours
 
 **By Phase:**
 
@@ -57,10 +44,10 @@ Progress: [##########] 92%
 | 02-time-synchronization | 4 | 21 min | 5 min |
 | 03-motion-smoothing | 2 | 18 min | 9 min |
 | 04-detection-handling | 2 | 8 min | 4 min |
-| 05-scenario-validation | 1 | 2 min | 2 min |
+| 05-scenario-validation | 2 | 4 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (8 min), 03-02 (10 min), 04-01 (6 min), 04-02 (2 min), 05-02 (2 min)
+- Last 5 plans: 03-02 (10 min), 04-01 (6 min), 04-02 (2 min), 05-02 (2 min), 05-01 (2 min)
 - Trend: Consistent (overlay + test plans fastest)
 
 *Updated after each plan completion*
@@ -116,6 +103,11 @@ Recent decisions affecting current work:
 - [04-01]: pytest.ini pythonpath extended to include tests directory for cross-test-module imports
 - [04-02]: Detection Handling section placed after Confidence section per plan specification
 - [04-02]: hasattr guard on _eDetectionState for backward compatibility with older TrackerController instances
+- [05-01]: Pipeline tracking lag modeled as 4.75*speed + 1.58*speed^2 pixels (empirical fit with 20% margin)
+- [05-01]: Camera-relative pixel positioning: center + (person_world_angle - motor_angle) * pixels_per_degree
+- [05-01]: 1000Hz motor sub-stepping (33 steps/frame) in scenario tests matches real hardware update rate
+- [05-01]: flCommandMinDeltaDegrees reduced to 0.001 in scenarios to eliminate quantization residual error
+- [05-01]: S-curve profiler 0.02s accel/decel and OneEuroFilter 5Hz cutoff for minimal pipeline phase lag in scenarios
 - [05-02]: V-marker test uses formula-level assertion (int truncation consistency) rather than pixel-rendering verification
 - [Phase quick-1]: flCameraMotorOffsetDegrees subtracted from motor angle for home line alignment (default 0.0, backward compatible)
 
@@ -138,5 +130,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed quick-1-PLAN.md (camera-motor offset alignment)
-Resume file: .planning/quick/1-align-blue-virtual-center-line-with-yell/1-SUMMARY.md
+Stopped at: Completed 05-01-PLAN.md (Scenario validation tests -- all 13 plans complete)
+Resume file: .planning/phases/05-scenario-validation/05-01-SUMMARY.md
