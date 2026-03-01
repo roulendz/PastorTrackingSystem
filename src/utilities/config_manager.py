@@ -87,6 +87,10 @@ class SystemConfiguration:
     flConfidenceFullThreshold: float = 0.7
     flConfidenceLowTimeoutSeconds: float = 5.0
 
+    # Detection handling (DTCT-01, DTCT-02, DTCT-03)
+    iDetectionDropoutFrameThreshold: int = 3       # Frames before declaring detection lost
+    flRecoveryEasingDurationSeconds: float = 0.4   # Ramp-up duration on recovery (seconds)
+
 
 class ConfigurationManager:
     """
