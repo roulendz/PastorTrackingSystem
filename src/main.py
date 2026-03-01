@@ -276,6 +276,16 @@ def draw_visualization_overlay(obFrame, obSample, obStats, obConfig, obTrackerCo
     else:
         iHomeLineX = iCenterX
     cv2.line(obFrame, (iHomeLineX, 0), (iHomeLineX, iHeight), (255, 255, 0), 1)
+
+    # V-marker lectern indicator at home position (Phase 5: TEST-03)
+    if obConfig.bShowDebugInfo:
+        iVMarkerTipY = iHeight - 20  # 20px from bottom
+        iVMarkerSize = 20  # Half-width and height of V
+        cv2.line(obFrame, (iHomeLineX - iVMarkerSize, iVMarkerTipY - iVMarkerSize),
+                 (iHomeLineX, iVMarkerTipY), (0, 255, 255), 2)  # Left arm
+        cv2.line(obFrame, (iHomeLineX + iVMarkerSize, iVMarkerTipY - iVMarkerSize),
+                 (iHomeLineX, iVMarkerTipY), (0, 255, 255), 2)  # Right arm
+
     obDeadzoneUI.update_mapping(iHomeLineX, flAnglePerPixel if flAnglePerPixel != 0 else 1e-9, iWidth, iHeight)
     if bool(getattr(obConfig, 'bEnableDeadzoneOverlay', True)):
         obDeadzoneUI.draw(obFrame)
