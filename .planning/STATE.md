@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 4 of 5 (Detection Handling)
-Plan: 1 of 2 in current phase
-Status: Executing Phase 4 plans
-Last activity: 2026-03-01 -- Completed 04-01 (Detection state machine, dropout filter, recovery easing)
+Phase: 4 of 5 (Detection Handling) -- COMPLETE
+Plan: 2 of 2 in current phase
+Status: Phase 4 complete, ready for Phase 5
+Last activity: 2026-03-01 -- Completed 04-02 (Detection handling UI sliders and debug overlay)
 
-Progress: [########..] 85%
+Progress: [#########.] 92%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: 6 min
-- Total execution time: 0.98 hours
+- Total execution time: 1.01 hours
 
 **By Phase:**
 
@@ -30,11 +30,11 @@ Progress: [########..] 85%
 | 01-test-foundation | 3 | 15 min | 5 min |
 | 02-time-synchronization | 4 | 21 min | 5 min |
 | 03-motion-smoothing | 2 | 18 min | 9 min |
-| 04-detection-handling | 1 | 6 min | 6 min |
+| 04-detection-handling | 2 | 8 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (4 min), 02-04 (9 min), 03-01 (8 min), 03-02 (10 min), 04-01 (6 min)
-- Trend: Consistent
+- Last 5 plans: 02-04 (9 min), 03-01 (8 min), 03-02 (10 min), 04-01 (6 min), 04-02 (2 min)
+- Trend: Consistent (UI-only plan was fastest)
 
 *Updated after each plan completion*
 
@@ -87,6 +87,8 @@ Recent decisions affecting current work:
 - [04-01]: MotionProfiler.reset() on entering HOLDING prevents stale velocity burst on recovery
 - [04-01]: Previous control timestamp set to now on recovery to prevent dt gap cascade skip
 - [04-01]: pytest.ini pythonpath extended to include tests directory for cross-test-module imports
+- [04-02]: Detection Handling section placed after Confidence section per plan specification
+- [04-02]: hasattr guard on _eDetectionState for backward compatibility with older TrackerController instances
 
 ### Pending Todos
 
@@ -101,5 +103,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 04-01-PLAN.md (Detection state machine)
-Resume file: .planning/phases/04-detection-handling/04-01-SUMMARY.md
+Stopped at: Completed 04-02-PLAN.md (Detection handling UI)
+Resume file: .planning/phases/04-detection-handling/04-02-SUMMARY.md
