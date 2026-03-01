@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 4 of 5 (Detection Handling)
-Plan: 0 of TBD in current phase
-Status: Ready for Phase 4 planning
-Last activity: 2026-02-27 -- Completed 03-02 (Pipeline integration and settings panel)
+Plan: 1 of 2 in current phase
+Status: Executing Phase 4 plans
+Last activity: 2026-03-01 -- Completed 04-01 (Detection state machine, dropout filter, recovery easing)
 
-Progress: [########..] 80%
+Progress: [########..] 85%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: 6 min
-- Total execution time: 0.88 hours
+- Total execution time: 0.98 hours
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [########..] 80%
 | 01-test-foundation | 3 | 15 min | 5 min |
 | 02-time-synchronization | 4 | 21 min | 5 min |
 | 03-motion-smoothing | 2 | 18 min | 9 min |
+| 04-detection-handling | 1 | 6 min | 6 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (3 min), 02-03 (4 min), 02-04 (9 min), 03-01 (8 min), 03-02 (10 min)
+- Last 5 plans: 02-03 (4 min), 02-04 (9 min), 03-01 (8 min), 03-02 (10 min), 04-01 (6 min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -80,6 +81,12 @@ Recent decisions affecting current work:
 - [03-02]: Low-confidence timer feeds HomeReturnController with angle 0.0 to trigger safe-zone transitions
 - [03-02]: DearPyGui slider callbacks update both config and live module attributes (GIL makes float assignment atomic)
 - [03-02]: Integration tests track _flLastCommandedAngle to isolate pipeline logic from motor physics
+- [04-01]: Frame-counter dropout filter (threshold=3 frames) -- simpler and more deterministic than time-based at fixed 30 FPS
+- [04-01]: DetectionState is sub-state of TRACKING (not replacement for TrackerState) -- top-level state machine unchanged
+- [04-01]: OneEuroFilter preserved during HOLDING (alpha~1.0 for large dt), reset only on RETURNING_HOME recovery
+- [04-01]: MotionProfiler.reset() on entering HOLDING prevents stale velocity burst on recovery
+- [04-01]: Previous control timestamp set to now on recovery to prevent dt gap cascade skip
+- [04-01]: pytest.ini pythonpath extended to include tests directory for cross-test-module imports
 
 ### Pending Todos
 
@@ -94,5 +101,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Phase 4 context gathered -- ready for planning
-Resume file: .planning/phases/04-detection-handling/04-CONTEXT.md
+Stopped at: Completed 04-01-PLAN.md (Detection state machine)
+Resume file: .planning/phases/04-detection-handling/04-01-SUMMARY.md

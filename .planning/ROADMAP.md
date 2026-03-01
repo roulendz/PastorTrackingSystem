@@ -81,7 +81,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- Detection state machine, dropout filter, recovery easing (TDD: core logic + config + tests)
+- [x] 04-01-PLAN.md -- Detection state machine, dropout filter, recovery easing (TDD: core logic + config + tests)
 - [ ] 04-02-PLAN.md -- Settings panel sliders and debug overlay for detection handling
 
 ### Phase 5: Scenario Validation
@@ -107,5 +107,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Test Foundation and Code Cleanup | 3/3 | Complete | 2026-02-15 |
 | 2. Time Synchronization | 4/4 | Complete | 2026-02-22 |
 | 3. Motion Smoothing | 2/2 | Complete | 2026-02-27 |
-| 4. Detection Handling | 0/2 | In progress | - |
+| 4. Detection Handling | 1/2 | In progress | - |
 | 5. Scenario Validation | 0/TBD | Not started | - |

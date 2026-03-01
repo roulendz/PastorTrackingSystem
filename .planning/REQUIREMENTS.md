@@ -25,9 +25,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Detection Handling
 
-- [ ] **DTCT-01**: When person detection is lost, camera holds its current position for a configurable timeout (default 5 seconds)
-- [ ] **DTCT-02**: After detection loss timeout expires, camera returns to home with smooth easing (same S-curve as MOTN-02)
-- [ ] **DTCT-03**: Single dropped detection frames do not cause any visible camera movement — requires consecutive lost frames before hold mode activates
+- [x] **DTCT-01**: When person detection is lost, camera holds its current position for a configurable timeout (default 5 seconds)
+- [x] **DTCT-02**: After detection loss timeout expires, camera returns to home with smooth easing (same S-curve as MOTN-02)
+- [x] **DTCT-03**: Single dropped detection frames do not cause any visible camera movement — requires consecutive lost frames before hold mode activates
 
 ### Testing Infrastructure
 
@@ -93,9 +93,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MOTN-02 | Phase 3 | Pending |
 | MOTN-03 | Phase 3 | Pending |
 | MOTN-04 | Phase 3 | Pending |
-| DTCT-01 | Phase 4 | Pending |
-| DTCT-02 | Phase 4 | Pending |
-| DTCT-03 | Phase 4 | Pending |
+| DTCT-01 | Phase 4 | Complete |
+| DTCT-02 | Phase 4 | Complete |
+| DTCT-03 | Phase 4 | Complete |
 | TEST-01 | Phase 1 | Pending |
 | TEST-02 | Phase 5 | Pending |
 | TEST-03 | Phase 5 | Pending |
