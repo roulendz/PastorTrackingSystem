@@ -78,10 +78,11 @@ Plans:
   1. When detection is lost, the camera holds its current position for 5 seconds (configurable) without any drift
   2. After the hold timeout, the camera returns to home using the same smooth S-curve easing as normal home return
   3. A single dropped detection frame (one frame with no person, next frame person is back) causes zero visible camera movement
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md -- Detection state machine, dropout filter, recovery easing (TDD: core logic + config + tests)
+- [ ] 04-02-PLAN.md -- Settings panel sliders and debug overlay for detection handling
 
 ### Phase 5: Scenario Validation
 **Goal**: The full tracking system passes automated tests across a library of realistic pastor movement scenarios
@@ -106,5 +107,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. Test Foundation and Code Cleanup | 3/3 | Complete | 2026-02-15 |
 | 2. Time Synchronization | 4/4 | Complete | 2026-02-22 |
 | 3. Motion Smoothing | 2/2 | Complete | 2026-02-27 |
-| 4. Detection Handling | 0/TBD | Not started | - |
+| 4. Detection Handling | 0/2 | In progress | - |
 | 5. Scenario Validation | 0/TBD | Not started | - |
