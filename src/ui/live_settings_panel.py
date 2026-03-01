@@ -436,6 +436,7 @@ def _bind_global_scale():
 _g_iCenterAngleItem: int | None = None
 _g_iFovDegreesItem: int | None = None
 _g_bProgrammaticUpdate: bool = False
+_g_iCameraWidth: int = 1280
 
 def update_center_angle_slider(flAngleDegrees: float):
     global _g_iCenterAngleItem, _g_bProgrammaticUpdate
@@ -454,6 +455,16 @@ def update_fov_degrees_slider(flFovDegrees: float):
     _g_bProgrammaticUpdate = True
     try:
         dpg.set_value(_g_iFovDegreesItem, float(flFovDegrees))
+        # Also sync the FOV input and angle-per-pixel slider/input
+        dFovMeta = _g_dItemsMeta.get("flFieldOfViewDegrees")
+        if dFovMeta and dFovMeta.get("input"):
+            dpg.set_value(dFovMeta["input"], float(flFovDegrees))
+        dApxMeta = _g_dItemsMeta.get("flInitialAnglePerPixelDegrees")
+        if dApxMeta:
+            iCamWidth = _g_iCameraWidth if _g_iCameraWidth > 0 else 1280
+            flApx = float(flFovDegrees) / float(iCamWidth)
+            dpg.set_value(dApxMeta["slider"], flApx)
+            dpg.set_value(dApxMeta["input"], flApx)
     finally:
         _g_bProgrammaticUpdate = False
 
@@ -596,7 +607,9 @@ def start_live_settings_panel(
 
         dpg.add_separator()
         _add_section_header_with_tooltip("FOV", dTips.get("FOV", ""))
+        global _g_iCameraWidth
         iWidth, _ = obCamera.get_frame_dimensions()
+        _g_iCameraWidth = iWidth
         flConfigFov = float(getattr(obConfig, 'flFieldOfViewDegrees', 0.0))
         if flConfigFov > 0.0:
             flInitialFOV = flConfigFov
@@ -611,11 +624,26 @@ def start_live_settings_panel(
         except Exception:
             logger.debug("DearPyGui operation skipped")
             flSavedMin, flSavedMax, flSavedSliderValue = 10.0, 180.0, flInitialFOV
+        bSyncingFovApx = False
         def _on_fov_change(flFovDegrees: float):
+            nonlocal bSyncingFovApx
+            if bSyncingFovApx:
+                return
+            bSyncingFovApx = True
             try:
                 obConfig.flFieldOfViewDegrees = float(flFovDegrees)
+                # Sync angle-per-pixel to match FOV
+                if iWidth > 0:
+                    flApx = float(flFovDegrees) / float(iWidth)
+                    obConfig.flInitialAnglePerPixelDegrees = flApx
+                    dApxMeta = _g_dItemsMeta.get("flInitialAnglePerPixelDegrees")
+                    if dApxMeta:
+                        dpg.set_value(dApxMeta["slider"], flApx)
+                        dpg.set_value(dApxMeta["input"], flApx)
             except Exception:
                 logger.debug("DearPyGui operation skipped")
+            finally:
+                bSyncingFovApx = False
         # Use a dedicated range for FOV degrees
         dItems["flFieldOfViewDegrees"] = None
         with dpg.group(horizontal=True):
@@ -644,7 +672,25 @@ def start_live_settings_panel(
 
         # Angle-per-pixel override slider (direct)
         def _on_apx_change(flAnglePerPixel: float):
-            obConfig.flInitialAnglePerPixelDegrees = float(flAnglePerPixel)
+            nonlocal bSyncingFovApx
+            if bSyncingFovApx:
+                return
+            bSyncingFovApx = True
+            try:
+                obConfig.flInitialAnglePerPixelDegrees = float(flAnglePerPixel)
+                # Sync FOV to match angle-per-pixel
+                if iWidth > 0:
+                    flFov = float(flAnglePerPixel) * float(iWidth)
+                    obConfig.flFieldOfViewDegrees = flFov
+                    if dItems.get("flFieldOfViewDegrees") is not None:
+                        dpg.set_value(dItems["flFieldOfViewDegrees"], flFov)
+                    dFovMeta = _g_dItemsMeta.get("flFieldOfViewDegrees")
+                    if dFovMeta and dFovMeta.get("input"):
+                        dpg.set_value(dFovMeta["input"], flFov)
+            except Exception:
+                logger.debug("DearPyGui operation skipped")
+            finally:
+                bSyncingFovApx = False
         _add_slider_with_range(
             "flInitialAnglePerPixelDegrees",
             obConfig.flInitialAnglePerPixelDegrees,

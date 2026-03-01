@@ -3,8 +3,8 @@
     "iMotorBaudRate": 115200,
     "flMotorMaxSpeedStepsPerSecond": 900.0,
     "flMotorMaxAccelerationStepsPerSecondSquared": 3400.0,
-    "flMotorMinAngleDegrees": -45.0,
-    "flMotorMaxAngleDegrees": 45.0,
+    "flMotorMinAngleDegrees": -25.0,
+    "flMotorMaxAngleDegrees": 25.0,
     "iCameraDeviceIndex": 1,
     "iCameraWidthPixels": 1280,
     "iCameraHeightPixels": 720,
@@ -32,8 +32,8 @@
     "ui": {
         "controls": {
             "flManualCenterAngleDegrees": {
-                "min": -45.0,
-                "max": 45.0,
+                "min": -25.0,
+                "max": 25.0,
                 "slider_value": 0.0
             },
             "flMotorMaxSpeedStepsPerSecond": {
@@ -49,16 +49,16 @@
                 "input_value": 3400.0
             },
             "flMotorMinAngleDegrees": {
-                "min": -90.0,
+                "min": -25.0,
                 "max": 0.0,
-                "slider_value": -45.0,
-                "input_value": -45.0
+                "slider_value": -25.0,
+                "input_value": -25.0
             },
             "flMotorMaxAngleDegrees": {
                 "min": 0.0,
-                "max": 90.0,
-                "slider_value": 45.0,
-                "input_value": 45.0
+                "max": 25.0,
+                "slider_value": 25.0,
+                "input_value": 25.0
             },
             "flControlDeadbandDegrees": {
                 "min": 0.0,
@@ -109,10 +109,10 @@
                 "input_value": 0.15000000596046448
             },
             "flFieldOfViewDegrees": {
-                "min": 6.800000190734863,
+                "min": 1.0,
                 "max": 70.9000015258789,
-                "slider_value": 6.800000190734863,
-                "input_value": 6.800000190734863
+                "slider_value": 6.272,
+                "input_value": 6.272
             },
             "flInitialAnglePerPixelDegrees": {
                 "min": 9.999999747378752e-06,
