@@ -488,6 +488,13 @@ def main():
                                 except Exception as e:
                                     logger.debug(f"UI slider update skipped: {e}")
                                 logger.info(f"FOV calibrate: set flFieldOfViewDegrees={flFov:.3f}")
+                                # Auto-save calibrated FOV to user config
+                                try:
+                                    from ui.live_settings_panel import _save_full_config
+                                    _save_full_config(obConfigManager)
+                                    logger.info("FOV calibrate: saved to user_config.json")
+                                except Exception as e:
+                                    logger.debug(f"FOV auto-save skipped: {e}")
                                 dFovCalibration = None
                 except (ValueError, TypeError, AttributeError, ZeroDivisionError) as e:
                     logger.error(f"FOV calibration error: {e}")
