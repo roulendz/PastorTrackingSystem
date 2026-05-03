@@ -1,0 +1,28 @@
+# Runtime dependencies for Pastor Tracking System
+# Bootstrap only - long-term moves to pyproject.toml + uv (see PROMPT.md).
+# Install:  .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# Config + validation
+pydantic~=2.10
+pydantic-settings~=2.7
+
+# Structured logging
+structlog~=24.4
+
+# Detection + tracking (BoT-SORT bundled, pulls torch/opencv-python/numpy/pillow)
+ultralytics~=8.3
+
+# Camera I/O (explicit pin even though ultralytics pulls it)
+opencv-python~=4.10
+
+# Windows DirectShow device enumeration (find OBS Virtual Camera)
+pygrabber~=0.2
+
+# Arduino serial
+pyserial~=3.5
+
+# GUI
+dearpygui~=2.0
+
+# Numerics (Kalman filter, damping math)
+numpy~=2.1
