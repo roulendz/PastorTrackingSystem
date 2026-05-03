@@ -68,6 +68,21 @@ SEQ_MODULUS: Final[int] = 1 << 32  # uint32 rollover (main.cpp:42 sequence type)
 FEEDBACK_SEQ_GAP_WARN_THRESHOLD: Final[int] = 5  # IO-ARD-04
 MAX_RX_LINE_BYTES: Final[int] = 256  # T-02-04 DoS guard (firmware never emits > ~80)
 
+# Settings clamp ranges -- firmware silently clamps out-of-range values
+# (protocol.h:27-30). The host-side wrappers fail-loud at the boundary
+# instead (W-03 / tiger-style rule 1).
+MIN_MAX_SPEED_STEPS_PER_SEC: Final[float] = 100.0     # protocol.h:27
+MAX_MAX_SPEED_STEPS_PER_SEC: Final[float] = 50_000.0  # protocol.h:28
+MIN_MAX_ACCEL_STEPS_PER_SEC2: Final[float] = 50.0     # protocol.h:29
+MAX_MAX_ACCEL_STEPS_PER_SEC2: Final[float] = 30_000.0  # protocol.h:30
+# Software-limit defaults from firmware (protocol.h:23-24); valid host
+# inputs to send_limits must lie within +/- DEFAULT_ANGLE_MAX_DEGREES * 2
+# i.e. a generous superset that still rejects garbage (e.g. 1e9). We
+# pin the wider bound at the magnitude the firmware itself uses for its
+# own defaults; future firmware widening is forward-compat (Pitfall 9).
+LIMIT_ANGLE_MIN_DEG: Final[float] = -180.0  # protocol.h:23 (default -90 widened)
+LIMIT_ANGLE_MAX_DEG: Final[float] = 180.0   # protocol.h:24 (default +90 widened)
+
 # Internal parser literals. Named to avoid PLR2004 magic-value warnings even
 # though they are pure structural counts (CLAUDE.md rule 6).
 _FB_FIELD_COUNT: Final[int] = 7

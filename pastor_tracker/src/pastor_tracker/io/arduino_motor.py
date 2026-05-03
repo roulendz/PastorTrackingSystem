@@ -42,6 +42,12 @@ from pastor_tracker.core.types import MotorCommand
 from pastor_tracker.io.arduino_protocol import (
     FEEDBACK_SEQ_GAP_WARN_THRESHOLD,
     FIRMWARE_INPUT_BUFFER_USABLE,
+    LIMIT_ANGLE_MAX_DEG,
+    LIMIT_ANGLE_MIN_DEG,
+    MAX_MAX_ACCEL_STEPS_PER_SEC2,
+    MAX_MAX_SPEED_STEPS_PER_SEC,
+    MIN_MAX_ACCEL_STEPS_PER_SEC2,
+    MIN_MAX_SPEED_STEPS_PER_SEC,
     PROTOCOL_VERSION_MAJOR,
     SEQ_MODULUS,
     Error,
@@ -687,10 +693,42 @@ class ArduinoMotor:
         pid_i: float,
         pid_d: float,
     ) -> None:
-        """``S:<spd>,<acc>,<p>,<i>,<d>`` -- structured settings command."""
+        """``S:<spd>,<acc>,<p>,<i>,<d>`` -- structured settings command.
+
+        Tiger-style fail-loud at the host boundary (W-03): firmware
+        ``protocol.h:27-30`` clamps numeric inputs server-side, but
+        silently. Reject out-of-range values here with a typed
+        :class:`ValueError` instead of letting the caller submit garbage
+        the firmware will silently truncate.
+        """
         # Internal call from _recover bypasses pause; external callers
         # respect the latched-error gate.
         self._raise_if_latched()
+        if not (
+            MIN_MAX_SPEED_STEPS_PER_SEC
+            <= max_speed
+            <= MAX_MAX_SPEED_STEPS_PER_SEC
+        ):
+            raise ValueError(
+                f"max_speed {max_speed} outside firmware clamp "
+                f"[{MIN_MAX_SPEED_STEPS_PER_SEC}, "
+                f"{MAX_MAX_SPEED_STEPS_PER_SEC}] (protocol.h:27-28)"
+            )
+        if not (
+            MIN_MAX_ACCEL_STEPS_PER_SEC2
+            <= max_accel
+            <= MAX_MAX_ACCEL_STEPS_PER_SEC2
+        ):
+            raise ValueError(
+                f"max_accel {max_accel} outside firmware clamp "
+                f"[{MIN_MAX_ACCEL_STEPS_PER_SEC2}, "
+                f"{MAX_MAX_ACCEL_STEPS_PER_SEC2}] (protocol.h:29-30)"
+            )
+        # PID gains are unbounded in firmware (protocol.h does not pin a
+        # range); keep a finiteness guard so NaN/inf cannot reach the wire.
+        for name, value in (("pid_p", pid_p), ("pid_i", pid_i), ("pid_d", pid_d)):
+            if value != value or value in (float("inf"), float("-inf")):
+                raise ValueError(f"{name} must be finite, got {value}")
         payload = (
             f"S:{max_speed:.3f},{max_accel:.3f},"
             f"{pid_p:.3f},{pid_i:.3f},{pid_d:.3f}"
@@ -698,8 +736,33 @@ class ArduinoMotor:
         await self._send_raw(payload)
 
     async def send_limits(self, min_deg: float, max_deg: float) -> None:
-        """``L:<min>,<max>`` -- software angle limits."""
+        """``L:<min>,<max>`` -- software angle limits.
+
+        Tiger-style fail-loud (W-03): reject NaN/inf, reject inverted
+        limits (``min_deg >= max_deg``), reject magnitudes outside the
+        wider firmware envelope (protocol.h:23-24 +/- 180 deg superset).
+        """
         self._raise_if_latched()
+        for name, value in (("min_deg", min_deg), ("max_deg", max_deg)):
+            if value != value or value in (float("inf"), float("-inf")):
+                raise ValueError(f"{name} must be finite, got {value}")
+        if min_deg >= max_deg:
+            raise ValueError(
+                f"min_deg ({min_deg}) must be strictly less than "
+                f"max_deg ({max_deg})"
+            )
+        if not (LIMIT_ANGLE_MIN_DEG <= min_deg <= LIMIT_ANGLE_MAX_DEG):
+            raise ValueError(
+                f"min_deg {min_deg} outside firmware envelope "
+                f"[{LIMIT_ANGLE_MIN_DEG}, {LIMIT_ANGLE_MAX_DEG}] "
+                f"(protocol.h:23-24)"
+            )
+        if not (LIMIT_ANGLE_MIN_DEG <= max_deg <= LIMIT_ANGLE_MAX_DEG):
+            raise ValueError(
+                f"max_deg {max_deg} outside firmware envelope "
+                f"[{LIMIT_ANGLE_MIN_DEG}, {LIMIT_ANGLE_MAX_DEG}] "
+                f"(protocol.h:23-24)"
+            )
         payload = f"L:{min_deg:.3f},{max_deg:.3f}".encode("ascii")
         await self._send_raw(payload)
 

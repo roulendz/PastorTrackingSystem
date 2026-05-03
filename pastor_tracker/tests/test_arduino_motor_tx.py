@@ -138,6 +138,88 @@ async def test_send_limits_byte_format(
         await motor.close()
 
 
+@pytest.mark.parametrize(
+    ("max_speed", "max_accel", "match"),
+    [
+        # max_speed below firmware MIN_MAX_SPEED_STEPS_PER_SEC (100.0).
+        (50.0, 12500.0, "max_speed 50.0 outside firmware clamp"),
+        # max_speed above firmware MAX_MAX_SPEED_STEPS_PER_SEC (50000.0).
+        (60000.0, 12500.0, "max_speed 60000.0 outside firmware clamp"),
+        # max_accel below firmware MIN_MAX_ACCEL_STEPS_PER_SEC2 (50.0).
+        (25000.0, 10.0, "max_accel 10.0 outside firmware clamp"),
+        # max_accel above firmware MAX_MAX_ACCEL_STEPS_PER_SEC2 (30000.0).
+        (25000.0, 40000.0, "max_accel 40000.0 outside firmware clamp"),
+    ],
+)
+async def test_send_settings_rejects_out_of_range(
+    valid_config_dict: dict[str, object],
+    max_speed: float,
+    max_accel: float,
+    match: str,
+) -> None:
+    """W-03: out-of-firmware-range inputs raise ValueError fail-loud."""
+    motor, _fake = await _fresh_motor(valid_config_dict)
+    try:
+        with pytest.raises(ValueError, match=match):
+            await motor.send_settings(max_speed, max_accel, 0.0, 0.0, 0.0)
+    finally:
+        await motor.close()
+
+
+@pytest.mark.parametrize(
+    ("pid_p", "pid_i", "pid_d", "match"),
+    [
+        (float("nan"), 0.0, 0.0, "pid_p must be finite"),
+        (0.0, float("inf"), 0.0, "pid_i must be finite"),
+        (0.0, 0.0, float("-inf"), "pid_d must be finite"),
+    ],
+)
+async def test_send_settings_rejects_non_finite_pid(
+    valid_config_dict: dict[str, object],
+    pid_p: float,
+    pid_i: float,
+    pid_d: float,
+    match: str,
+) -> None:
+    """W-03: NaN/inf PID gains rejected at the host boundary."""
+    motor, _fake = await _fresh_motor(valid_config_dict)
+    try:
+        with pytest.raises(ValueError, match=match):
+            await motor.send_settings(25000.0, 12500.0, pid_p, pid_i, pid_d)
+    finally:
+        await motor.close()
+
+
+@pytest.mark.parametrize(
+    ("min_deg", "max_deg", "match"),
+    [
+        # Inverted limits.
+        (10.0, -10.0, "min_deg .* must be strictly less than"),
+        # Zero-area.
+        (0.0, 0.0, "min_deg .* must be strictly less than"),
+        # Out-of-envelope (firmware envelope is +/- 180).
+        (-200.0, 90.0, "min_deg -200.0 outside firmware envelope"),
+        (-90.0, 200.0, "max_deg 200.0 outside firmware envelope"),
+        # NaN.
+        (float("nan"), 90.0, "min_deg must be finite"),
+        (-90.0, float("inf"), "max_deg must be finite"),
+    ],
+)
+async def test_send_limits_rejects_out_of_range(
+    valid_config_dict: dict[str, object],
+    min_deg: float,
+    max_deg: float,
+    match: str,
+) -> None:
+    """W-03: malformed/out-of-range limits raise ValueError fail-loud."""
+    motor, _fake = await _fresh_motor(valid_config_dict)
+    try:
+        with pytest.raises(ValueError, match=match):
+            await motor.send_limits(min_deg, max_deg)
+    finally:
+        await motor.close()
+
+
 async def test_send_buffer_overflow_raises_pre_send(
     valid_config_dict: dict[str, object],
 ) -> None:
