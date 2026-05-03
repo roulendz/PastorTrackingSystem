@@ -433,11 +433,28 @@ class ArduinoMotor:
         self._rx_queue.put_nowait(event)
 
     def _check_seq_gap(self, fb: Feedback) -> None:
-        """Mod-2^32 rollover-safe gap detection (Pitfall 7)."""
+        """Mod-2^32 rollover-safe gap detection (Pitfall 7).
+
+        Distinguishes a forward gap (lost feedback line) from a sequence
+        regression (W-04). A regression typically means the firmware
+        watchdog reset and ``sequence`` was zeroed; without this, naive
+        modular subtraction logs a forward gap of ~2^32 which masks
+        subsequent real gaps until the regressed counter catches up.
+        """
         if self._last_seq is None:
             self._last_seq = fb.sequence
             return
         gap = (fb.sequence - self._last_seq) % SEQ_MODULUS
+        if gap > SEQ_MODULUS // 2:
+            # Backwards delta: the new seq is "before" the last one. Treat
+            # as a regression rather than a gigantic forward gap (W-04).
+            self._logger.warning(
+                "feedback_seq_regression",
+                from_seq=self._last_seq,
+                to_seq=fb.sequence,
+            )
+            self._last_seq = fb.sequence
+            return
         if gap > FEEDBACK_SEQ_GAP_WARN_THRESHOLD:
             self._logger.warning(
                 "feedback_seq_gap",
