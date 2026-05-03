@@ -423,13 +423,24 @@ class ArduinoMotor:
     # -----------------------------------------------------------------------
 
     async def _heartbeat_loop(self) -> None:
-        """Emit ``b"Q\\n"`` every ``arduino_heartbeat_interval_ms``."""
+        """Emit ``b"Q\\n"`` every ``arduino_heartbeat_interval_ms``.
+
+        Exits gracefully when the link has faulted (latched
+        :class:`ArduinoError` from a firmware ERROR or USB unplug) -- we
+        cannot keep the firmware watchdog satisfied if the link is dead,
+        and continuing to call :meth:`send_query` would raise the latched
+        error every tick.
+        """
         interval_sec = (
             self._config.arduino_heartbeat_interval_ms / _MS_PER_SEC
         )
         try:
             while True:
-                await self.send_query()
+                try:
+                    await self.send_query()
+                except ArduinoError as exc:
+                    self._logger.info("heartbeat_halted", reason=str(exc))
+                    return
                 await asyncio.sleep(interval_sec)
         except asyncio.CancelledError:
             self._logger.info("heartbeat_stopped")
@@ -571,10 +582,17 @@ class ArduinoMotor:
     # -----------------------------------------------------------------------
 
     async def send_motor_angle(self, command: MotorCommand) -> None:
-        """``M:<deg>`` -- the hot-path. Pause-respect + latched-error gate."""
+        """``M:<deg>`` -- the hot-path.
+
+        Latched-error gate is checked BEFORE the pause gate so that a fault
+        that happened to also pause dispatch (FAULTED state sets both)
+        surfaces the typed exception rather than silently returning. A
+        plain RECOVERING-state pause (no latched error) still silences
+        cleanly.
+        """
+        self._raise_if_latched()
         if self._dispatch_paused:
             return
-        self._raise_if_latched()
         payload = (
             f"M:{command.target_angle_deg:.{_DECIMAL_DEG_PRECISION}f}"
         ).encode("ascii")
