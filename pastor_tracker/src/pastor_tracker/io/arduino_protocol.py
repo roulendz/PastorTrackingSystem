@@ -343,33 +343,24 @@ def _parse_settings(text: str) -> Settings | SettingsInfo:
             raise ProtocolParseError(
                 f"SETTINGS: unknown textual message: {message!r}"
             )
-        try:
-            return SettingsInfo(message=message)
-        except ValidationError as exc:
-            raise ProtocolParseError(
-                f"SETTINGS: SettingsInfo validation failed: {exc}"
-            ) from exc
+        # Allowlist members all satisfy min_length=1, so SettingsInfo construction
+        # cannot raise ValidationError here — the allowlist IS the validator.
+        return SettingsInfo(message=message)
     parts = payload.split(",")
     if len(parts) != _SETTINGS_STRUCTURED_FIELD_COUNT:
         raise ProtocolParseError(
             f"SETTINGS: expected {_SETTINGS_STRUCTURED_FIELD_COUNT} structured "
             f"fields, got {len(parts)}: {text!r}"
         )
-    max_speed = _safe_float(parts[0], field_name="max_speed")
-    max_accel = _safe_float(parts[1], field_name="max_accel")
-    pid_p = _safe_float(parts[2], field_name="pid_p")
-    pid_i = _safe_float(parts[3], field_name="pid_i")
-    pid_d = _safe_float(parts[4], field_name="pid_d")
-    try:
-        return Settings(
-            max_speed=max_speed,
-            max_accel=max_accel,
-            pid_p=pid_p,
-            pid_i=pid_i,
-            pid_d=pid_d,
-        )
-    except ValidationError as exc:
-        raise ProtocolParseError(f"SETTINGS: validation failed: {exc}") from exc
+    # _safe_float guarantees finite floats; Settings has no extra validators,
+    # so construction below cannot raise ValidationError.
+    return Settings(
+        max_speed=_safe_float(parts[0], field_name="max_speed"),
+        max_accel=_safe_float(parts[1], field_name="max_accel"),
+        pid_p=_safe_float(parts[2], field_name="pid_p"),
+        pid_i=_safe_float(parts[3], field_name="pid_i"),
+        pid_d=_safe_float(parts[4], field_name="pid_d"),
+    )
 
 
 def _parse_limits(text: str) -> Limits:
@@ -400,11 +391,9 @@ def _parse_diag(text: str) -> Diag:
     match = _DIAG_RE.match(text)
     if match is None:
         raise ProtocolParseError(f"DIAG: malformed: {text!r}")
-    steps = _safe_int(match.group(1), field_name="diag_steps")
-    try:
-        return Diag(steps=steps)
-    except ValidationError as exc:
-        raise ProtocolParseError(f"DIAG: validation failed: {exc}") from exc
+    # Regex captures ``-?\d+`` so int() conversion below cannot raise; Diag has
+    # no extra validators on ``steps`` so construction cannot raise either.
+    return Diag(steps=int(match.group(1)))
 
 
 def parse_line(line: bytes) -> ProtocolEvent:  # noqa: PLR0911, PLR0912
