@@ -52,7 +52,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Protocol parser test (fake-serial replay) decodes canned `FB:` / `READY:` / `SETTINGS:` / `LIMITS:` / `DRIVER:` / `RESET:` / `STOP:` / `DIAG:` / `ERROR:` lines into typed DTOs and detects `seq` gaps > 5 with a WARN
   5. `M:` dispatch enforces Δ > 0.2° and ≥ 50 ms gap; receiving `ERROR:<code>` halts tracking and surfaces a typed error event (no auto-recover)
 **Plans**: 3 plans
-- [ ] 02-01-PLAN.md — Pure protocol parser + DTOs + ErrorCode enum + pyserial/pytest-cov deps (Wave 1)
+- [x] 02-01-PLAN.md — Pure protocol parser + DTOs + ErrorCode enum + pyserial/pytest-cov deps (Wave 1)
 - [ ] 02-02-PLAN.md — SerialTransport Protocol + PySerial impl + FakeSerial impl + VID:PID discovery (Wave 2)
 - [ ] 02-03-PLAN.md — ArduinoMotor orchestrator (handshake, RX thread, heartbeat, watchdog recovery, ERROR halt) + 6 motor tests + golden-trace replay (Wave 3)
 **UI hint**: no

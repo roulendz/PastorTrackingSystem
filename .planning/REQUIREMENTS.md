@@ -32,7 +32,7 @@
 - [ ] **IO-ARD-01**: VID:PID auto-detect over `serial.tools.list_ports.comports()` matching genuine Uno R3 (`2341:0043`), R4 (`2341:0069`), CH340 (`1A86:7523`), FTDI (`0403:6001`)
 - [ ] **IO-ARD-02**: Boot handshake — read up to `arduino_ready_timeout_sec`, expect `READY:v2`, abort on version mismatch with expected-vs-received log
 - [ ] **IO-ARD-03**: Async TX wrapper for `M:` `S:` `L:` `R` `Q` `E` `H` `X:` `D:` commands; rate-limited dispatcher (Δ > 0.2°, ≥ 50 ms gap)
-- [ ] **IO-ARD-04**: Threaded RX with parser for `FB:` `READY:` `SETTINGS:` `LIMITS:` `DRIVER:` `RESET:` `STOP:` `DIAG:` `ERROR:` lines; `seq` gap > 5 → WARN
+- [x] **IO-ARD-04**: Threaded RX with parser for `FB:` `READY:` `SETTINGS:` `LIMITS:` `DRIVER:` `RESET:` `STOP:` `DIAG:` `ERROR:` lines; `seq` gap > 5 → WARN
 - [ ] **IO-ARD-05**: 200 ms heartbeat task while tracking — sends `Q` (or other) so firmware never hits 1000 ms PC-heartbeat timeout
 - [ ] **IO-ARD-06**: Watchdog-reset recovery — re-receipt of `READY:v2` mid-session = MCU reset → re-issue settings + limits + WARN log
 - [ ] **IO-ARD-07**: `ERROR:` from firmware halts tracking, surfaces to UI, requires manual reset; `ERROR:11` (heartbeat lost) logs ERROR for investigation
@@ -148,7 +148,7 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | IO-ARD-01 | Phase 2 | Pending |
 | IO-ARD-02 | Phase 2 | Pending |
 | IO-ARD-03 | Phase 2 | Pending |
-| IO-ARD-04 | Phase 2 | Pending |
+| IO-ARD-04 | Phase 2 | Complete |
 | IO-ARD-05 | Phase 2 | Pending |
 | IO-ARD-06 | Phase 2 | Pending |
 | IO-ARD-07 | Phase 2 | Pending |

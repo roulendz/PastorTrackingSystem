@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: verifying
 stopped_at: ""Plan 01-01 complete: pastor_tracker scaffold + lint/type/test policy + commitizen hook""
-last_updated: "2026-05-03T13:16:47.921Z"
+last_updated: "2026-05-03T18:56:13.888Z"
 last_activity: 2026-05-03
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_plans: 6
+  completed_plans: 4
+  percent: 67
 ---
 
 # Project State
@@ -30,7 +30,7 @@ Plan: 3 of 3 (next: 01-02 frozen Pydantic Config)
 Status: Phase complete — ready for verification
 Last activity: 2026-05-03
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100%
 *Updated after each plan completion*
 | Phase 01 P02 | 7 | 2 tasks | 4 files |
 | Phase 01 P03 | 5 | 3 tasks | 6 files |
+| Phase 02 P01 | 577 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 01-03: ImageArray = npt.NDArray[np.uint8] alias mitigates Pitfall 2 (bare ndarray expands to Any under disallow_any_explicit)
 - [Phase ?]: Plan 01-03: Damper uses Holden exact closed-form (pos_new = target + exp(-y*dt)*(j0+j1*dt)), NOT semi-implicit Euler — unconditionally stable for any dt
 - [Phase ?]: Plan 01-03: Mixed DTO containers — Frame as dataclass(frozen,slots) for ndarray; other 5 DTOs as Pydantic BaseModel(frozen,extra=forbid) via _FrozenModel base (Pattern 8)
+- [Phase ?]: Plan 02-01: ProtocolEvent uses PEP 695 type syntax (ruff UP040)
+- [Phase ?]: Plan 02-01: pure parser layer at 100% line+branch coverage; zero serial/threading/asyncio imports in arduino_protocol.py
+- [Phase ?]: Plan 02-01: Error.code modelled as ErrorCode | int union for forward-compat (Pitfall 9)
 
 ### Pending Todos
 
@@ -94,6 +98,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-03T13:16:17.042Z
+Last session: 2026-05-03T18:56:03.979Z
 Stopped at: "Plan 01-01 complete: pastor_tracker scaffold + lint/type/test policy + commitizen hook"
 Resume file: None
