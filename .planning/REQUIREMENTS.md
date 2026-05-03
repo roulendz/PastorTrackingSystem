@@ -22,10 +22,10 @@
 
 ### Core (pure, side-effect-free)
 
-- [ ] **CORE-01**: `core/types.py` — frozen DTOs: `Frame`, `Detection`, `TrackedSubject`, `MotionState`, `FramingTarget`, `MotorCommand`
-- [ ] **CORE-02**: `core/geometry.py` — FOV math, normalized↔angle conversions; property-tested (hypothesis)
-- [ ] **CORE-03**: `core/damping.py` — critically-damped 2nd-order follower; step-response test asserts no overshoot
-- [ ] **CORE-04**: 100% type coverage on core; no `Any`; no `print`; ≤2-level conditional nesting
+- [x] **CORE-01**: `core/types.py` — frozen DTOs: `Frame`, `Detection`, `TrackedSubject`, `MotionState`, `FramingTarget`, `MotorCommand`
+- [x] **CORE-02**: `core/geometry.py` — FOV math, normalized↔angle conversions; property-tested (hypothesis)
+- [x] **CORE-03**: `core/damping.py` — critically-damped 2nd-order follower; step-response test asserts no overshoot
+- [x] **CORE-04**: 100% type coverage on core; no `Any`; no `print`; ≤2-level conditional nesting
 
 ### Arduino I/O
 
@@ -84,11 +84,11 @@
 
 ### Testing
 
-- [ ] **TEST-01**: Property tests for `core/geometry.py` (hypothesis)
-- [ ] **TEST-02**: Step-response test for `core/damping.py` — no overshoot
+- [x] **TEST-01**: Property tests for `core/geometry.py` (hypothesis)
+- [x] **TEST-02**: Step-response test for `core/damping.py` — no overshoot
 - [ ] **TEST-03**: Unit tests for `motion_analyzer.py` (hysteresis + dwell), `framer.py` (third selection), `pan_controller.py` (deadband + clamp)
 - [ ] **TEST-04**: Integration test for Arduino protocol parser using fake-serial replay of canned `FB:` / `READY:` / `ERROR:` lines + heartbeat verification
-- [ ] **TEST-05**: No mocked Kalman/damping math — test real implementations
+- [x] **TEST-05**: No mocked Kalman/damping math — test real implementations
 
 ### Docs + Quality
 
@@ -141,10 +141,10 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | CFG-02 | Phase 1 | Complete |
 | CFG-03 | Phase 1 | Complete |
 | CFG-04 | Phase 1 | Complete |
-| CORE-01 | Phase 1 | Pending |
-| CORE-02 | Phase 1 | Pending |
-| CORE-03 | Phase 1 | Pending |
-| CORE-04 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | Complete |
+| CORE-02 | Phase 1 | Complete |
+| CORE-03 | Phase 1 | Complete |
+| CORE-04 | Phase 1 | Complete |
 | IO-ARD-01 | Phase 2 | Pending |
 | IO-ARD-02 | Phase 2 | Pending |
 | IO-ARD-03 | Phase 2 | Pending |
@@ -179,11 +179,11 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | UI-03 | Phase 7 | Pending |
 | UI-04 | Phase 7 | Pending |
 | UI-05 | Phase 7 | Pending |
-| TEST-01 | Phase 1 | Pending |
-| TEST-02 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Complete |
+| TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 5 | Pending |
 | TEST-04 | Phase 2 | Pending |
-| TEST-05 | Phase 1 | Pending |
+| TEST-05 | Phase 1 | Complete |
 | DOC-01 | Phase 8 | Pending |
 | QA-01 | Phase 8 | Pending |
 | QA-02 | Phase 8 | Pending |

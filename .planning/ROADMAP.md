@@ -38,7 +38,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 - [x] 01-01-PLAN.md — Scaffold uv project + ruff/mypy/pytest config + structlog + lint canary + commitizen (Wave 0)
 - [x] 01-02-PLAN.md — Frozen Pydantic Config (24 fields, env+JSON, fail-fast) + tests (Wave 1)
-- [ ] 01-03-PLAN.md — core/types.py DTOs + core/geometry.py + core/damping.py (Holden) + property tests (Wave 2)
+- [x] 01-03-PLAN.md — core/types.py DTOs + core/geometry.py + core/damping.py (Holden) + property tests (Wave 2)
 **UI hint**: no
 
 ### Phase 2: Arduino I/O
