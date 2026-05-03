@@ -11,7 +11,7 @@ import structlog
 
 from pastor_tracker.config import Config
 from pastor_tracker.io.arduino_motor import ArduinoMotor
-from pastor_tracker.io.arduino_protocol import Feedback, SEQ_MODULUS
+from pastor_tracker.io.arduino_protocol import SEQ_MODULUS, Feedback
 from pastor_tracker.io.arduino_transport import FakeSerialTransport
 
 

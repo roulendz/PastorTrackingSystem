@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import enum
+import math
 import threading
 from collections.abc import AsyncIterator
 from typing import Final
@@ -794,7 +795,7 @@ class ArduinoMotor:
         # PID gains are unbounded in firmware (protocol.h does not pin a
         # range); keep a finiteness guard so NaN/inf cannot reach the wire.
         for name, value in (("pid_p", pid_p), ("pid_i", pid_i), ("pid_d", pid_d)):
-            if value != value or value in (float("inf"), float("-inf")):
+            if not math.isfinite(value):
                 raise ValueError(f"{name} must be finite, got {value}")
         payload = (
             f"S:{max_speed:.3f},{max_accel:.3f},"
@@ -811,7 +812,7 @@ class ArduinoMotor:
         """
         self._raise_if_latched()
         for name, value in (("min_deg", min_deg), ("max_deg", max_deg)):
-            if value != value or value in (float("inf"), float("-inf")):
+            if not math.isfinite(value):
                 raise ValueError(f"{name} must be finite, got {value}")
         if min_deg >= max_deg:
             raise ValueError(
