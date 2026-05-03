@@ -24,6 +24,7 @@ Fix the core timing bug causing virtual center line drift. All timing in the pip
 - Physics-informed interpolation using known motor parameters (configured accel, max velocity from AccelStepper)
 - Single smooth curve through direction reversals — not three discrete phases (decel/stop/accel)
 - Interpolation always runs — no rest-detection bypass
+- Operating angle range limited to ±25° for this setup (pastor motion envelope)
 - When pastor enters home safe zone, motor smoothly returns to 0 degrees (home position for picture symmetry)
 - Smooth but sticky: no jitter, but responsive tracking is the priority
 - Constant-velocity segment interpolation method is Claude's discretion
