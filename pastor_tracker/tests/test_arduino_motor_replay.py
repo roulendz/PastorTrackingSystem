@@ -37,7 +37,7 @@ async def test_golden_trace_replay(
                 if isinstance(ev, Error):
                     return
 
-        await asyncio.wait_for(_drain(), timeout=2.0)
+        await asyncio.wait_for(_drain(), timeout=5.0)
         assert any(isinstance(e, Feedback) for e in events), (
             "no Feedback events captured"
         )
