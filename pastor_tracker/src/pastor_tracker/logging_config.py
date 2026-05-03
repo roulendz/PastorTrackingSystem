@@ -11,7 +11,16 @@ import structlog
 
 
 def configure_logging(level: str = "INFO") -> None:
-    """Configure structlog + stdlib logging for JSON output. Idempotent."""
+    """Configure structlog + stdlib logging for JSON output.
+
+    CALL ONCE at process startup (e.g. from ``__main__``). NOT idempotent:
+    ``logging.basicConfig`` is a no-op once the root logger has handlers, and
+    ``cache_logger_on_first_use=True`` (below) freezes the filtering wrapper
+    on every previously-bound ``structlog.get_logger`` instance. Phase 7's
+    runtime level slider will need a proper reconfigure path; until then,
+    treat this function as one-shot and crash loudly on second invocation
+    upstream rather than relying on silent re-application here.
+    """
     logging.basicConfig(level=level.upper(), format="%(message)s")
     structlog.configure(
         processors=[
