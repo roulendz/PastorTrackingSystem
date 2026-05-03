@@ -80,6 +80,13 @@ warn_unreachable = true
 module = ["cv2.*", "dearpygui.*", "pygrabber.*", "ultralytics.*", "filterpy.*", "serial.*"]
 ignore_missing_imports = true
 
+[tool.pydantic-mypy]
+# Tighten the synthesized __init__ so it does not introduce Any-typed kwargs
+# (otherwise [tool.mypy] disallow_any_explicit fires on every BaseModel/BaseSettings subclass).
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
