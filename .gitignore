@@ -41,3 +41,23 @@ weights/
 config.local.json
 .env
 .env.local
+
+# ── GSD baseline (auto-generated) ──
+.gsd
+.gsd-id
+.mcp.json
+.bg-shell/
+*~
+*.code-workspace
+.env.*
+!.env.example
+node_modules/
+.next/
+dist/
+build/
+*.pyc
+target/
+vendor/
+coverage/
+.cache/
+tmp/
