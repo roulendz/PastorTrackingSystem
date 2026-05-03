@@ -819,24 +819,28 @@ def test_protocol_version_must_be_2() -> None:
 
 **These are the only `[ASSUMED]` items in this research. Everything else is `[VERIFIED]` (PyPI, .venv probe, official docs) or `[CITED]` (referenced URL).**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Bump versions, or pin to `.venv`?**
    - What we know: `.venv` has structlog 24.4.0, pytest 8.4.2, pytest-asyncio 0.26.0; latest are 25.5.0, 9.0.3, 1.1.0.
    - What's unclear: Whether to upgrade now or pin current.
    - Recommendation: **Pin to current `.venv` versions** for Phase 1 — the goal is "make it work and lock it." Plan a separate maintenance phase if upgrades are wanted.
+   - **RESOLVED:** Pin to current `.venv` versions for Phase 1. Defer upgrades to a future maintenance phase. Reflected in Plan 01 `pyproject.toml` version constraints.
 
 2. **Where does `config.json` live?**
    - What we know: `JsonConfigSettingsSource(json_file="config.json")` resolves relative to CWD by default.
    - What's unclear: CWD = repo root or `pastor_tracker/`?
    - Recommendation: Use absolute path resolved from a known anchor (e.g. `Path(__file__).resolve().parent.parent.parent / "config.json"`), document in README, allow override via `PTS_CONFIG_FILE` env var.
+   - **RESOLVED:** Use anchor-relative path `Path(__file__).resolve().parent.parent.parent / "config.json"` (=`pastor_tracker/config.json`). Allow override via `PTS_CONFIG_FILE` env var. README guidance deferred to Phase 8 (`DOC-01`).
 
 3. **Should `__main__.py` exist in Phase 1?**
    - What we know: PROMPT.md lists `__main__.py` as the entry, but Phase 1 has no pipeline yet.
    - Recommendation: Land a stub that calls `configure_logging()` and prints `Config()` (via structlog) to prove the wire-up. Avoids "empty package" smell and exercises the boot path.
+   - **RESOLVED:** Yes — ship a stub `__main__.py` that calls `configure_logging()` and structlog-logs the validated `Config`. Implemented in Plan 01 Task 2.
 
 4. **Should `tests/conftest.py` ship a "valid Config dict" fixture in Phase 1?**
    - Recommendation: Yes — Phase 2-7 will all want it. One-line factory that produces a baseline-valid kwargs dict for Config tests.
+   - **RESOLVED:** Yes — `tests/conftest.py` ships `valid_config_dict` fixture (extended in Plan 02 Task 1). Phases 2–7 reuse without duplication.
 
 ## Environment Availability
 
