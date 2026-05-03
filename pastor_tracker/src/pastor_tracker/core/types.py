@@ -31,6 +31,15 @@ ImageArray = npt.NDArray[np.uint8]
 # Sentinel for the "no decision yet" intent, used by MotionAnalyzer in Phase 5.
 MotionIntent = Literal["moving_left", "moving_right", "dwelling", "indeterminate"]
 
+# Frame.image contract: BGR uint8 of shape (H, W, 3). Named constants per
+# CLAUDE.md rule 6 — no magic numbers in validation paths.
+_IMAGE_NDIM_EXPECTED: int = 3  # H, W, channels
+_IMAGE_CHANNELS_EXPECTED: int = 3  # B, G, R
+_IMAGE_HEIGHT_AXIS: int = 0
+_IMAGE_WIDTH_AXIS: int = 1
+_IMAGE_CHANNEL_AXIS: int = 2
+_TIMESTAMP_NS_MIN: int = 0
+
 
 @dataclass(frozen=True, slots=True)
 class Frame:
@@ -38,12 +47,41 @@ class Frame:
 
     ``image`` is BGR uint8 (OpenCV convention) of shape ``(height, width, 3)``.
     ``timestamp_ns`` is ``time.perf_counter_ns()`` at grab time.
+
+    Tiger-style invariants enforced in ``__post_init__`` (CLAUDE.md rule 1):
+    - ``image`` must be HxWx3 BGR (ndim==3, last axis size 3)
+    - ``width`` / ``height`` must agree with ``image.shape``
+    - ``timestamp_ns`` must be ``>= 0`` (matches sibling Pydantic DTOs)
     """
 
     image: ImageArray
     width: int
     height: int
     timestamp_ns: int
+
+    def __post_init__(self) -> None:
+        if self.image.ndim != _IMAGE_NDIM_EXPECTED:
+            raise ValueError(
+                f"Frame.image must be {_IMAGE_NDIM_EXPECTED}-D (HxWx3 BGR), "
+                f"got ndim={self.image.ndim} shape={self.image.shape}"
+            )
+        if self.image.shape[_IMAGE_CHANNEL_AXIS] != _IMAGE_CHANNELS_EXPECTED:
+            raise ValueError(
+                f"Frame.image must have {_IMAGE_CHANNELS_EXPECTED} channels "
+                f"(BGR), got shape {self.image.shape}"
+            )
+        image_height = int(self.image.shape[_IMAGE_HEIGHT_AXIS])
+        image_width = int(self.image.shape[_IMAGE_WIDTH_AXIS])
+        if image_width != self.width or image_height != self.height:
+            raise ValueError(
+                f"Frame width/height ({self.width}x{self.height}) "
+                f"disagree with image.shape ({image_width}x{image_height})"
+            )
+        if self.timestamp_ns < _TIMESTAMP_NS_MIN:
+            raise ValueError(
+                f"timestamp_ns must be >= {_TIMESTAMP_NS_MIN}, "
+                f"got {self.timestamp_ns}"
+            )
 
 
 class _FrozenModel(BaseModel):

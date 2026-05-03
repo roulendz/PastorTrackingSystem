@@ -28,11 +28,39 @@ def test_frame_is_frozen_dataclass() -> None:
 
 
 def test_frame_replace_returns_new_instance() -> None:
-    """``dataclasses.replace`` is the documented mutation path."""
+    """``dataclasses.replace`` is the documented mutation path.
+
+    NOTE: ``replace`` re-runs ``__post_init__`` so we must keep image/width
+    coherent (WR-02 guard rejects mismatched scalars).
+    """
     frame = Frame(image=_make_image(), width=4, height=4, timestamp_ns=1)
-    bigger = dataclasses.replace(frame, width=8)
+    bigger_image = np.zeros((4, 8, 3), dtype=np.uint8)
+    bigger = dataclasses.replace(frame, image=bigger_image, width=8)
     assert frame.width == 4
     assert bigger.width == 8
+
+
+def test_frame_rejects_dimension_mismatch() -> None:
+    """WR-02: ``width``/``height`` scalars MUST agree with ``image.shape``."""
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match=r"disagree with image\.shape"):
+        Frame(image=img, width=1920, height=1080, timestamp_ns=1)
+
+
+def test_frame_rejects_non_bgr_image() -> None:
+    """WR-02: ``image`` must be HxWx3 BGR — reject 2-D or wrong channel count."""
+    flat = np.zeros((4, 4), dtype=np.uint8)  # ndim==2
+    with pytest.raises(ValueError, match="HxWx3 BGR"):
+        Frame(image=flat, width=4, height=4, timestamp_ns=1)
+    rgba = np.zeros((4, 4, 4), dtype=np.uint8)  # 4 channels
+    with pytest.raises(ValueError, match="channels"):
+        Frame(image=rgba, width=4, height=4, timestamp_ns=1)
+
+
+def test_frame_rejects_negative_timestamp() -> None:
+    """WR-02: ``timestamp_ns`` must be ``>= 0`` — match sibling Pydantic DTOs."""
+    with pytest.raises(ValueError, match="timestamp_ns"):
+        Frame(image=_make_image(), width=4, height=4, timestamp_ns=-1)
 
 
 def test_detection_rejects_mutation() -> None:
