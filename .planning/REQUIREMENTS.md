@@ -7,11 +7,11 @@
 
 ### Scaffold
 
-- [ ] **SCAF-01**: `pastor_tracker/` package with `pyproject.toml`, `uv lock`, pinned deps for the 2026 stack
-- [ ] **SCAF-02**: `ruff` lint/format config + `mypy --strict` config (no `Any`, all functions annotated)
-- [ ] **SCAF-03**: `tests/` directory wired to `pytest` + `hypothesis`
-- [ ] **SCAF-04**: `structlog` JSON logging configured at module entry; `print()` and bare `except` forbidden by lint policy
-- [ ] **SCAF-05**: Conventional Commits enforced — one logical change per commit
+- [x] **SCAF-01**: `pastor_tracker/` package with `pyproject.toml`, `uv lock`, pinned deps for the 2026 stack
+- [x] **SCAF-02**: `ruff` lint/format config + `mypy --strict` config (no `Any`, all functions annotated)
+- [x] **SCAF-03**: `tests/` directory wired to `pytest` + `hypothesis`
+- [x] **SCAF-04**: `structlog` JSON logging configured at module entry; `print()` and bare `except` forbidden by lint policy
+- [x] **SCAF-05**: Conventional Commits enforced — one logical change per commit
 
 ### Configuration
 
@@ -132,11 +132,11 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCAF-01 | Phase 1 | Pending |
-| SCAF-02 | Phase 1 | Pending |
-| SCAF-03 | Phase 1 | Pending |
-| SCAF-04 | Phase 1 | Pending |
-| SCAF-05 | Phase 1 | Pending |
+| SCAF-01 | Phase 1 | Complete |
+| SCAF-02 | Phase 1 | Complete |
+| SCAF-03 | Phase 1 | Complete |
+| SCAF-04 | Phase 1 | Complete |
+| SCAF-05 | Phase 1 | Complete |
 | CFG-01 | Phase 1 | Pending |
 | CFG-02 | Phase 1 | Pending |
 | CFG-03 | Phase 1 | Pending |
