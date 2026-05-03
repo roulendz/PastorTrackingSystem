@@ -735,7 +735,7 @@ Plus a special-case for `ERROR:11`: assert log level is `ERROR` (not WARN) and i
 
 **Pattern (verbatim from RESEARCH.md lines 658–671):**
 ```python
-from pastor_tracker.tests.fixtures.arduino_traces import ARDUINO_TRACE_GOLDEN
+from tests.fixtures.arduino_traces import ARDUINO_TRACE_GOLDEN
 
 async def test_golden_trace_replay(
     valid_config_dict: dict[str, Any],
