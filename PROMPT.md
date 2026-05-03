@@ -44,37 +44,43 @@ OBS VCam ─► FrameSource ─► PoseDetector ─► SubjectTracker ─► Mot
 Each stage = pure transform on typed DTO. Orchestrator wires stages. No stage knows another stage's internals.
 
 ```
-pastor_tracker/
-├── pyproject.toml
-├── src/pastor_tracker/
-│   ├── __main__.py                   # entry, CLI args, async event loop
-│   ├── config.py                     # Pydantic Settings, env + JSON
-│   ├── core/
-│   │   ├── types.py                  # Frame, Detection, TrackedSubject, MotionState, FramingTarget, MotorCommand
-│   │   ├── geometry.py               # FOV math, normalized↔angle conversions
-│   │   └── damping.py                # critically-damped 2nd-order follower
-│   ├── io/
-│   │   ├── obs_camera.py             # async frame source, drops stale frames
-│   │   └── arduino_motor.py          # async serial, RX thread, FB parser
-│   ├── perception/
-│   │   ├── pose_detector.py          # YOLO11-pose wrapper
-│   │   └── subject_tracker.py        # BoT-SORT ID lock, Kalman smoothing
-│   ├── intent/
-│   │   ├── motion_analyzer.py        # velocity, direction, dwell detection
-│   │   └── framer.py                 # rule-of-thirds intent + hysteresis
-│   ├── control/
-│   │   ├── pan_controller.py         # damped follower, deadband, vel-clamp
-│   │   └── command_dispatcher.py     # rate-limited M: emitter
-│   ├── pipeline.py                   # asyncio orchestrator
-│   └── ui/
-│       └── dashboard.py              # DearPyGui live view + tuning sliders
-└── tests/
-    ├── test_geometry.py              # property tests
-    ├── test_damping.py               # step response, no overshoot
-    ├── test_motion_analyzer.py       # hysteresis, dwell
-    ├── test_framer.py                # third selection logic
-    ├── test_pan_controller.py        # deadband, clamp
-    └── test_arduino_protocol.py      # parser against canned FB lines
+repo_root/
+├── arduino/stepper_controller/         # PlatformIO project, firmware v2 (shipped)
+│   ├── platformio.ini                  # Uno + native test envs
+│   ├── include/protocol.h              # constants, enums, EEPROM layout
+│   ├── src/main.cpp                    # firmware entry
+│   └── test/                           # Unity unit tests
+└── pastor_tracker/                     # Python tracking app (this PROMPT scope)
+    ├── pyproject.toml
+    ├── src/pastor_tracker/
+    │   ├── __main__.py                 # entry, CLI args, async event loop
+    │   ├── config.py                   # Pydantic Settings, env + JSON
+    │   ├── core/
+    │   │   ├── types.py                # Frame, Detection, TrackedSubject, MotionState, FramingTarget, MotorCommand
+    │   │   ├── geometry.py             # FOV math, normalized↔angle conversions
+    │   │   └── damping.py              # critically-damped 2nd-order follower
+    │   ├── io/
+    │   │   ├── obs_camera.py           # async frame source, drops stale frames
+    │   │   └── arduino_motor.py        # async serial, RX thread, FB parser, heartbeat task
+    │   ├── perception/
+    │   │   ├── pose_detector.py        # YOLO11-pose wrapper
+    │   │   └── subject_tracker.py      # BoT-SORT ID lock, Kalman smoothing
+    │   ├── intent/
+    │   │   ├── motion_analyzer.py      # velocity, direction, dwell detection
+    │   │   └── framer.py               # rule-of-thirds intent + hysteresis
+    │   ├── control/
+    │   │   ├── pan_controller.py       # damped follower, deadband, vel-clamp
+    │   │   └── command_dispatcher.py   # rate-limited M: emitter
+    │   ├── pipeline.py                 # asyncio orchestrator
+    │   └── ui/
+    │       └── dashboard.py            # DearPyGui live view + tuning sliders
+    └── tests/
+        ├── test_geometry.py            # property tests
+        ├── test_damping.py             # step response, no overshoot
+        ├── test_motion_analyzer.py     # hysteresis, dwell
+        ├── test_framer.py              # third selection logic
+        ├── test_pan_controller.py      # deadband, clamp
+        └── test_arduino_protocol.py    # parser against canned FB lines + heartbeat
 ```
 
 ## Subject Tracking — 2026 Best Practices
@@ -133,30 +139,67 @@ Two-stage damping = no jerk, no overshoot, cinematic feel.
 - **Command throttle:** emit `M:` only if delta > 0.2° AND ≥ 50ms since last command.
 - **Frame staleness:** drop frames older than 100ms in capture queue.
 
-## Arduino Protocol
+## Arduino Protocol (v2)
 
-Firmware fixed. Use as-is.
+Firmware lives in `arduino/stepper_controller/` (PlatformIO project, target Uno R3).
+PC must speak protocol **v2** — verify via boot handshake.
 
 **TX (newline-terminated, 115200 baud):**
 | Cmd | Meaning |
 |---|---|
-| `M:<deg>` | move to absolute angle |
-| `S:<maxSpd>,<maxAcc>,<p>,<i>,<d>` | settings |
-| `R` | reset position to 0 |
-| `Q` | query state (immediate FB) |
+| `M:<deg>` | move to absolute angle (rejected if outside software limits) |
+| `S:<maxSpd>,<maxAcc>,<p>,<i>,<d>` | motion settings (clamped, persisted to EEPROM) |
+| `L:<minDeg>,<maxDeg>` | software angle limits (persisted to EEPROM) |
+| `R` | reset current position to 0 |
+| `Q` | query state — immediate `FB:` line |
 | `E` | emergency stop |
-| `H` | home (move to 0) |
-| `X:0\|1` | driver disable/enable |
+| `H` | home (move to 0°, rejected if 0° outside limits) |
+| `X:0\|1` | driver disable / enable |
+| `D:<steps>` | diagnostic relative step move (no limit check) |
 
 **RX:**
 ```
 FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState
 FB:<curAng>,<tgtAng>,<speed>,<isRun 0|1>,<microsTs>,<seq>,<accState 0..3>
-READY
+READY:v2
+SETTINGS:<spd>,<acc>,<p>,<i>,<d>
+LIMITS:<min>,<max>
+DRIVER:ENABLED|DISABLED
+RESET:OK
+STOP:OK
+DIAG: moving <n> steps
 ERROR:<code> - <message>
 ```
 
 `accelState`: 0=stopped, 1=accel, 2=cruise, 3=decel. `seq` monotonic — gap > 5 = WARN.
+
+**Boot handshake:** PC reads up to 2 s after open. Expects `READY:v<N>`. Mismatch on `<N>` = abort with version error.
+
+**Heartbeat watchdog:** during `MOVING` / `HOMING` states, PC must send any command (e.g. `Q`) at least every **1000 ms**. If silent longer, firmware halts motor with `ERROR:11 - PC heartbeat lost`. PC keeps a 200 ms heartbeat sender as background task while tracking.
+
+**Hardware watchdog:** firmware enables AVR `WDTO_500MS`. If main loop hangs > 500 ms, MCU resets. PC must handle `READY:v2` re-emission as a reset event and re-issue settings.
+
+**Error codes** (firmware enum `ErrorCode`):
+| Code | Meaning |
+|---|---|
+| 0 | None |
+| 1 | EmptyCommand |
+| 2 | UnknownCommandType |
+| 3 | MoveMissingArgument |
+| 4 | DiagnosticMissingArgument |
+| 5 | SettingsMissingArgument |
+| 6 | DriverMissingArgument |
+| 7 | DriverInvalidArgument |
+| 8 | HomingFailed |
+| 9 | AngleOutOfBounds |
+| 10 | SettingsOutOfBounds |
+| 11 | HeartbeatTimeout |
+
+**Software angle limits:** default ±90° at first boot, configurable via `L:`. Stored in EEPROM with magic header `0x50545332` ('PTS2') — firmware ignores stale EEPROM from older protocols.
+
+**Settings clamps** (firmware enforces, host should mirror):
+- `maxSpeed` ∈ [100, 50000] steps/s
+- `maxAccel` ∈ [50, 30000] steps/s²
 
 **Mechanics:** 200 steps × 180:1 gear × 8 microsteps = 288000 steps/rev.
 
@@ -192,8 +235,13 @@ class Config(BaseSettings, frozen=True):
     pan_max_velocity_deg_per_sec: float = 30.0
     motor_max_speed_steps_per_sec: float = 25000.0
     motor_max_accel_steps_per_sec2: float = 12500.0
+    motor_angle_min_deg: float = -90.0
+    motor_angle_max_deg: float = 90.0
     command_min_delta_deg: float = 0.2
     command_min_interval_ms: int = 50
+    arduino_heartbeat_interval_ms: int = 200
+    arduino_protocol_version: int = 2
+    arduino_ready_timeout_sec: float = 2.0
 ```
 
 Validation: ranges, port format, FOV positive. Crash at startup on invalid.
@@ -213,9 +261,13 @@ DearPyGui single window:
 |---|---|
 | Serial open fails | exit, print error |
 | OBS VCam missing | exit, list available cameras |
+| `READY:v<N>` version mismatch | exit, log expected vs received |
+| Boot `READY:v2` not seen within `arduino_ready_timeout_sec` | exit, log timeout |
+| Re-receipt of `READY:v2` mid-session | treat as MCU watchdog reset, re-send settings + limits, log WARN |
 | 3 consecutive frames no detection | hold position, log WARN |
 | Lock lost > 2.0s | re-acquire, log WARN |
 | `ERROR:` from Arduino | halt tracking, surface in UI, require manual reset |
+| `ERROR:11` (heartbeat timeout) | log ERROR — investigate why heartbeat task stalled |
 | `seq` gap > 5 | log WARN |
 | Frame queue stall > 200ms | log ERROR, restart capture |
 
