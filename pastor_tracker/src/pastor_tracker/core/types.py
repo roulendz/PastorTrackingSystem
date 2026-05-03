@@ -21,7 +21,7 @@ from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # BGR uint8 image buffer (OpenCV convention). Parameterised to keep mypy
 # ``disallow_any_explicit`` happy — bare ``np.ndarray`` expands to
@@ -91,7 +91,12 @@ class _FrozenModel(BaseModel):
 
 
 class Detection(_FrozenModel):
-    """A single person detection from YOLO11-pose, in normalized image coords."""
+    """A single person detection from YOLO11-pose, in normalized image coords.
+
+    Cross-field invariants (WR-03 — tiger-style fail-fast on degenerate bboxes):
+    - ``bbox_x2_normalized > bbox_x1_normalized``
+    - ``bbox_y2_normalized > bbox_y1_normalized``
+    """
 
     subject_center_x_normalized: float = Field(ge=0.0, le=1.0)
     subject_center_y_normalized: float = Field(ge=0.0, le=1.0)
@@ -101,6 +106,20 @@ class Detection(_FrozenModel):
     bbox_x2_normalized: float = Field(ge=0.0, le=1.0)
     bbox_y2_normalized: float = Field(ge=0.0, le=1.0)
     timestamp_ns: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _bbox_well_ordered(self) -> Detection:
+        if self.bbox_x2_normalized <= self.bbox_x1_normalized:
+            raise ValueError(
+                f"bbox_x2_normalized ({self.bbox_x2_normalized}) must exceed "
+                f"bbox_x1_normalized ({self.bbox_x1_normalized})"
+            )
+        if self.bbox_y2_normalized <= self.bbox_y1_normalized:
+            raise ValueError(
+                f"bbox_y2_normalized ({self.bbox_y2_normalized}) must exceed "
+                f"bbox_y1_normalized ({self.bbox_y1_normalized})"
+            )
+        return self
 
 
 class TrackedSubject(_FrozenModel):

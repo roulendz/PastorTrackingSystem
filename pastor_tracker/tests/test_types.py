@@ -92,6 +92,51 @@ def test_detection_rejects_out_of_range() -> None:
         )
 
 
+def test_detection_rejects_inverted_bbox_x() -> None:
+    """WR-03: ``bbox_x2`` must strictly exceed ``bbox_x1``."""
+    with pytest.raises(ValidationError, match="bbox_x2_normalized"):
+        Detection(
+            subject_center_x_normalized=0.5,
+            subject_center_y_normalized=0.5,
+            mean_keypoint_confidence=0.9,
+            bbox_x1_normalized=0.7,  # > x2 — inverted
+            bbox_y1_normalized=0.4,
+            bbox_x2_normalized=0.3,
+            bbox_y2_normalized=0.6,
+            timestamp_ns=1,
+        )
+
+
+def test_detection_rejects_zero_area_bbox() -> None:
+    """WR-03: degenerate (x2 == x1 or y2 == y1) bboxes are rejected."""
+    with pytest.raises(ValidationError, match="bbox_x2_normalized"):
+        Detection(
+            subject_center_x_normalized=0.5,
+            subject_center_y_normalized=0.5,
+            mean_keypoint_confidence=0.9,
+            bbox_x1_normalized=0.5,  # == x2 — zero width
+            bbox_y1_normalized=0.4,
+            bbox_x2_normalized=0.5,
+            bbox_y2_normalized=0.6,
+            timestamp_ns=1,
+        )
+
+
+def test_detection_rejects_inverted_bbox_y() -> None:
+    """WR-03: ``bbox_y2`` must strictly exceed ``bbox_y1``."""
+    with pytest.raises(ValidationError, match="bbox_y2_normalized"):
+        Detection(
+            subject_center_x_normalized=0.5,
+            subject_center_y_normalized=0.5,
+            mean_keypoint_confidence=0.9,
+            bbox_x1_normalized=0.3,
+            bbox_y1_normalized=0.8,  # > y2 — inverted
+            bbox_x2_normalized=0.6,
+            bbox_y2_normalized=0.2,
+            timestamp_ns=1,
+        )
+
+
 def test_tracked_subject_rejects_mutation() -> None:
     sub = TrackedSubject(
         track_id=7,
