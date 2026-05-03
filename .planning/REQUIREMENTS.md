@@ -15,10 +15,10 @@
 
 ### Configuration
 
-- [ ] **CFG-01**: `Config(BaseSettings, frozen=True)` with all 23 PROMPT.md fields, env+JSON loading
-- [ ] **CFG-02**: Range validation on every field — port format, FOV positive, motor clamps `[100..50000]` speed `[50..30000]` accel
-- [ ] **CFG-03**: Crash at startup on invalid config (no silent fallback, no defaults that hide errors)
-- [ ] **CFG-04**: `arduino_protocol_version` defaults to `2`; mismatch with firmware `READY:v<N>` aborts boot
+- [x] **CFG-01**: `Config(BaseSettings, frozen=True)` with all 23 PROMPT.md fields, env+JSON loading
+- [x] **CFG-02**: Range validation on every field — port format, FOV positive, motor clamps `[100..50000]` speed `[50..30000]` accel
+- [x] **CFG-03**: Crash at startup on invalid config (no silent fallback, no defaults that hide errors)
+- [x] **CFG-04**: `arduino_protocol_version` defaults to `2`; mismatch with firmware `READY:v<N>` aborts boot
 
 ### Core (pure, side-effect-free)
 
@@ -137,10 +137,10 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | SCAF-03 | Phase 1 | Complete |
 | SCAF-04 | Phase 1 | Complete |
 | SCAF-05 | Phase 1 | Complete |
-| CFG-01 | Phase 1 | Pending |
-| CFG-02 | Phase 1 | Pending |
-| CFG-03 | Phase 1 | Pending |
-| CFG-04 | Phase 1 | Pending |
+| CFG-01 | Phase 1 | Complete |
+| CFG-02 | Phase 1 | Complete |
+| CFG-03 | Phase 1 | Complete |
+| CFG-04 | Phase 1 | Complete |
 | CORE-01 | Phase 1 | Pending |
 | CORE-02 | Phase 1 | Pending |
 | CORE-03 | Phase 1 | Pending |

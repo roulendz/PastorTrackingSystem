@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. `core/damping.py` step-response test asserts the follower converges to target with zero overshoot for time constants in [0.1, 2.0] s (real math, no mocks)
 **Plans**: 3 plans
 - [x] 01-01-PLAN.md — Scaffold uv project + ruff/mypy/pytest config + structlog + lint canary + commitizen (Wave 0)
-- [ ] 01-02-PLAN.md — Frozen Pydantic Config (24 fields, env+JSON, fail-fast) + tests (Wave 1)
+- [x] 01-02-PLAN.md — Frozen Pydantic Config (24 fields, env+JSON, fail-fast) + tests (Wave 1)
 - [ ] 01-03-PLAN.md — core/types.py DTOs + core/geometry.py + core/damping.py (Holden) + property tests (Wave 2)
 **UI hint**: no
 
@@ -135,7 +135,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scaffold, Config, Core Math | 1/3 | In progress | - |
+| 1. Scaffold, Config, Core Math | 2/3 | In Progress|  |
 | 2. Arduino I/O | 0/TBD | Not started | - |
 | 3. Camera I/O | 0/TBD | Not started | - |
 | 4. Perception | 0/TBD | Not started | - |

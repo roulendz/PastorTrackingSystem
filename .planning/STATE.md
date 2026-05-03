@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Plan 01-01 complete: pastor_tracker scaffold + lint/type/test policy + commitizen hook"
-last_updated: "2026-05-03T12:54:39Z"
-last_activity: 2026-05-03 -- Phase 01 Plan 01 complete (SCAF-01..05 done)
+stopped_at: ""Plan 01-01 complete: pastor_tracker scaffold + lint/type/test policy + commitizen hook""
+last_updated: "2026-05-03T13:06:36.913Z"
+last_activity: 2026-05-03
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 4
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Phase: 01 (scaffold-config-core-math) — EXECUTING
-Plan: 2 of 3 (next: 01-02 frozen Pydantic Config)
-Status: Executing Phase 01
-Last activity: 2026-05-03 -- Phase 01 Plan 01 complete (SCAF-01..05 done)
+Plan: 3 of 3 (next: 01-02 frozen Pydantic Config)
+Status: Ready to execute
+Last activity: 2026-05-03
 
-Progress: [█░░░░░░░░░] 4%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [█░░░░░░░░░] 4%
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 01 P02 | 7 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,9 @@ Recent decisions affecting current work:
 - Phase 1 / Plan 01: uv hosted in repo-root `.venv` (pip install uv) — pipx unavailable on dev box; bypasses PATH pollution
 - Phase 1 / Plan 01: pre-commit `commit-msg` hook installed at parent-repo `.git/hooks/` with `--config pastor_tracker/.pre-commit-config.yaml` — pastor_tracker is a sub-directory, not nested git repo
 - Phase 1 / Plan 01: structlog 25.5.0 resolved within `>=24.4,<26.0` — JSON API + format_exc_info processor identical to 24.4
+- [Phase ?]: Phase 1 / Plan 02: Tightened [tool.pydantic-mypy] init_forbid_extra+init_typed in pyproject.toml so mypy disallow_any_explicit stays clean for every Pydantic class
+- [Phase ?]: Phase 1 / Plan 02: Config has 25 fields (NOT 24) — PROMPT.md ## Config block already includes arduino_ready_timeout_sec; plan narrative arithmetic was stale
+- [Phase ?]: Phase 1 / Plan 02: Cross-field invariants enforced via @model_validator(mode='after'); source precedence locked init > env > .env > config.json > defaults via settings_customise_sources
 
 ### Pending Todos
 
@@ -86,6 +90,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-03
+Last session: 2026-05-03T13:06:17.364Z
 Stopped at: "Plan 01-01 complete: pastor_tracker scaffold + lint/type/test policy + commitizen hook"
-Resume file: .planning/phases/01-scaffold-config-core-math/01-02-PLAN.md
+Resume file: None
