@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: verifying
 stopped_at: ""Plan 01-01 complete: pastor_tracker scaffold + lint/type/test policy + commitizen hook""
-last_updated: "2026-05-03T18:56:13.888Z"
+last_updated: "2026-05-03T19:20:37.120Z"
 last_activity: 2026-05-03
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 6
+  percent: 100
 ---
 
 # Project State
@@ -30,7 +30,7 @@ Plan: 3 of 3 (next: 01-02 frozen Pydantic Config)
 Status: Phase complete — ready for verification
 Last activity: 2026-05-03
 
-Progress: [███████░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [███████░░░] 67%
 | Phase 01 P02 | 7 | 2 tasks | 4 files |
 | Phase 01 P03 | 5 | 3 tasks | 6 files |
 | Phase 02 P01 | 577 | 3 tasks | 2 files |
+| Phase 02 P03 | 12 | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 02-01: ProtocolEvent uses PEP 695 type syntax (ruff UP040)
 - [Phase ?]: Plan 02-01: pure parser layer at 100% line+branch coverage; zero serial/threading/asyncio imports in arduino_protocol.py
 - [Phase ?]: Plan 02-01: Error.code modelled as ErrorCode | int union for forward-compat (Pitfall 9)
+- [Phase ?]: Plan 02-03: latched-error gate runs BEFORE _dispatch_paused gate in send_motor_angle so a faulted+paused state still raises the typed exception (BLOCKER 3)
+- [Phase ?]: Plan 02-03: heartbeat task fault-halts on ArduinoError; link is dead, firmware watchdog moot once link faulted
+- [Phase ?]: Plan 02-03: _recover catches (asyncio.TimeoutError, asyncio.QueueEmpty), latches WatchdogResetError + FAULTED, RETURNS without re-raising; deterministic surface = next send_*
+- [Phase ?]: Plan 02-03: USB-disconnect latches LinkLostError, NOT FirmwareErrorReceived(ErrorCode.NONE); ErrorCode.NONE is firmware-only sentinel per protocol.h:68
 
 ### Pending Todos
 
@@ -98,6 +103,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-03T18:56:03.979Z
+Last session: 2026-05-03T19:19:35.376Z
 Stopped at: "Plan 01-01 complete: pastor_tracker scaffold + lint/type/test policy + commitizen hook"
 Resume file: None

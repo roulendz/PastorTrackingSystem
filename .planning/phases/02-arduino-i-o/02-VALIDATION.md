@@ -2,8 +2,8 @@
 phase: 2
 slug: arduino-i-o
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-05-03
 ---
 
@@ -39,14 +39,14 @@ created: 2026-05-03
 
 | Req ID | Plan | Wave | Behavior | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |--------|------|------|----------|------------|-----------------|-----------|-------------------|-------------|--------|
-| IO-ARD-01 | 02-02 | 1 | VID:PID auto-detect, configured-port override, no-match crash | T-02-01 (USB spoof) | VID:PID match is sole gate; ConfigPortAbsent / NoArduinoFound on miss | unit | `pytest tests/test_arduino_transport.py::test_discover -x` | ❌ W0 | ⬜ pending |
-| IO-ARD-02 | 02-03 | 2 | Boot handshake `READY:v2`; abort on mismatch; timeout error | T-02-02 (preamble parse) | Skip `SettingsInfo`/`FeedbackHeader`; `ProtocolVersionMismatchError` / `HandshakeTimeoutError` on miss | unit (FakeSerial) | `pytest tests/test_arduino_motor_handshake.py -x` | ❌ W0 | ⬜ pending |
-| IO-ARD-03 | 02-03 | 2 | TX wrapper produces correct ASCII bytes per command tag; `asyncio.Lock` serialises writers | T-02-03 (interleaved bytes) | Single `asyncio.Lock` over `loop.run_in_executor`; INPUT_BUFFER_SIZE=48 enforced pre-send | unit | `pytest tests/test_arduino_motor_tx.py -x` | ❌ W0 | ⬜ pending |
-| IO-ARD-04 | 02-01 | 1 | Parser handles all 9 RX prefixes + malformed; `seq` gap > 5 → WARN | T-02-04 (parser DoS) | Reject lines > 256 B; `ProtocolParseError` containment; `math.isfinite()` on floats | unit | `pytest tests/test_arduino_protocol.py -x` | ❌ W0 (BRANCH-COVERAGE GATE: 100 %) | ⬜ pending |
-| IO-ARD-05 | 02-03 | 2 | Heartbeat emits `Q` every `arduino_heartbeat_interval_sec`; cancels cleanly | T-02-05 (TX deadlock) | Lock non-reentrant; heartbeat shares lock with command sender | unit (FakeSerial + virtual clock) | `pytest tests/test_arduino_motor_heartbeat.py -x` | ❌ W0 | ⬜ pending |
-| IO-ARD-06 | 02-03 | 3 | Mid-session `READY:v2` triggers settings → limits re-issue; pause `M:` until both echoed; ERROR on ack timeout | T-02-06 (false reset) | Watchdog gate uses `Ready` events post-handshake only; `RESET:` lines are acks not signals | integration (FakeSerial replay) | `pytest tests/test_arduino_motor_recovery.py -x` | ❌ W0 | ⬜ pending |
-| IO-ARD-07 | 02-03 | 2 | `ERROR:N` (codes 1–11) halts dispatch; raises `FirmwareErrorReceived`; manual reset required | T-02-07 (silent error) | No `except Exception: pass`; ERROR halts at orchestrator boundary | unit (parametrized over codes) | `pytest tests/test_arduino_motor_error.py -x` | ❌ W0 | ⬜ pending |
-| TEST-04 | 02-03 | 3 | Golden trace replay through full pipeline (handshake → FB stream → ERROR halt) | T-02-08 (e2e drift) | Canned bytes mirror firmware exactly; deterministic | integration | `pytest tests/test_arduino_motor_replay.py -x` | ❌ W0 | ⬜ pending |
+| IO-ARD-01 | 02-02 | 1 | VID:PID auto-detect, configured-port override, no-match crash | T-02-01 (USB spoof) | VID:PID match is sole gate; ConfigPortAbsent / NoArduinoFound on miss | unit | `pytest tests/test_arduino_transport.py::test_discover -x` | ✅ | ✅ green |
+| IO-ARD-02 | 02-03 | 2 | Boot handshake `READY:v2`; abort on mismatch; timeout error | T-02-02 (preamble parse) | Skip `SettingsInfo`/`FeedbackHeader`; `ProtocolVersionMismatchError` / `HandshakeTimeoutError` on miss | unit (FakeSerial) | `pytest tests/test_arduino_motor_handshake.py -x` | ✅ | ✅ green |
+| IO-ARD-03 | 02-03 | 2 | TX wrapper produces correct ASCII bytes per command tag; `asyncio.Lock` serialises writers | T-02-03 (interleaved bytes) | Single `asyncio.Lock` over `loop.run_in_executor`; INPUT_BUFFER_SIZE=48 enforced pre-send | unit | `pytest tests/test_arduino_motor_tx.py -x` | ✅ | ✅ green |
+| IO-ARD-04 | 02-01 | 1 | Parser handles all 9 RX prefixes + malformed; `seq` gap > 5 → WARN | T-02-04 (parser DoS) | Reject lines > 256 B; `ProtocolParseError` containment; `math.isfinite()` on floats | unit | `pytest tests/test_arduino_protocol.py -x` | ✅ (100 % branch) | ✅ green |
+| IO-ARD-05 | 02-03 | 2 | Heartbeat emits `Q` every `arduino_heartbeat_interval_sec`; cancels cleanly | T-02-05 (TX deadlock) | Lock non-reentrant; heartbeat shares lock with command sender | unit (FakeSerial + virtual clock) | `pytest tests/test_arduino_motor_heartbeat.py -x` | ✅ | ✅ green |
+| IO-ARD-06 | 02-03 | 3 | Mid-session `READY:v2` triggers settings → limits re-issue; pause `M:` until both echoed; ERROR on ack timeout | T-02-06 (false reset) | Watchdog gate uses `Ready` events post-handshake only; `RESET:` lines are acks not signals | integration (FakeSerial replay) | `pytest tests/test_arduino_motor_recovery.py -x` | ✅ | ✅ green |
+| IO-ARD-07 | 02-03 | 2 | `ERROR:N` (codes 1–11) halts dispatch; raises `FirmwareErrorReceived`; manual reset required | T-02-07 (silent error) | No `except Exception: pass`; ERROR halts at orchestrator boundary | unit (parametrized over codes) | `pytest tests/test_arduino_motor_error.py -x` | ✅ | ✅ green |
+| TEST-04 | 02-03 | 3 | Golden trace replay through full pipeline (handshake → FB stream → ERROR halt) | T-02-08 (e2e drift) | Canned bytes mirror firmware exactly; deterministic | integration | `pytest tests/test_arduino_motor_replay.py -x` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -54,17 +54,17 @@ created: 2026-05-03
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_arduino_protocol.py` — covers IO-ARD-04
-- [ ] `tests/test_arduino_transport.py` — covers IO-ARD-01
-- [ ] `tests/test_arduino_motor_handshake.py` — covers IO-ARD-02
-- [ ] `tests/test_arduino_motor_tx.py` — covers IO-ARD-03
-- [ ] `tests/test_arduino_motor_heartbeat.py` — covers IO-ARD-05
-- [ ] `tests/test_arduino_motor_recovery.py` — covers IO-ARD-06
-- [ ] `tests/test_arduino_motor_error.py` — covers IO-ARD-07
-- [ ] `tests/test_arduino_motor_replay.py` — covers TEST-04
-- [ ] `tests/fixtures/arduino_traces.py` — canned byte sequences shared between recovery + replay tests
-- [ ] Add `pyserial>=3.5,<4.0` to `[project.dependencies]` in `pastor_tracker/pyproject.toml`
-- [ ] Add `pytest-cov>=5,<7` to dev deps so the 90 / 100 % coverage gate is automatable
+- [x] `tests/test_arduino_protocol.py` — covers IO-ARD-04
+- [x] `tests/test_arduino_transport.py` — covers IO-ARD-01
+- [x] `tests/test_arduino_motor_handshake.py` — covers IO-ARD-02
+- [x] `tests/test_arduino_motor_tx.py` — covers IO-ARD-03
+- [x] `tests/test_arduino_motor_heartbeat.py` — covers IO-ARD-05
+- [x] `tests/test_arduino_motor_recovery.py` — covers IO-ARD-06
+- [x] `tests/test_arduino_motor_error.py` — covers IO-ARD-07
+- [x] `tests/test_arduino_motor_replay.py` — covers TEST-04
+- [x] `tests/fixtures/arduino_traces.py` — canned byte sequences shared between recovery + replay tests
+- [x] Add `pyserial>=3.5,<4.0` to `[project.dependencies]` in `pastor_tracker/pyproject.toml`
+- [x] Add `pytest-cov>=5,<7` to dev deps so the 90 / 100 % coverage gate is automatable
 
 *If none: "Existing infrastructure covers all phase requirements." — N/A here, Wave 0 is non-empty.*
 
@@ -93,4 +93,4 @@ These all degrade to "log INFO and skip" in CI; deferred to QA-04 stage smoke pe
 - [ ] Feedback latency < 10 s
 - [ ] `nyquist_compliant: true` set in frontmatter once planner fills `Plan` column
 
-**Approval:** pending
+**Approval:** approved 2026-05-03 (all 8 requirements green; arduino_protocol.py 100 % line+branch; arduino_motor.py 95 % line ≥ 90 % bar; arduino_transport.py 88 % line — pre-existing 02-02 deferral, see deferred-items.md)

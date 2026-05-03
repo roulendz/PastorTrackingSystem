@@ -53,8 +53,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. `M:` dispatch enforces Δ > 0.2° and ≥ 50 ms gap; receiving `ERROR:<code>` halts tracking and surfaces a typed error event (no auto-recover)
 **Plans**: 3 plans
 - [x] 02-01-PLAN.md — Pure protocol parser + DTOs + ErrorCode enum + pyserial/pytest-cov deps (Wave 1)
-- [ ] 02-02-PLAN.md — SerialTransport Protocol + PySerial impl + FakeSerial impl + VID:PID discovery (Wave 2)
-- [ ] 02-03-PLAN.md — ArduinoMotor orchestrator (handshake, RX thread, heartbeat, watchdog recovery, ERROR halt) + 6 motor tests + golden-trace replay (Wave 3)
+- [x] 02-02-PLAN.md — SerialTransport Protocol + PySerial impl + FakeSerial impl + VID:PID discovery (Wave 2)
+- [x] 02-03-PLAN.md — ArduinoMotor orchestrator (handshake, RX thread, heartbeat, watchdog recovery, ERROR halt) + 6 motor tests + golden-trace replay (Wave 3)
 **UI hint**: no
 
 ### Phase 3: Camera I/O

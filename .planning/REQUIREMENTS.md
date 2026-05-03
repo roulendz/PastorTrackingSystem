@@ -30,12 +30,12 @@
 ### Arduino I/O
 
 - [ ] **IO-ARD-01**: VID:PID auto-detect over `serial.tools.list_ports.comports()` matching genuine Uno R3 (`2341:0043`), R4 (`2341:0069`), CH340 (`1A86:7523`), FTDI (`0403:6001`)
-- [ ] **IO-ARD-02**: Boot handshake — read up to `arduino_ready_timeout_sec`, expect `READY:v2`, abort on version mismatch with expected-vs-received log
-- [ ] **IO-ARD-03**: Async TX wrapper for `M:` `S:` `L:` `R` `Q` `E` `H` `X:` `D:` commands; rate-limited dispatcher (Δ > 0.2°, ≥ 50 ms gap)
+- [x] **IO-ARD-02**: Boot handshake — read up to `arduino_ready_timeout_sec`, expect `READY:v2`, abort on version mismatch with expected-vs-received log
+- [x] **IO-ARD-03**: Async TX wrapper for `M:` `S:` `L:` `R` `Q` `E` `H` `X:` `D:` commands; rate-limited dispatcher (Δ > 0.2°, ≥ 50 ms gap)
 - [x] **IO-ARD-04**: Threaded RX with parser for `FB:` `READY:` `SETTINGS:` `LIMITS:` `DRIVER:` `RESET:` `STOP:` `DIAG:` `ERROR:` lines; `seq` gap > 5 → WARN
-- [ ] **IO-ARD-05**: 200 ms heartbeat task while tracking — sends `Q` (or other) so firmware never hits 1000 ms PC-heartbeat timeout
-- [ ] **IO-ARD-06**: Watchdog-reset recovery — re-receipt of `READY:v2` mid-session = MCU reset → re-issue settings + limits + WARN log
-- [ ] **IO-ARD-07**: `ERROR:` from firmware halts tracking, surfaces to UI, requires manual reset; `ERROR:11` (heartbeat lost) logs ERROR for investigation
+- [x] **IO-ARD-05**: 200 ms heartbeat task while tracking — sends `Q` (or other) so firmware never hits 1000 ms PC-heartbeat timeout
+- [x] **IO-ARD-06**: Watchdog-reset recovery — re-receipt of `READY:v2` mid-session = MCU reset → re-issue settings + limits + WARN log
+- [x] **IO-ARD-07**: `ERROR:` from firmware halts tracking, surfaces to UI, requires manual reset; `ERROR:11` (heartbeat lost) logs ERROR for investigation
 
 ### Camera I/O
 
@@ -87,7 +87,7 @@
 - [x] **TEST-01**: Property tests for `core/geometry.py` (hypothesis)
 - [x] **TEST-02**: Step-response test for `core/damping.py` — no overshoot
 - [ ] **TEST-03**: Unit tests for `motion_analyzer.py` (hysteresis + dwell), `framer.py` (third selection), `pan_controller.py` (deadband + clamp)
-- [ ] **TEST-04**: Integration test for Arduino protocol parser using fake-serial replay of canned `FB:` / `READY:` / `ERROR:` lines + heartbeat verification
+- [x] **TEST-04**: Integration test for Arduino protocol parser using fake-serial replay of canned `FB:` / `READY:` / `ERROR:` lines + heartbeat verification
 - [x] **TEST-05**: No mocked Kalman/damping math — test real implementations
 
 ### Docs + Quality
@@ -146,12 +146,12 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | CORE-03 | Phase 1 | Complete |
 | CORE-04 | Phase 1 | Complete |
 | IO-ARD-01 | Phase 2 | Pending |
-| IO-ARD-02 | Phase 2 | Pending |
-| IO-ARD-03 | Phase 2 | Pending |
+| IO-ARD-02 | Phase 2 | Complete |
+| IO-ARD-03 | Phase 2 | Complete |
 | IO-ARD-04 | Phase 2 | Complete |
-| IO-ARD-05 | Phase 2 | Pending |
-| IO-ARD-06 | Phase 2 | Pending |
-| IO-ARD-07 | Phase 2 | Pending |
+| IO-ARD-05 | Phase 2 | Complete |
+| IO-ARD-06 | Phase 2 | Complete |
+| IO-ARD-07 | Phase 2 | Complete |
 | IO-CAM-01 | Phase 3 | Pending |
 | IO-CAM-02 | Phase 3 | Pending |
 | IO-CAM-03 | Phase 3 | Pending |
@@ -182,7 +182,7 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 5 | Pending |
-| TEST-04 | Phase 2 | Pending |
+| TEST-04 | Phase 2 | Complete |
 | TEST-05 | Phase 1 | Complete |
 | DOC-01 | Phase 8 | Pending |
 | QA-01 | Phase 8 | Pending |
