@@ -233,6 +233,11 @@ class ArduinoMotor:
         )
         self._rx_thread.start()
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        # W-05: surface unexpected exceptions (non-CancelledError,
+        # non-ArduinoError) deterministically rather than letting them
+        # die silently and surface at GC as
+        # ``Task exception was never retrieved``.
+        self._heartbeat_task.add_done_callback(self._on_task_done)
         self._logger.info(
             "heartbeat_started",
             interval_ms=self._config.arduino_heartbeat_interval_ms,
@@ -249,14 +254,20 @@ class ArduinoMotor:
         which under ``filterwarnings=["error"]`` is a non-deterministic
         test failure (C-01).
         """
+        # Awaiting a task that already finished with an exception re-raises
+        # it -- but the done-callback has already retrieved + latched any
+        # unexpected exception (W-05). Suppress Exception (NOT BaseException
+        # -- KeyboardInterrupt / SystemExit must still propagate) at
+        # shutdown so close() stays a clean no-throw drain even if the
+        # task crashed mid-flight.
         if self._recover_task is not None:
             self._recover_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self._recover_task
             self._recover_task = None
         if self._heartbeat_task is not None:
             self._heartbeat_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self._heartbeat_task
             self._heartbeat_task = None
         self._stop_event.set()
@@ -394,6 +405,8 @@ class ArduinoMotor:
                 self._recover_task = asyncio.create_task(
                     self._recover(), name="arduino_recover"
                 )
+                # W-05: same exception-surface contract as the heartbeat.
+                self._recover_task.add_done_callback(self._on_task_done)
                 return
             # FAULTED, DISCONNECTED, HANDSHAKING, CLOSED: ignore the Ready
             # without enqueuing (W-02).
@@ -480,6 +493,43 @@ class ArduinoMotor:
         self._dispatch_paused = True
         self._latched_error = LinkLostError(f"link_lost: {exc}")
         self._logger.error("link_lost", reason=str(exc))
+
+    def _on_task_done(self, task: asyncio.Task[None]) -> None:
+        """Done-callback for heartbeat + recover tasks (W-05).
+
+        Surfaces unexpected exceptions deterministically rather than
+        letting them die silently and surface at GC as
+        ``Task exception was never retrieved`` (a non-deterministic
+        pytest flake under ``filterwarnings = ["error"]``).
+
+        Cancellation and :class:`ArduinoError` (the documented graceful
+        exit conditions for both tasks) are ignored; any other exception
+        latches a :class:`LinkLostError` so the next public ``send_*``
+        call surfaces it via the latched-error gate.
+        """
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is None:
+            return
+        if isinstance(exc, ArduinoError):
+            return
+        # Unknown failure -- treat as link-lost class so the existing
+        # latched-error gate handles surfacing without inventing a new
+        # error type. Preserve the original via __cause__ for debugging.
+        latched = LinkLostError(
+            f"{task.get_name()} crashed: {type(exc).__name__}: {exc}"
+        )
+        latched.__cause__ = exc
+        self._latched_error = latched
+        self._state = _MotorState.FAULTED
+        self._dispatch_paused = True
+        self._logger.error(
+            "task_crashed",
+            task=task.get_name(),
+            exc_type=type(exc).__name__,
+            reason=str(exc),
+        )
 
     # -----------------------------------------------------------------------
     # Heartbeat.
