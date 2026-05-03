@@ -48,6 +48,12 @@ _PROBABILITY_MIN: float = 0.0
 _PROBABILITY_MAX: float = 1.0
 
 _TIME_CONSTANT_MAX_SEC: float = 10.0
+# Normalized-frame velocity ceiling. 1.0 norm/sec = subject crosses the full
+# frame width in one second; well above any plausible pastor motion (PROMPT.md
+# motion thresholds default 0.08 norm/sec). Distinct constant prevents the
+# unit-confusion bug of reusing the time-domain ceiling for velocity fields
+# (CLAUDE.md rule 6 — name what you mean).
+_VELOCITY_THRESHOLD_MAX_NORM_PER_SEC: float = 1.0
 _PAN_VELOCITY_MAX_DEG_PER_SEC: float = 360.0
 
 # Firmware clamps from PROMPT.md ## Settings clamps — host MUST mirror.
@@ -123,11 +129,11 @@ class Config(BaseSettings):
         default=0.55, ge=_PROBABILITY_MIN, le=_PROBABILITY_MAX
     )
     motion_threshold_norm_per_sec: float = Field(
-        default=0.08, gt=0.0, le=_TIME_CONSTANT_MAX_SEC
+        default=0.08, gt=0.0, le=_VELOCITY_THRESHOLD_MAX_NORM_PER_SEC
     )
     motion_hysteresis_sec: float = Field(default=0.3, gt=0.0, le=_TIME_CONSTANT_MAX_SEC)
     dwell_threshold_norm_per_sec: float = Field(
-        default=0.03, gt=0.0, le=_TIME_CONSTANT_MAX_SEC
+        default=0.03, gt=0.0, le=_VELOCITY_THRESHOLD_MAX_NORM_PER_SEC
     )
     dwell_duration_sec: float = Field(default=1.5, gt=0.0, le=_TIME_CONSTANT_MAX_SEC)
 
