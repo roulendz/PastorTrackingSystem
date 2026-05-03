@@ -106,3 +106,15 @@ def test_invalid_fov_raises() -> None:
         normalized_x_to_angle_deg(0.5, 0.0)
     with pytest.raises(ValueError, match="horizontal_fov_deg"):
         normalized_x_to_angle_deg(0.5, 180.0)
+
+
+def test_invalid_angle_raises() -> None:
+    """``angle_deg_to_normalized_x`` rejects ``|angle| > fov/2`` (CR-01)."""
+    with pytest.raises(ValueError, match="angle_deg"):
+        angle_deg_to_normalized_x(50.0, DEFAULT_FOV_DEG)  # |angle| > fov/2
+    with pytest.raises(ValueError, match="angle_deg"):
+        angle_deg_to_normalized_x(90.0, DEFAULT_FOV_DEG)
+    with pytest.raises(ValueError, match="angle_deg"):
+        angle_deg_to_normalized_x(180.0, DEFAULT_FOV_DEG)
+    with pytest.raises(ValueError, match="angle_deg"):
+        angle_deg_to_normalized_x(-90.0, DEFAULT_FOV_DEG)

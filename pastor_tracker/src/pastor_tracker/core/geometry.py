@@ -20,6 +20,14 @@ HALF: float = 0.5
 NORMALIZED_RANGE: float = NORMALIZED_X_MAX - NORMALIZED_X_MIN  # 1.0
 TWO: float = 2.0
 
+# Float-drift tolerance on the half-FOV boundary check in
+# ``angle_deg_to_normalized_x``. The forward map ``atan(±1 * tan(half_fov))``
+# is mathematically exactly ``±half_fov_deg`` but drifts by ~1 ULP for some
+# FOV values (~5e-15 deg). Tolerating ~1e-9 deg here keeps roundtrips legal
+# without admitting any out-of-domain caller (smallest plausible "real" angle
+# in this app is the 0.2° dispatcher delta — eight orders of magnitude bigger).
+_HALF_FOV_BOUNDARY_TOL_DEG: float = 1e-9
+
 
 def normalized_x_to_angle_deg(
     normalized_x: float, horizontal_fov_deg: float
@@ -49,13 +57,26 @@ def normalized_x_to_angle_deg(
 def angle_deg_to_normalized_x(
     angle_deg: float, horizontal_fov_deg: float
 ) -> float:
-    """Inverse of :func:`normalized_x_to_angle_deg`."""
+    """Inverse of :func:`normalized_x_to_angle_deg`.
+
+    Domain: ``angle_deg ∈ [-fov/2, +fov/2]``. Out-of-domain inputs raise
+    ``ValueError`` (tiger-style fail-fast — symmetric with the forward map).
+    """
     if not FOV_DEG_MIN_EXCLUSIVE < horizontal_fov_deg < FOV_DEG_MAX_EXCLUSIVE:
         raise ValueError(
             f"horizontal_fov_deg out of "
             f"({FOV_DEG_MIN_EXCLUSIVE}, {FOV_DEG_MAX_EXCLUSIVE}): "
             f"{horizontal_fov_deg}"
         )
-    half_fov_rad = math.radians(horizontal_fov_deg * HALF)
+    half_fov_deg = horizontal_fov_deg * HALF
+    if (
+        angle_deg < -half_fov_deg - _HALF_FOV_BOUNDARY_TOL_DEG
+        or angle_deg > half_fov_deg + _HALF_FOV_BOUNDARY_TOL_DEG
+    ):
+        raise ValueError(
+            f"angle_deg out of [{-half_fov_deg}, {half_fov_deg}] for "
+            f"fov={horizontal_fov_deg}: {angle_deg}"
+        )
+    half_fov_rad = math.radians(half_fov_deg)
     offset = math.tan(math.radians(angle_deg)) / math.tan(half_fov_rad)
     return (offset + NORMALIZED_RANGE) * HALF
