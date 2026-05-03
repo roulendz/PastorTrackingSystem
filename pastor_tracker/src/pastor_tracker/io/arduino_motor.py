@@ -511,6 +511,34 @@ class ArduinoMotor:
                 stage_exc=str(exc),
             )
             return
+        except LinkLostError as exc:
+            # USB unplug mid-recovery: preserve the typed surface so the
+            # next send_* raises LinkLostError (not WatchdogResetError).
+            self._latched_error = exc
+            self._state = _MotorState.FAULTED
+            self._logger.error(
+                "watchdog_recovery_failed",
+                reason="link_lost",
+                stage_exc=str(exc),
+            )
+            return
+        except ValueError as exc:
+            # 47-byte TX buffer guard tripped while re-issuing settings/limits
+            # (e.g., config drift). Latch deterministically.
+            self._latched_error = WatchdogResetError(
+                f"recovery write error: {exc}"
+            )
+            self._state = _MotorState.FAULTED
+            self._logger.error(
+                "watchdog_recovery_failed",
+                reason="invalid_payload",
+                stage_exc=str(exc),
+            )
+            return
+        except asyncio.CancelledError:
+            # close() awaits the cancellation via gather(return_exceptions=True);
+            # propagate so cancellation semantics stay correct (C-01 + C-02).
+            raise
         # WARN 6 -- drain ONE trailing "SETTINGS: saved to EEPROM"
         # SettingsInfo so the public events queue does NOT receive
         # recovery noise (RESEARCH line 506).

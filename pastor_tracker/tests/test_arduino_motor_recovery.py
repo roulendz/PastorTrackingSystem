@@ -26,6 +26,7 @@ from pastor_tracker.config import Config
 from pastor_tracker.core.types import MotorCommand
 from pastor_tracker.io.arduino_motor import (
     ArduinoMotor,
+    LinkLostError,
     WatchdogResetError,
     _MotorState,
 )
@@ -185,6 +186,95 @@ async def test_motor_angle_paused_during_recovery(
         )
         m_count_after = sum(1 for w in fake.captured_writes if w.startswith(b"M:"))
         assert m_count_after == m_count_during + 1
+    finally:
+        await motor.close()
+
+
+async def test_recovery_link_lost_during_settings_send_latches_link_lost_error(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """C-02: LinkLostError raised inside _recover is caught + latched as
+    LinkLostError (preserving the typed surface), not as WatchdogResetError.
+    Without C-02 the exception escapes as an unhandled task exception.
+    """
+    cfg_kwargs: dict[str, object] = {
+        **valid_config_dict,
+        "arduino_ready_timeout_sec": 5.0,
+    }
+    fake = FakeSerialTransport()
+    fake.feed_rx(b"SETTINGS: defaults (no valid EEPROM)")
+    fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+    fake.feed_rx(b"READY:v2")
+    motor = ArduinoMotor(fake, Config(**cfg_kwargs))
+    await motor.start()
+    try:
+        # Trigger recovery; do NOT feed Settings ack yet -- recovery blocks
+        # waiting for it inside _wait_for_event.
+        fake.feed_rx(b"SETTINGS: loaded from EEPROM")
+        fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+        fake.feed_rx(b"READY:v2")
+        await wait_for_state(motor, _MotorState.RECOVERING, timeout=1.0)
+        # Simulate USB unplug mid-recovery: latch LinkLostError on the
+        # loop thread (mimics the RX-thread bridge translator path). The
+        # next _wait_for_event call observes _latched_error and raises
+        # LinkLostError, which _recover must catch and preserve as-is.
+        # Latch BEFORE feeding the ack so the latched-error gate trips
+        # inside the next send_settings/send_limits or _raise_if_latched.
+        # Easiest path: directly invoke _on_link_lost (it runs sync on the
+        # loop thread the same way the RX-thread bridge does).
+        # However, _on_link_lost just SETS the latched error -- it doesn't
+        # interrupt the in-flight _wait_for_event. We need to feed an ack
+        # so the await returns, THEN the next send_limits hits the
+        # latched-error gate and raises LinkLostError inside _recover.
+        # That LinkLostError must be caught by C-02's broadened except.
+        motor._on_link_lost(RuntimeError("simulated USB unplug"))
+        fake.feed_rx(b"SETTINGS:25000.000,12500.000,0.000,0.000,0.000")
+        # Wait for FAULTED -- _recover should latch and return cleanly.
+        await wait_for_state(motor, _MotorState.FAULTED, timeout=1.0)
+        # Critical: latched error must STILL be LinkLostError, not coerced
+        # to WatchdogResetError by C-02's catch.
+        assert isinstance(motor._latched_error, LinkLostError), (
+            f"expected LinkLostError, got {type(motor._latched_error).__name__}"
+        )
+        with pytest.raises(LinkLostError):
+            await motor.send_motor_angle(
+                MotorCommand(target_angle_deg=0.0, timestamp_ns=1)
+            )
+    finally:
+        await motor.close()
+
+
+async def test_recovery_cancelled_propagates(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """C-02: CancelledError inside _recover must propagate, not be swallowed."""
+    cfg_kwargs: dict[str, object] = {
+        **valid_config_dict,
+        "arduino_ready_timeout_sec": 5.0,
+    }
+    fake = FakeSerialTransport()
+    fake.feed_rx(b"SETTINGS: defaults (no valid EEPROM)")
+    fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+    fake.feed_rx(b"READY:v2")
+    motor = ArduinoMotor(fake, Config(**cfg_kwargs))
+    await motor.start()
+    try:
+        fake.feed_rx(b"SETTINGS: loaded from EEPROM")
+        fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+        fake.feed_rx(b"READY:v2")
+        await wait_for_state(motor, _MotorState.RECOVERING, timeout=1.0)
+        recover_task = motor._recover_task
+        assert recover_task is not None
+        # Cancel directly. The task awaits the cancellation cleanly because
+        # _recover re-raises CancelledError (does not swallow).
+        recover_task.cancel()
+        # Awaiting the cancelled task must produce CancelledError, NOT
+        # latch WatchdogResetError or LinkLostError.
+        with pytest.raises(asyncio.CancelledError):
+            await recover_task
+        # _latched_error must NOT be set: cancellation is operator-driven,
+        # not a fault condition.
+        assert motor._latched_error is None
     finally:
         await motor.close()
 
