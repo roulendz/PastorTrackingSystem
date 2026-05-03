@@ -1,0 +1,9 @@
+# Conventional Commits enforcement for pastor_tracker.
+# Install once per clone:
+#   cd pastor_tracker && uv run pre-commit install --hook-type commit-msg
+repos:
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.15.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
