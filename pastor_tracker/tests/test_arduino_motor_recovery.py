@@ -279,6 +279,92 @@ async def test_recovery_cancelled_propagates(
         await motor.close()
 
 
+async def test_burst_ready_does_not_double_recover(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """W-01: two mid-session Ready events back-to-back must spawn exactly
+    one _recover task (no double-spawn race).
+    """
+    cfg_kwargs: dict[str, object] = {
+        **valid_config_dict,
+        "arduino_ready_timeout_sec": 5.0,
+    }
+    fake = FakeSerialTransport()
+    fake.feed_rx(b"SETTINGS: defaults (no valid EEPROM)")
+    fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+    fake.feed_rx(b"READY:v2")
+    motor = ArduinoMotor(fake, Config(**cfg_kwargs))
+    await motor.start()
+    try:
+        # Burst: feed two mid-session preambles back-to-back. Each preamble
+        # ends in Ready; the FIRST Ready spawns recovery, the SECOND must be
+        # dropped by the in-flight guard.
+        fake.feed_rx(b"SETTINGS: loaded from EEPROM")
+        fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+        fake.feed_rx(b"READY:v2")
+        fake.feed_rx(b"SETTINGS: loaded from EEPROM")
+        fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+        fake.feed_rx(b"READY:v2")
+        await wait_for_state(motor, _MotorState.RECOVERING, timeout=1.0)
+        first_task = motor._recover_task
+        assert first_task is not None
+        # Wait long enough that the second Ready would have been processed.
+        await asyncio.sleep(0.05)
+        # The same task must still be the in-flight one -- no second task
+        # was spawned (otherwise _recover_task would have been overwritten
+        # and first_task would not match).
+        assert motor._recover_task is first_task, (
+            "second mid-session Ready spawned a duplicate _recover task"
+        )
+        # Drain acks so close() proceeds cleanly.
+        fake.feed_rx(b"SETTINGS:25000.000,12500.000,0.000,0.000,0.000")
+        fake.feed_rx(b"LIMITS:-90.000,90.000")
+        fake.feed_rx(b"SETTINGS: saved to EEPROM")
+        await wait_for_pause_cleared(motor, timeout=1.0)
+    finally:
+        await motor.close()
+
+
+async def test_mid_session_ready_not_enqueued_to_public_events(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """W-02: mid-session Ready (control signal) must not appear in events()."""
+    cfg_kwargs: dict[str, object] = {
+        **valid_config_dict,
+        "arduino_ready_timeout_sec": 5.0,
+    }
+    fake = FakeSerialTransport()
+    fake.feed_rx(b"SETTINGS: defaults (no valid EEPROM)")
+    fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+    fake.feed_rx(b"READY:v2")
+    motor = ArduinoMotor(fake, Config(**cfg_kwargs))
+    await motor.start()
+    try:
+        # First mid-session Ready -> recovery spawn (case 1, RUNNING).
+        fake.feed_rx(b"SETTINGS: loaded from EEPROM")
+        fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+        fake.feed_rx(b"READY:v2")
+        await wait_for_state(motor, _MotorState.RECOVERING, timeout=1.0)
+        # Second mid-session Ready WHILE RECOVERING (case 2). Must be dropped,
+        # NOT enqueued to public events.
+        fake.feed_rx(b"READY:v2")
+        # Brief settle so the bridged Ready is processed before we drain.
+        await asyncio.sleep(0.05)
+        # Drain remaining acks so we can complete recovery (and so the
+        # event-queue drain below is bounded).
+        fake.feed_rx(b"SETTINGS:25000.000,12500.000,0.000,0.000,0.000")
+        fake.feed_rx(b"LIMITS:-90.000,90.000")
+        fake.feed_rx(b"SETTINGS: saved to EEPROM")
+        await wait_for_pause_cleared(motor, timeout=1.0)
+        public = await _drain_public_events(motor)
+        from pastor_tracker.io.arduino_protocol import Ready
+        assert not any(isinstance(ev, Ready) for ev in public), (
+            "mid-session Ready leaked into public events queue (W-02)"
+        )
+    finally:
+        await motor.close()
+
+
 async def test_close_during_recovery_cancels_cleanly(
     valid_config_dict: dict[str, object],
 ) -> None:

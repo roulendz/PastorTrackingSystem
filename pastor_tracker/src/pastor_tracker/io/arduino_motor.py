@@ -362,12 +362,38 @@ class ArduinoMotor:
             self._check_seq_gap(event)
             self._enqueue(event)
             return
-        if isinstance(event, Ready) and self._state is _MotorState.RUNNING:
+        if isinstance(event, Ready):
             # Mid-session Ready = MCU watchdog reset signal. Don't enqueue
-            # this Ready into the public events queue -- it is a control
-            # signal, not a payload event.
-            self._logger.warning("watchdog_reset_detected")
-            self._recover_task = asyncio.create_task(self._recover())
+            # into the public events queue -- it is a control signal, not
+            # a payload event (W-02). Three sub-cases:
+            #   1. RUNNING  -> spawn recovery (the normal case).
+            #   2. RECOVERING / a recover task is already in flight ->
+            #      drop duplicate to avoid double-spawn race (W-01).
+            #   3. FAULTED  -> swallow; recovery is no longer possible until
+            #      operator-driven reset.
+            # Cases 2/3 must NOT fall through to _enqueue (W-02).
+            if self._recover_task is not None and not self._recover_task.done():
+                self._logger.warning(
+                    "recovery_already_in_flight",
+                    state=self._state.value,
+                )
+                return
+            if self._state is _MotorState.RUNNING:
+                # Flip state synchronously BEFORE create_task so a second
+                # bridged Ready in the same tick batch sees RECOVERING and
+                # hits the in-flight guard above (W-01).
+                self._state = _MotorState.RECOVERING
+                self._dispatch_paused = True
+                self._logger.warning("watchdog_reset_detected")
+                self._recover_task = asyncio.create_task(
+                    self._recover(), name="arduino_recover"
+                )
+                return
+            # FAULTED, DISCONNECTED, HANDSHAKING, CLOSED: ignore the Ready
+            # without enqueuing (W-02).
+            self._logger.debug(
+                "ready_ignored", state=self._state.value
+            )
             return
         if isinstance(event, Error):
             code_name = (
@@ -474,88 +500,101 @@ class ArduinoMotor:
         under ``filterwarnings = ["error"]`` becomes a non-deterministic
         test failure. Tiger-style requires a deterministic surface =
         the next ``send_*`` call raises the latched error.
+
+        State transition + ``_dispatch_paused = True`` happen synchronously
+        in :meth:`_on_rx_event` BEFORE this task is spawned (W-01) so the
+        in-flight guard there is race-free. Clearing ``_recover_task`` on
+        the way out is done in a ``finally`` block so a second mid-session
+        Ready arriving after a successful recovery can spawn a fresh task
+        (W-01).
         """
-        self._state = _MotorState.RECOVERING
-        self._dispatch_paused = True
         self._logger.warning(
             "watchdog_reset_detected",
             action="re-issuing settings+limits",
         )
         timeout = self._config.arduino_ready_timeout_sec
         try:
-            await self.send_settings(
-                self._config.motor_max_speed_steps_per_sec,
-                self._config.motor_max_accel_steps_per_sec2,
-                0.0,
-                0.0,
-                0.0,
-            )
-            await self._wait_for_event(
-                Settings, timeout=timeout, stage="settings"
-            )
-            await self.send_limits(
-                self._config.motor_angle_min_deg,
-                self._config.motor_angle_max_deg,
-            )
-            await self._wait_for_event(
-                Limits, timeout=timeout, stage="limits"
-            )
-        except (asyncio.TimeoutError, asyncio.QueueEmpty) as exc:  # noqa: UP041
-            self._latched_error = WatchdogResetError(
-                f"recovery ack timeout: {exc}"
-            )
-            self._state = _MotorState.FAULTED
-            self._logger.error(
-                "watchdog_recovery_failed",
-                reason="ack_timeout",
-                stage_exc=str(exc),
-            )
-            return
-        except LinkLostError as exc:
-            # USB unplug mid-recovery: preserve the typed surface so the
-            # next send_* raises LinkLostError (not WatchdogResetError).
-            self._latched_error = exc
-            self._state = _MotorState.FAULTED
-            self._logger.error(
-                "watchdog_recovery_failed",
-                reason="link_lost",
-                stage_exc=str(exc),
-            )
-            return
-        except ValueError as exc:
-            # 47-byte TX buffer guard tripped while re-issuing settings/limits
-            # (e.g., config drift). Latch deterministically.
-            self._latched_error = WatchdogResetError(
-                f"recovery write error: {exc}"
-            )
-            self._state = _MotorState.FAULTED
-            self._logger.error(
-                "watchdog_recovery_failed",
-                reason="invalid_payload",
-                stage_exc=str(exc),
-            )
-            return
-        except asyncio.CancelledError:
-            # close() awaits the cancellation via gather(return_exceptions=True);
-            # propagate so cancellation semantics stay correct (C-01 + C-02).
-            raise
-        # WARN 6 -- drain ONE trailing "SETTINGS: saved to EEPROM"
-        # SettingsInfo so the public events queue does NOT receive
-        # recovery noise (RESEARCH line 506).
-        with contextlib.suppress(asyncio.TimeoutError):
-            trailing = await self._wait_for_event(
-                SettingsInfo,
-                timeout=_RECOVERY_TRAILING_DRAIN_SEC,
-                stage="trailing_settings_info",
-            )
-            if isinstance(trailing, SettingsInfo):
-                self._logger.debug(
-                    "recovery_drained_trailing_settings_info",
-                    message=trailing.message,
+            try:
+                await self.send_settings(
+                    self._config.motor_max_speed_steps_per_sec,
+                    self._config.motor_max_accel_steps_per_sec2,
+                    0.0,
+                    0.0,
+                    0.0,
                 )
-        self._dispatch_paused = False
-        self._state = _MotorState.RUNNING
-        self._logger.warning("watchdog_recovery_complete")
+                await self._wait_for_event(
+                    Settings, timeout=timeout, stage="settings"
+                )
+                await self.send_limits(
+                    self._config.motor_angle_min_deg,
+                    self._config.motor_angle_max_deg,
+                )
+                await self._wait_for_event(
+                    Limits, timeout=timeout, stage="limits"
+                )
+            except (asyncio.TimeoutError, asyncio.QueueEmpty) as exc:  # noqa: UP041
+                self._latched_error = WatchdogResetError(
+                    f"recovery ack timeout: {exc}"
+                )
+                self._state = _MotorState.FAULTED
+                self._logger.error(
+                    "watchdog_recovery_failed",
+                    reason="ack_timeout",
+                    stage_exc=str(exc),
+                )
+                return
+            except LinkLostError as exc:
+                # USB unplug mid-recovery: preserve the typed surface so
+                # the next send_* raises LinkLostError (not
+                # WatchdogResetError).
+                self._latched_error = exc
+                self._state = _MotorState.FAULTED
+                self._logger.error(
+                    "watchdog_recovery_failed",
+                    reason="link_lost",
+                    stage_exc=str(exc),
+                )
+                return
+            except ValueError as exc:
+                # 47-byte TX buffer guard tripped while re-issuing
+                # settings/limits (e.g., config drift). Latch
+                # deterministically.
+                self._latched_error = WatchdogResetError(
+                    f"recovery write error: {exc}"
+                )
+                self._state = _MotorState.FAULTED
+                self._logger.error(
+                    "watchdog_recovery_failed",
+                    reason="invalid_payload",
+                    stage_exc=str(exc),
+                )
+                return
+            except asyncio.CancelledError:
+                # close() awaits the cancellation via
+                # contextlib.suppress(CancelledError); propagate so
+                # cancellation semantics stay correct (C-01 + C-02).
+                raise
+            # WARN 6 -- drain ONE trailing "SETTINGS: saved to EEPROM"
+            # SettingsInfo so the public events queue does NOT receive
+            # recovery noise (RESEARCH line 506).
+            with contextlib.suppress(asyncio.TimeoutError):
+                trailing = await self._wait_for_event(
+                    SettingsInfo,
+                    timeout=_RECOVERY_TRAILING_DRAIN_SEC,
+                    stage="trailing_settings_info",
+                )
+                if isinstance(trailing, SettingsInfo):
+                    self._logger.debug(
+                        "recovery_drained_trailing_settings_info",
+                        message=trailing.message,
+                    )
+            self._dispatch_paused = False
+            self._state = _MotorState.RUNNING
+            self._logger.warning("watchdog_recovery_complete")
+        finally:
+            # W-01: allow a fresh mid-session Ready to spawn a new task
+            # after we exit (success, fault, or cancellation).
+            self._recover_task = None
 
     async def _wait_for_event(
         self,
