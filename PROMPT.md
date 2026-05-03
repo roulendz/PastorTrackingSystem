@@ -1,6 +1,6 @@
 # Pastor Tracking System — Greenfield 2026
 
-Build Python 3.12 desktop app. Track speaker on stage. Drive Arduino stepper via COM3. Input = OBS Virtual Camera. Smooth cinematic pan with rule-of-thirds lead-room.
+Build Python 3.12 desktop app. Track speaker on stage. Drive Arduino stepper over USB serial. Input = OBS Virtual Camera. Smooth cinematic pan with rule-of-thirds lead-room.
 
 ## Stack (2026 SOTA)
 
@@ -203,6 +203,16 @@ ERROR:<code> - <message>
 
 **Mechanics:** 200 steps × 180:1 gear × 8 microsteps = 288000 steps/rev.
 
+**Port auto-detect:** enumerate via `serial.tools.list_ports.comports()`, match USB VID:PID:
+- Genuine Arduino Uno R3 → `2341:0043`
+- Genuine Uno R4 → `2341:0069`
+- CH340 clone (cheap Uno) → `1A86:7523`
+- FTDI clone → `0403:6001`
+
+Open first match. If none, fall back to `arduino_port` from config; if that is `None`, exit with available-ports listing.
+
+Discovered on dev machine: this Uno enumerates on **COM6** (USB slot dependent — port number changes per USB jack and reboot, hence VID:PID match is mandatory).
+
 ## OBS Virtual Camera
 
 ```python
@@ -217,7 +227,7 @@ Each frame stamped with `time.perf_counter_ns()` at grab time.
 
 ```python
 class Config(BaseSettings, frozen=True):
-    arduino_port: str = "COM3"
+    arduino_port: str | None = None  # None = auto-detect by VID:PID; override e.g. "COM6"
     arduino_baud: int = 115200
     obs_camera_name: str = "OBS Virtual Camera"
     capture_width: int = 1920
@@ -295,7 +305,7 @@ DearPyGui single window:
 
 1. Scaffold tree + `pyproject.toml` + lint config
 2. `core/types.py` + `core/geometry.py` + `core/damping.py` with full tests
-3. `io/arduino_motor.py` — verify against real COM3
+3. `io/arduino_motor.py` — verify against real Uno (auto-detected port, fallback `COM6`)
 4. `io/obs_camera.py` — verify frame grab
 5. `perception/pose_detector.py` + `subject_tracker.py`
 6. `intent/motion_analyzer.py` + `framer.py`
