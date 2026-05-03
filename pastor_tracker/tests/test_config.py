@@ -78,6 +78,18 @@ def test_max_below_min_rejected() -> None:
         Config(motor_angle_min_deg=10.0, motor_angle_max_deg=5.0)
 
 
+def test_command_min_interval_zero_rejected() -> None:
+    """WR-05: zero interval defeats throttle — PROMPT.md ## Anti-jitter requires > 0."""
+    with pytest.raises(ValidationError):
+        Config(command_min_interval_ms=0)
+
+
+def test_command_min_delta_zero_rejected() -> None:
+    """WR-05: zero delta defeats dispatch throttle — strict gt=0 mirrors interval."""
+    with pytest.raises(ValidationError):
+        Config(command_min_delta_deg=0.0)
+
+
 # ---------- CFG-03: fail-fast on invalid ----------
 
 

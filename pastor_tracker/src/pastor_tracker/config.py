@@ -170,8 +170,11 @@ class Config(BaseSettings):
     )
 
     # --- Dispatcher rate limit ---
-    command_min_delta_deg: float = Field(default=0.2, ge=0.0, le=_DELTA_DEG_MAX)
-    command_min_interval_ms: int = Field(default=50, ge=0, le=_INTERVAL_MS_MAX)
+    # Anti-jitter throttles (PROMPT.md ## Anti-jitter). Both MUST be > 0;
+    # zero here defeats the deliberate dispatcher rate limit that pairs with
+    # deadband / vel-clamp / staleness-drop as the four jitter mitigations.
+    command_min_delta_deg: float = Field(default=0.2, gt=0.0, le=_DELTA_DEG_MAX)
+    command_min_interval_ms: int = Field(default=50, gt=0, le=_INTERVAL_MS_MAX)
 
     @model_validator(mode="after")
     def _max_above_min(self) -> Config:
