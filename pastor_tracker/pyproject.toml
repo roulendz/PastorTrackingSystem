@@ -1,0 +1,94 @@
+[project]
+name = "pastor_tracker"
+version = "0.1.0"
+description = "Cinematic auto-tracker for a single primary speaker — Python 3.12 + Arduino stepper pan."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pydantic>=2.13,<3.0",
+    "pydantic-settings>=2.14,<3.0",
+    "structlog>=24.4,<26.0",
+    "numpy>=2.4,<3.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15,<0.16",
+    "mypy>=1.20,<2.0",
+    "pytest>=8.4,<9.0",
+    "pytest-asyncio>=0.26,<2.0",
+    "hypothesis>=6.152,<7.0",
+    "commitizen>=4.15,<5.0",
+    "pre-commit>=4.0,<5.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pastor_tracker"]
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["tests/fixtures/_lint_canary.py"]
+
+[tool.ruff.lint]
+select = [
+    "F", "E", "W",          # pyflakes / pycodestyle
+    "B",                      # bugbear
+    "I",                      # isort
+    "UP",                     # pyupgrade
+    "ANN",                    # flake8-annotations (incl. ANN001/201/204/401)
+    "T20",                    # flake8-print (T201, T203)
+    "BLE",                    # flake8-blind-except (BLE001)
+    "S",                      # bandit
+    "SIM",                    # flake8-simplify
+    "RET",                    # flake8-return
+    "PLR",                    # pylint refactor (incl. PLR2004 magic-value)
+    "RUF",                    # ruff-specific
+]
+ignore = [
+    "S101",                   # assert in tests is fine
+    "PLR0913",                # too-many-arguments — pure math sometimes needs them
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN", "PLR2004", "S"]   # tests don't need full ANN, magic-value, or bandit
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+disallow_any_explicit = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+packages = ["pastor_tracker"]
+warn_unused_ignores = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["cv2.*", "dearpygui.*", "pygrabber.*", "ultralytics.*", "filterpy.*", "serial.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+filterwarnings = ["error"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "v$version"
+update_changelog_on_bump = false
