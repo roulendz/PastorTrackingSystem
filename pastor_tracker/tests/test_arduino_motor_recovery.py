@@ -189,6 +189,36 @@ async def test_motor_angle_paused_during_recovery(
         await motor.close()
 
 
+async def test_close_during_recovery_cancels_cleanly(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """C-01: close() during in-flight recovery cancels the task; no warnings."""
+    cfg_kwargs: dict[str, object] = {
+        **valid_config_dict,
+        "arduino_ready_timeout_sec": 5.0,  # long enough that we cancel mid-flight
+    }
+    fake = FakeSerialTransport()
+    fake.feed_rx(b"SETTINGS: defaults (no valid EEPROM)")
+    fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+    fake.feed_rx(b"READY:v2")
+    motor = ArduinoMotor(fake, Config(**cfg_kwargs))
+    await motor.start()
+    # Trigger recovery; feed NO acks -- recovery sits awaiting Settings.
+    fake.feed_rx(b"SETTINGS: loaded from EEPROM")
+    fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+    fake.feed_rx(b"READY:v2")
+    await wait_for_state(motor, _MotorState.RECOVERING, timeout=1.0)
+    # Capture the recover task before close() clears it.
+    recover_task = motor._recover_task
+    assert recover_task is not None
+    # close() must cancel the in-flight recover task without raising.
+    await motor.close()
+    assert motor._recover_task is None
+    assert motor.state == _MotorState.CLOSED
+    # Sanity: the cancelled task is done (cancellation observed).
+    assert recover_task.done()
+
+
 async def test_heartbeat_continues_during_recovery(
     valid_config_dict: dict[str, object],
 ) -> None:

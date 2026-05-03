@@ -233,7 +233,21 @@ class ArduinoMotor:
         )
 
     async def close(self) -> None:
-        """Cancel heartbeat, signal RX thread, join it, close transport."""
+        """Cancel heartbeat + recover task, signal RX thread, close transport.
+
+        Order matters: cancel any in-flight ``_recover`` task FIRST so it
+        cannot race the transport close with a write. Mirrors the
+        heartbeat-task shutdown pattern. Without this, an orphan
+        ``_recover`` running concurrently would write to a closed
+        transport and surface as ``Task exception was never retrieved``,
+        which under ``filterwarnings=["error"]`` is a non-deterministic
+        test failure (C-01).
+        """
+        if self._recover_task is not None:
+            self._recover_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._recover_task
+            self._recover_task = None
         if self._heartbeat_task is not None:
             self._heartbeat_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
