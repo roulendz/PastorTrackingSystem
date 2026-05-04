@@ -942,11 +942,48 @@ class ObsCamera:
         _STALE_FRAME_MAX_AGE_NS`` (100 ms) and logs WARN
         ``frame_stale_dropped``. Surfaces any latched terminal error
         once the queue drains (mirrors arduino_motor pattern).
+
+        WR-06: producer-dead watchdog. ``_frames_queue.get()``
+        blocks forever if the queue is empty and no producer is
+        alive. CR-01/WR-01 closed every known path that exits the
+        capture thread without latching an error, but a future
+        regression could re-introduce the symptom. Wrap the get in
+        ``asyncio.wait_for`` with a :data:`_FIRST_FRAME_TIMEOUT_SEC`
+        budget; on timeout, check whether the capture thread is
+        still alive. If the thread died without latching an error,
+        synthesize a typed :class:`CameraStallError` so the consumer
+        does NOT hang silently.
         """
         while True:
             if self._latched_error is not None and self._frames_queue.empty():
                 raise self._latched_error
-            frame = await self._frames_queue.get()
+            try:
+                frame = await asyncio.wait_for(
+                    self._frames_queue.get(),
+                    timeout=_FIRST_FRAME_TIMEOUT_SEC,
+                )
+            except TimeoutError:
+                # WR-06: only treat the timeout as fatal if the
+                # producer is gone AND no error is latched. If a
+                # latched error exists (race with the loop-thread
+                # latcher), the next iteration's empty-check raises
+                # it. If the thread is alive, simply continue
+                # waiting -- the camera is just idle.
+                thread_dead = (
+                    self._capture_thread is None
+                    or not self._capture_thread.is_alive()
+                )
+                if thread_dead and self._latched_error is None:
+                    raise CameraStallError(
+                        attempts=[
+                            (
+                                0,
+                                0,
+                                "capture thread dead, no error latched",
+                            ),
+                        ],
+                    ) from None
+                continue
             now_ns = time.perf_counter_ns()
             age_ns = now_ns - frame.timestamp_ns
             if age_ns > _STALE_FRAME_MAX_AGE_NS:
