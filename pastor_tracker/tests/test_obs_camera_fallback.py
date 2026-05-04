@@ -35,6 +35,7 @@ from pastor_tracker.config import Config
 from pastor_tracker.io.obs_camera import (
     _FALLBACK_HEIGHT,
     _FALLBACK_WIDTH,
+    CameraStallError,
     ObsCamera,
     _CamState,
 )
@@ -214,6 +215,69 @@ async def test_720p_breach_logs_error_continues(
         assert len(fallbacks) == 0  # no actual fallback fires when already 720p
         assert cam.current_resolution == (1280, 720)
         assert cam.state is _CamState.RUNNING
+    finally:
+        await cam.stop()
+
+
+async def test_fallback_factory_exception_latches_stall_error(
+    valid_config_dict: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CR-01 regression: factory raising on the fallback transition MUST
+    surface as a typed CameraStallError on cam.last_error rather than
+    silently kill the daemon thread.
+
+    Models the production path where the post-release 720p
+    ``VideoCapture(device_index, CAP_DSHOW)`` open fails (driver-side
+    error). The orchestrator must NOT leak self._source = None +
+    state == RUNNING + last_error == None.
+    """
+    _short_fuse(monkeypatch)
+    initial_source = FakeVideoSource(
+        script=_slow_script(1920, 1080, count=200, delay_sec=0.060),
+        width=1920,
+        height=1080,
+    )
+    call_index = [0]
+
+    def _factory(*_a: object, **_kw: object) -> FakeVideoSource:
+        idx = call_index[0]
+        call_index[0] += 1
+        if idx == 0:
+            return initial_source
+        # Fallback open raises -- mirrors a cv2 / DirectShow failure
+        # the moment the orchestrator releases the 1080p handle and
+        # tries to reopen at 720p.
+        msg = f"simulated cv2 open error during fallback attempt {idx}"
+        raise RuntimeError(msg)
+
+    cam = ObsCamera(
+        Config(**valid_config_dict),
+        video_source_factory=_factory,
+        filter_graph_factory=lambda: SimpleNamespace(
+            get_input_devices=lambda: ["OBS Virtual Camera"]
+        ),
+    )
+    await cam.start()
+    try:
+        with structlog.testing.capture_logs() as caplog:
+            await asyncio.sleep(0.8)
+            factory_failed = [
+                r
+                for r in caplog
+                if r.get("event") == "camera_fallback_factory_failed"
+            ]
+        assert len(factory_failed) >= 1
+        assert isinstance(cam.last_error, CameraStallError)
+        assert cam.state is _CamState.FAULTED
+        # The error reason MUST cite the factory exception so the
+        # operator can distinguish a fallback-open failure from a
+        # steady-state stall.
+        reasons = [a[2] for a in cam.last_error.attempts]
+        assert any("simulated cv2 open error" in r for r in reasons)
+        # Initial source MUST have been released before the failed
+        # fallback factory call (T-03-03 -- no leaked handle).
+        assert initial_source.release_calls >= 1
     finally:
         await cam.stop()
 

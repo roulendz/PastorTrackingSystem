@@ -815,12 +815,29 @@ class ObsCamera:
         if self._source is not None:
             self._source.release()
             self._source = None
-        self._source = self._video_source_factory(
-            self._device_index,
-            _FALLBACK_WIDTH,
-            _FALLBACK_HEIGHT,
-            self._config.capture_fps,
-        )
+        try:
+            self._source = self._video_source_factory(
+                self._device_index,
+                _FALLBACK_WIDTH,
+                _FALLBACK_HEIGHT,
+                self._config.capture_fps,
+            )
+        except Exception as exc:  # noqa: BLE001 -- documented translator
+            # CR-01: cv2 / DirectShow open errors during fallback MUST
+            # translate to a typed terminal stall rather than escape
+            # _capture_loop and silently kill the daemon thread.
+            # Without this, self._source stays None, state stays
+            # RUNNING, last_error stays None, and the consumer hangs
+            # on _frames_queue.get() forever.
+            self._logger.error(
+                "camera_fallback_factory_failed",
+                reason=str(exc),
+                from_dim=f"{self._current_width}x{self._current_height}",
+                to_dim=f"{_FALLBACK_WIDTH}x{_FALLBACK_HEIGHT}",
+            )
+            self._fault_with_stall(exc)
+            self._fallback_consumed = True
+            return
         self._logger.warning(
             "camera_resolution_fallback",
             from_dim=f"{self._current_width}x{self._current_height}",
