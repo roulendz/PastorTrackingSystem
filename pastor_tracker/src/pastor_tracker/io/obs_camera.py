@@ -530,6 +530,11 @@ class ObsCamera:
                 await asyncio.to_thread(
                     self._capture_thread.join, _CAPTURE_JOIN_TIMEOUT_SEC
                 )
+                # WR-03: null the handle so a subsequent stop() does
+                # not log a redundant camera_thread_exited for an
+                # already-joined thread. Mirrors the symmetric null
+                # at stop()'s join-then-null block.
+                self._capture_thread = None
             if self._source is not None:
                 # T-03-03: release on timeout path -- no leaked handle.
                 self._source.release()
