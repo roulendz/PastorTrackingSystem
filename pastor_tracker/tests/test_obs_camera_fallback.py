@@ -282,6 +282,87 @@ async def test_fallback_factory_exception_latches_stall_error(
         await cam.stop()
 
 
+async def test_fallback_does_not_trip_stall_on_slow_first_frame(
+    valid_config_dict: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CR-02 regression: a slow first-frame on the fresh 720p source
+    after fallback MUST NOT trip the stall detector.
+
+    Production CAP_DSHOW first-frame latency can be up to 3 s
+    (_FIRST_FRAME_TIMEOUT_SEC). If _capture_loop measures
+    ``now_ns - last_grab_ns`` against _STALL_THRESHOLD_NS using the
+    PRE-fallback timestamp, that delta blows through 200 ms and
+    forces an immediate spurious reopen. The fix routes the fallback
+    return value back through the loop so last_grab_ns resets to
+    None on the swap.
+
+    Test models the production scenario by giving the post-fallback
+    source a single slow first read (400 ms, > compressed stall
+    threshold of 300 ms). Without CR-02, that 400 ms would be
+    measured against the pre-fallback last_grab_ns and trip the
+    stall threshold; with CR-02, the fallback resets last_grab_ns
+    to None so the slow first frame is the new baseline rather than
+    a stall delta. Steady-state fast frames follow so the camera
+    continues running.
+    """
+    _short_fuse(monkeypatch)
+    initial_source = FakeVideoSource(
+        script=_slow_script(1920, 1080, count=200, delay_sec=0.060),
+        width=1920,
+        height=1080,
+    )
+    # Post-fallback: first read is slow (400 ms simulated CAP_DSHOW
+    # warmup -- exceeds the compressed 300 ms stall threshold);
+    # subsequent reads are fast (5 ms). Without CR-02 the 400 ms
+    # first read is charged against the pre-fallback last_grab_ns
+    # (5 ms before fallback) and trips the stall path, calling
+    # _attempt_reopen on the freshly-opened healthy 720p source.
+    shared_720 = make_solid_bgr(1280, 720, (0, 0, 0))
+    fallback_script = [
+        _ScriptedFrame(bgr=shared_720, ok=True, delay_sec=0.400),
+    ]
+    fallback_script.extend(
+        _ScriptedFrame(bgr=shared_720, ok=True, delay_sec=0.005)
+        for _ in range(200)
+    )
+    fallback_source = FakeVideoSource(
+        script=fallback_script, width=1280, height=720
+    )
+    cam = _build_camera_with_factory(
+        valid_config_dict, [initial_source, fallback_source]
+    )
+    await cam.start()
+    try:
+        with structlog.testing.capture_logs() as caplog:
+            await asyncio.sleep(1.2)
+            fallbacks = [
+                r
+                for r in caplog
+                if r.get("event") == "camera_resolution_fallback"
+            ]
+            stalls = [
+                r for r in caplog if r.get("event") == "camera_stall_detected"
+            ]
+            reopen_failed = [
+                r
+                for r in caplog
+                if r.get("event") == "camera_reopen_attempt_failed"
+            ]
+        # Fallback fires exactly once.
+        assert len(fallbacks) == 1
+        # The slow first frame on the fresh 720p source MUST NOT
+        # have been measured against the pre-fallback grab timestamp.
+        assert len(stalls) == 0
+        assert len(reopen_failed) == 0
+        assert cam.current_resolution == (_FALLBACK_WIDTH, _FALLBACK_HEIGHT)
+        # Camera stays healthy after the fallback.
+        assert cam.last_error is None
+        assert cam.state is _CamState.RUNNING
+    finally:
+        await cam.stop()
+
+
 async def test_fallback_one_shot(
     valid_config_dict: dict[str, object],
     monkeypatch: pytest.MonkeyPatch,

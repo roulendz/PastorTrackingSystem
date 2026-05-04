@@ -660,8 +660,19 @@ class ObsCamera:
                     int(_WARMUP_WINDOW_SEC * _NS_PER_SEC)
                     - (now_ns - warmup_started_ns)
                 )
-                if warmup_remaining_ns >= 0:
-                    self._maybe_fallback(p95_detector, now_ns)
+                if warmup_remaining_ns >= 0 and self._maybe_fallback(
+                    p95_detector, now_ns
+                ):
+                    # CR-02: fallback released + reopened the source.
+                    # The new 720p CAP_DSHOW first-frame latency is
+                    # documented as up to _FIRST_FRAME_TIMEOUT_SEC (3 s);
+                    # measuring (now_ns_next - last_grab_ns) against
+                    # _STALL_THRESHOLD_NS (200 ms) would deterministically
+                    # false-trip the stall detector and burn the reopen
+                    # budget on a healthy fallback. Mirror the stall-
+                    # recovery pattern (last_grab_ns = None; continue).
+                    last_grab_ns = None
+                    continue
             last_grab_ns = now_ns
             if self._loop is not None:
                 self._loop.call_soon_threadsafe(self._enqueue_frame, frame)
@@ -785,19 +796,27 @@ class ObsCamera:
     # Resolution-fallback decision.
     # -----------------------------------------------------------------------
 
-    def _maybe_fallback(self, p95: _P95Detector, now_ns: int) -> None:
+    def _maybe_fallback(self, p95: _P95Detector, now_ns: int) -> bool:
         """One-shot 1080p -> 720p fallback inside warmup window.
 
         IO-CAM-03. CONTEXT.md Area 3 lock: never re-promote, never
         re-fallback; already-720p case logs ERROR and continues
         capturing (halting kills the only camera path).
+
+        Returns ``True`` iff the source was actually swapped (the
+        caller MUST then reset ``last_grab_ns`` so the new 720p
+        CAP_DSHOW first-frame latency does not trip the 200 ms stall
+        detector). Returns ``False`` for every no-op path (already-
+        consumed / no breach / no device / already-720p / factory
+        failure -- all of which leave the grab clock untouched OR
+        terminate via _fault_with_stall).
         """
         if self._fallback_consumed:
-            return
+            return False
         if not p95.budget_breached_persistent(now_ns):
-            return
+            return False
         if self._device_index is None:
-            return
+            return False
         p95_ms = p95.current_p95_ns / _NS_PER_MS
         budget_ms = p95.budget_ns / _NS_PER_MS
         already_at_fallback = (
@@ -811,7 +830,7 @@ class ObsCamera:
                 budget_ms=budget_ms,
             )
             self._fallback_consumed = True
-            return
+            return False
         if self._source is not None:
             self._source.release()
             self._source = None
@@ -837,7 +856,7 @@ class ObsCamera:
             )
             self._fault_with_stall(exc)
             self._fallback_consumed = True
-            return
+            return False
         self._logger.warning(
             "camera_resolution_fallback",
             from_dim=f"{self._current_width}x{self._current_height}",
@@ -849,6 +868,7 @@ class ObsCamera:
         self._current_width = _FALLBACK_WIDTH
         self._current_height = _FALLBACK_HEIGHT
         self._fallback_consumed = True
+        return True
 
     # -----------------------------------------------------------------------
     # Async iterator surface (consumer side).
