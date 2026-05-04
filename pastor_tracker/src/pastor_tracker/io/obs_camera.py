@@ -608,6 +608,18 @@ class ObsCamera:
         while not self._stop_event.is_set():
             try:
                 if self._source is None:
+                    # WR-01: defense-in-depth -- a future refactor that
+                    # leaves self._source = None on a recovery branch
+                    # must surface as a typed terminal error rather
+                    # than a silent daemon exit. Today this guard is
+                    # unreachable (CR-01 closed the only known path);
+                    # tomorrow it MUST fail loud (CLAUDE.md rule 1).
+                    self._fault_with_stall(
+                        RuntimeError(
+                            "capture loop observed source=None; "
+                            "recovery path bug",
+                        ),
+                    )
                     return
                 ok, bgr = self._source.read()
             except Exception as exc:  # noqa: BLE001 -- documented translator
@@ -708,7 +720,11 @@ class ObsCamera:
 
         Single point that builds a :class:`CameraStallError` from the
         accumulated ``_reopen_history`` (plus, if present, a
-        capture-thread exception that triggered the fault).
+        capture-thread exception that triggered the fault). Sets
+        ``_stop_event`` so any subsequent iteration of
+        ``_capture_loop`` (e.g. the WR-01 ``self._source is None``
+        guard) exits cleanly without re-firing a duplicate fault that
+        would clobber the original ``_latched_error``.
         """
         history = list(self._reopen_history)
         if reason is not None:
@@ -724,6 +740,13 @@ class ObsCamera:
                 self._on_capture_failed,
                 CameraStallError(attempts=history),
             )
+        # Halt the daemon thread on its next loop iteration. Callers
+        # that already ``return`` (the BLE001 translators in
+        # _capture_loop and _attempt_reopen) are unaffected; callers
+        # that fall through (the _maybe_fallback factory-exception
+        # path) now terminate before WR-01's source=None guard re-
+        # fires _fault_with_stall.
+        self._stop_event.set()
 
     # -----------------------------------------------------------------------
     # Recovery state machine.
