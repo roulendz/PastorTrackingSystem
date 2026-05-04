@@ -68,7 +68,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every delivered frame carries a `perf_counter_ns()` timestamp; frames older than 100 ms are dropped at the queue boundary; a stall > 200 ms logs ERROR and restarts capture
 **Plans**: 2 plans
 - [x] 03-01-PLAN.md — opencv-python + pygrabber deps + obs_camera transport seam (VideoSource Protocol + OpenCvVideoSource + discover_obs_camera_index + CameraError hierarchy + _P95Detector helper + Final constants) + FakeVideoSource fixture + discovery test matrix (Wave 1)
-- [ ] 03-02-PLAN.md — ObsCamera orchestrator (start/stop/frames + capture thread + asyncio bridge + bounded queue + fallback + stall recovery + status surface) + lifecycle/fallback/stall/stale-drop tests (Wave 2)
+- [x] 03-02-PLAN.md — ObsCamera orchestrator (start/stop/frames + capture thread + asyncio bridge + bounded queue + fallback + stall recovery + status surface) + lifecycle/fallback/stall/stale-drop tests (Wave 2)
 **UI hint**: no
 
 ### Phase 4: Perception

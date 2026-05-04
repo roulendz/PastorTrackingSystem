@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: ""Plan 01-01 complete: pastor_tracker scaffold + lint/type/test policy + commitizen hook""
-last_updated: "2026-05-04T22:30:58.790Z"
-last_activity: 2026-05-04 -- Phase 03 execution started
+stopped_at: Completed 03-02-PLAN.md (Phase 3 done)
+last_updated: "2026-05-04T23:15:33.758Z"
+last_activity: 2026-05-04
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 6
-  percent: 75
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Phase: 03 (Camera I/O) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 03
-Last activity: 2026-05-04 -- Phase 03 execution started
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-05-04
 
 Progress: [██████████] 100%
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 | Phase 01 P03 | 5 | 3 tasks | 6 files |
 | Phase 02 P01 | 577 | 3 tasks | 2 files |
 | Phase 02 P03 | 12 | 3 tasks | 8 files |
+| Phase 03 P02 | 80m | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 02-03: heartbeat task fault-halts on ArduinoError; link is dead, firmware watchdog moot once link faulted
 - [Phase ?]: Plan 02-03: _recover catches (asyncio.TimeoutError, asyncio.QueueEmpty), latches WatchdogResetError + FAULTED, RETURNS without re-raising; deterministic surface = next send_*
 - [Phase ?]: Plan 02-03: USB-disconnect latches LinkLostError, NOT FirmwareErrorReceived(ErrorCode.NONE); ErrorCode.NONE is firmware-only sentinel per protocol.h:68
+- [Phase ?]: ObsCamera mirrors ArduinoMotor: single producer thread + bounded asyncio.Queue + cross-thread bridge via call_soon_threadsafe
+- [Phase ?]: Pitfall 7 close-order: stop_event -> thread.join -> source.release -> CLOSED
+- [Phase ?]: T-03-03: start() releases source on first-frame timeout BEFORE raising CameraOpenError
+- [Phase ?]: Resolution fallback is one-shot inside 2 s warmup window only; never re-promote, never re-fallback
 
 ### Pending Todos
 
@@ -103,6 +108,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-03T19:19:35.376Z
-Stopped at: "Plan 01-01 complete: pastor_tracker scaffold + lint/type/test policy + commitizen hook"
+Last session: 2026-05-04T23:15:33.739Z
+Stopped at: Completed 03-02-PLAN.md (Phase 3 done)
 Resume file: None

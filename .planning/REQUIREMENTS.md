@@ -39,10 +39,10 @@
 
 ### Camera I/O
 
-- [ ] **IO-CAM-01**: Async OBS Virtual Camera frame source via `cv2.VideoCapture(idx, CAP_DSHOW)`; enumerate via `pygrabber.dshow_graph.FilterGraph`, match `"OBS Virtual Camera"`
+- [x] **IO-CAM-01**: Async OBS Virtual Camera frame source via `cv2.VideoCapture(idx, CAP_DSHOW)`; enumerate via `pygrabber.dshow_graph.FilterGraph`, match `"OBS Virtual Camera"`
 - [ ] **IO-CAM-02**: Hard-fail with available device list if OBS VCam not found
-- [ ] **IO-CAM-03**: Target 1920×1080 @ 30 fps; auto-fall to 1280×720 if frame-time budget breached
-- [ ] **IO-CAM-04**: Each frame stamped with `time.perf_counter_ns()` at grab time; queue drops frames older than 100 ms; stall > 200 ms logs ERROR + restarts capture
+- [x] **IO-CAM-03**: Target 1920×1080 @ 30 fps; auto-fall to 1280×720 if frame-time budget breached
+- [x] **IO-CAM-04**: Each frame stamped with `time.perf_counter_ns()` at grab time; queue drops frames older than 100 ms; stall > 200 ms logs ERROR + restarts capture
 
 ### Perception
 
@@ -152,10 +152,10 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | IO-ARD-05 | Phase 2 | Complete |
 | IO-ARD-06 | Phase 2 | Complete |
 | IO-ARD-07 | Phase 2 | Complete |
-| IO-CAM-01 | Phase 3 | Pending |
+| IO-CAM-01 | Phase 3 | Complete |
 | IO-CAM-02 | Phase 3 | Pending |
-| IO-CAM-03 | Phase 3 | Pending |
-| IO-CAM-04 | Phase 3 | Pending |
+| IO-CAM-03 | Phase 3 | Complete |
+| IO-CAM-04 | Phase 3 | Complete |
 | PERC-01 | Phase 4 | Pending |
 | PERC-02 | Phase 4 | Pending |
 | PERC-03 | Phase 4 | Pending |
