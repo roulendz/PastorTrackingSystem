@@ -766,7 +766,20 @@ class ObsCamera:
         ``_capture_loop``: the orchestrator MUST translate cv2 /
         DirectShow open errors to a typed history entry rather than
         crash the daemon thread.
+
+        WR-04: transitions to :class:`_CamState.REOPENING` on entry
+        and back to :class:`_CamState.RUNNING` on success so the
+        dashboard can render the recovery in flight. On failure
+        (``return False``) we leave the state at REOPENING -- the
+        caller (``_capture_loop``) immediately calls
+        :meth:`_fault_with_stall`, which crosses to the loop thread
+        and sets FAULTED via ``_on_capture_failed``. Python attribute
+        writes are atomic so no lock is needed for the daemon-thread
+        write, but readers see a consistent value.
         """
+        prior_state = self._state
+        if prior_state is _CamState.RUNNING:
+            self._state = _CamState.REOPENING
         self._first_frame_event.clear()
         for attempt_index, backoff_ms in enumerate(_REOPEN_BACKOFFS_MS, start=1):
             if self._source is not None:
@@ -804,6 +817,11 @@ class ObsCamera:
                     attempt=attempt_index,
                     backoff_ms=backoff_ms,
                 )
+                # WR-04: only promote back to RUNNING if we entered
+                # from RUNNING; never overwrite a terminal state that
+                # raced ahead via _on_capture_failed.
+                if self._state is _CamState.REOPENING:
+                    self._state = _CamState.RUNNING
                 return True
             self._reopen_history.append(
                 (
