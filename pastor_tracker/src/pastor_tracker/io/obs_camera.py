@@ -813,6 +813,16 @@ class ObsCamera:
                 backoff_ms=backoff_ms,
                 reason="first_frame_after_reopen_returned_False",
             )
+            # WR-02: T-03-03 release-on-failure also applies to the
+            # FINAL failed iteration. Without this release, the loop
+            # falls through to ``return False`` carrying a live
+            # VideoCapture handle on a 3rd-attempt failure -- the
+            # _capture_loop caller calls _fault_with_stall and exits,
+            # so the handle leaks until stop() runs. Earlier attempts
+            # release the previous handle at the top of the next loop
+            # iteration; the final attempt has no next iteration.
+            self._source.release()
+            self._source = None
         return False
 
     # -----------------------------------------------------------------------
