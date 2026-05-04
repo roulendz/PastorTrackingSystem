@@ -33,9 +33,13 @@ Sibling split (this plan vs. Plan 03-02):
 """
 from __future__ import annotations
 
+import asyncio
 import collections
+import contextlib
 import enum
-from collections.abc import Callable
+import threading
+import time
+from collections.abc import AsyncIterator, Callable
 from typing import Final, Protocol, runtime_checkable
 
 import cv2
@@ -43,6 +47,9 @@ import numpy as np
 import numpy.typing as npt
 import structlog
 from pygrabber.dshow_graph import FilterGraph
+
+from pastor_tracker.config import Config
+from pastor_tracker.core.types import Frame
 
 # ---------------------------------------------------------------------------
 # Module-level Final constants -- every literal cited (CLAUDE.md rule 6).
@@ -100,6 +107,7 @@ __all__ = [
     "CameraOpenError",
     "CameraStallError",
     "OBSCameraNotFoundError",
+    "ObsCamera",
     "OpenCvVideoSource",
     "VideoSource",
     "_CamState",
@@ -354,7 +362,465 @@ class _P95Detector:
 
 
 # ----------------------------------------------------------------------------
-# Plan 03-02 appends:
-#   - ObsCamera orchestrator class (start/stop/frames/_capture_loop/_attempt_reopen
-#     /_maybe_fallback/_on_capture_failed/_enqueue_frame/status properties)
+# Section 4: ObsCamera orchestrator (Plan 03-02).
+#
+# Owns the only threading <-> asyncio bridge in this module. Mirrors
+# :class:`pastor_tracker.io.arduino_motor.ArduinoMotor`:
+#   * Single producer (capture thread) -> bounded asyncio.Queue.
+#   * Single consumer (asyncio loop) drains the queue.
+#   * Cross-thread bridge via ``loop.call_soon_threadsafe`` -- never direct
+#     queue access from the thread.
+#   * Pitfall 7 close-order: ``_stop_event.set()`` -> ``thread.join`` ->
+#     ``source.release()`` -> state CLOSED.
 # ----------------------------------------------------------------------------
+
+
+class ObsCamera:
+    """Asyncio orchestrator for the OBS Virtual Camera frame source.
+
+    Owns the only threading <-> asyncio bridge in this module: a daemon
+    capture thread reads BGR frames via the injected :class:`VideoSource`,
+    builds typed :class:`Frame` DTOs (timestamp + shape validation off the
+    asyncio hot path), then crosses into the asyncio loop via
+    ``loop.call_soon_threadsafe`` to enqueue a bounded
+    :class:`asyncio.Queue` with drop-oldest semantics.
+
+    Concurrency invariants (mirror :class:`ArduinoMotor`):
+        * Single producer: only ``_capture_loop`` calls ``source.read()``.
+        * Single consumer: only the asyncio loop drains ``_frames_queue``.
+        * Bounded queue: ``maxsize=64``, drop-oldest + WARN log.
+        * Communication via ``_stop_event`` (loop -> thread, signal-only)
+          and ``call_soon_threadsafe`` (thread -> loop, frames + errors).
+
+    Lifecycle (mirrors arduino_motor.start / close):
+        * :meth:`start` is single-shot; calling twice raises
+          :class:`CameraError`.
+        * :meth:`start` blocks until the first valid :class:`Frame`
+          arrives via the capture thread, OR raises
+          :class:`CameraOpenError` after :data:`_FIRST_FRAME_TIMEOUT_SEC`.
+          On timeout the source handle is released (T-03-03) before the
+          error is raised -- no leaked VideoCapture handle.
+        * :meth:`stop` close-order is ``_stop_event.set()`` -> thread join
+          (timeout) -> ``source.release()`` -> state CLOSED (Pitfall 7).
+        * :meth:`frames` yields :class:`Frame` instances; consumer-side
+          stale-drop discards frames older than
+          :data:`_STALE_FRAME_MAX_AGE_NS` (100 ms).
+
+    Read-only status surface (Phase 7 dashboard):
+        :attr:`state`, :attr:`is_running`, :attr:`current_resolution`,
+        :attr:`last_error`.
+    """
+
+    def __init__(
+        self,
+        config: Config,
+        *,
+        video_source_factory: Callable[[int, int, int, int], VideoSource],
+        filter_graph_factory: _FilterGraphFactory,
+    ) -> None:
+        self._config: Config = config
+        self._video_source_factory = video_source_factory
+        self._filter_graph_factory = filter_graph_factory
+        self._frames_queue: asyncio.Queue[Frame] = asyncio.Queue(
+            maxsize=_FRAMES_QUEUE_MAX_SIZE
+        )
+        self._stop_event: threading.Event = threading.Event()
+        self._first_frame_event: threading.Event = threading.Event()
+        self._state: _CamState = _CamState.DISCONNECTED
+        self._capture_thread: threading.Thread | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._source: VideoSource | None = None
+        self._device_index: int | None = None
+        self._current_width: int = config.capture_width
+        self._current_height: int = config.capture_height
+        self._reopen_history: list[tuple[int, int, str]] = []
+        self._latched_error: CameraError | None = None
+        self._fallback_consumed: bool = False
+        self._logger = structlog.get_logger(module="obs_camera")
+
+    # -----------------------------------------------------------------------
+    # Read-only status surface.
+    # -----------------------------------------------------------------------
+
+    @property
+    def state(self) -> _CamState:
+        """Current internal camera state. Read-only."""
+        return self._state
+
+    @property
+    def is_running(self) -> bool:
+        """``True`` while ``state is _CamState.RUNNING``."""
+        return self._state is _CamState.RUNNING
+
+    @property
+    def current_resolution(self) -> tuple[int, int]:
+        """Currently-active capture resolution (flips on fallback)."""
+        return self._current_width, self._current_height
+
+    @property
+    def last_error(self) -> CameraError | None:
+        """Latched terminal error, or ``None`` while running."""
+        return self._latched_error
+
+    # -----------------------------------------------------------------------
+    # Lifecycle.
+    # -----------------------------------------------------------------------
+
+    async def start(self) -> None:
+        """Discover -> open -> spawn capture thread -> await first frame.
+
+        IO-CAM-01. Single-shot: a second call raises :class:`CameraError`
+        with the current state in the message. On first-frame timeout
+        the source handle is released BEFORE the
+        :class:`CameraOpenError` is raised (T-03-03 mitigation).
+        """
+        if self._state is not _CamState.DISCONNECTED:
+            raise CameraError(
+                f"start() called twice (state={self._state.value})"
+            )
+        self._loop = asyncio.get_running_loop()
+        self._state = _CamState.OPENING
+        self._device_index = discover_obs_camera_index(
+            self._config.obs_camera_name,
+            factory=self._filter_graph_factory,
+            logger=self._logger,
+        )
+        self._source = self._video_source_factory(
+            self._device_index,
+            self._current_width,
+            self._current_height,
+            self._config.capture_fps,
+        )
+        self._capture_thread = threading.Thread(
+            target=self._capture_loop,
+            name="obs-camera-capture",
+            daemon=True,
+        )
+        self._capture_thread.start()
+        first_frame_arrived = await asyncio.to_thread(
+            self._first_frame_event.wait, _FIRST_FRAME_TIMEOUT_SEC
+        )
+        if not first_frame_arrived:
+            self._stop_event.set()
+            if self._capture_thread is not None:
+                await asyncio.to_thread(
+                    self._capture_thread.join, _CAPTURE_JOIN_TIMEOUT_SEC
+                )
+            if self._source is not None:
+                # T-03-03: release on timeout path -- no leaked handle.
+                self._source.release()
+                self._source = None
+            self._logger.error(
+                "camera_first_frame_timeout",
+                timeout_sec=_FIRST_FRAME_TIMEOUT_SEC,
+                device_index=self._device_index,
+            )
+            self._state = _CamState.FAULTED
+            self._latched_error = CameraOpenError(
+                "first frame timeout -- is OBS running and "
+                "'Start Virtual Camera' toggled on?"
+            )
+            raise self._latched_error
+        self._state = _CamState.RUNNING
+        self._logger.info(
+            "camera_started",
+            device_index=self._device_index,
+            width=self._current_width,
+            height=self._current_height,
+            fps=self._config.capture_fps,
+        )
+
+    async def stop(self) -> None:
+        """Signal stop event, join capture thread (timeout), release source.
+
+        Pitfall 7 close-order: ``_stop_event.set()`` BEFORE thread join
+        BEFORE ``source.release()``. Releasing the source before joining
+        the thread races the in-flight ``read()``.
+        """
+        self._stop_event.set()
+        capture_thread = self._capture_thread
+        if capture_thread is not None:
+            await asyncio.to_thread(
+                capture_thread.join, _CAPTURE_JOIN_TIMEOUT_SEC
+            )
+            self._logger.info(
+                "camera_thread_exited",
+                clean=not capture_thread.is_alive(),
+            )
+            self._capture_thread = None
+        if self._source is not None:
+            self._source.release()
+            self._source = None
+        self._state = _CamState.CLOSED
+
+    # -----------------------------------------------------------------------
+    # Capture thread (the only producer).
+    # -----------------------------------------------------------------------
+
+    def _capture_loop(self) -> None:
+        """Daemon-thread capture loop.
+
+        IO-CAM-04 (timestamp + stall) + IO-CAM-03 (fallback). The single
+        bare-Exception catch below (``noqa: BLE001``) is justified: cv2
+        / DirectShow exceptions on driver-side failure MUST translate to
+        a typed orchestrator-level error rather than crash the daemon
+        thread silently.
+        """
+        last_grab_ns: int | None = None
+        p95_detector = _P95Detector(self._config.capture_fps)
+        warmup_started_ns = time.perf_counter_ns()
+        while not self._stop_event.is_set():
+            try:
+                if self._source is None:
+                    return
+                ok, bgr = self._source.read()
+            except Exception as exc:  # noqa: BLE001 -- documented translator
+                # Capture-thread bridge: cv2 errors translate to a
+                # CameraStallError on the loop thread; never silently swallow.
+                self._fault_with_stall(exc)
+                return
+            now_ns = time.perf_counter_ns()
+            stalled = (
+                last_grab_ns is not None
+                and (now_ns - last_grab_ns) > _STALL_THRESHOLD_NS
+            )
+            if not ok or bgr is None or stalled:
+                if stalled and last_grab_ns is not None:
+                    self._logger.warning(
+                        "camera_stall_detected",
+                        delta_ms=(now_ns - last_grab_ns) / _NS_PER_MS,
+                        threshold_ms=_STALL_THRESHOLD_NS / _NS_PER_MS,
+                    )
+                if not self._attempt_reopen():
+                    self._fault_with_stall(None)
+                    return
+                last_grab_ns = None
+                continue
+            # Build typed Frame inside the thread; __post_init__ validates shape.
+            try:
+                frame = Frame(
+                    image=bgr,
+                    width=self._current_width,
+                    height=self._current_height,
+                    timestamp_ns=now_ns,
+                )
+            except ValueError as exc:
+                self._logger.info(
+                    "frame_shape_mismatch",
+                    expected=f"{self._current_width}x{self._current_height}",
+                    observed=str(getattr(bgr, "shape", "n/a")),
+                    reason=str(exc),
+                )
+                if not self._attempt_reopen():
+                    self._fault_with_stall(None)
+                    return
+                last_grab_ns = None
+                continue
+            if not self._first_frame_event.is_set():
+                self._first_frame_event.set()
+            if last_grab_ns is not None and not self._fallback_consumed:
+                p95_detector.observe(now_ns - last_grab_ns)
+                warmup_remaining_ns = (
+                    int(_WARMUP_WINDOW_SEC * _NS_PER_SEC)
+                    - (now_ns - warmup_started_ns)
+                )
+                if warmup_remaining_ns >= 0:
+                    self._maybe_fallback(p95_detector, now_ns)
+            last_grab_ns = now_ns
+            if self._loop is not None:
+                self._loop.call_soon_threadsafe(self._enqueue_frame, frame)
+
+    # -----------------------------------------------------------------------
+    # Cross-thread bridge: thread -> loop.
+    # -----------------------------------------------------------------------
+
+    def _enqueue_frame(self, frame: Frame) -> None:
+        """Loop-thread synchronous enqueuer. Drop-oldest semantics."""
+        if self._frames_queue.full():
+            with contextlib.suppress(asyncio.QueueEmpty):
+                self._frames_queue.get_nowait()
+            self._logger.warning(
+                "frames_queue_full",
+                dropped_timestamp_ns=frame.timestamp_ns,
+                queue_max=_FRAMES_QUEUE_MAX_SIZE,
+            )
+        self._frames_queue.put_nowait(frame)
+
+    def _on_capture_failed(self, error: CameraStallError) -> None:
+        """Loop-thread latcher for capture-thread terminal errors."""
+        self._state = _CamState.FAULTED
+        self._latched_error = error
+        self._logger.error(
+            "camera_stall_unrecoverable",
+            attempts=len(error.attempts),
+            reopen_history=error.attempts,
+        )
+
+    def _fault_with_stall(self, reason: Exception | None) -> None:
+        """Latch a CameraStallError and cross to the loop thread.
+
+        Single point that builds a :class:`CameraStallError` from the
+        accumulated ``_reopen_history`` (plus, if present, a
+        capture-thread exception that triggered the fault).
+        """
+        history = list(self._reopen_history)
+        if reason is not None:
+            history.append(
+                (
+                    len(history) + 1,
+                    0,
+                    f"capture_thread_exception: {reason!r}",
+                )
+            )
+        if self._loop is not None and not self._stop_event.is_set():
+            self._loop.call_soon_threadsafe(
+                self._on_capture_failed,
+                CameraStallError(attempts=history),
+            )
+
+    # -----------------------------------------------------------------------
+    # Recovery state machine.
+    # -----------------------------------------------------------------------
+
+    def _attempt_reopen(self) -> bool:
+        """Try up to 3 reopens with linear backoff. Returns ``True`` on success.
+
+        Backoffs are :data:`_REOPEN_BACKOFFS_MS` (200, 500, 1000 ms)
+        per CONTEXT.md Area 4 lock. The single bare-Exception catch
+        (``noqa: BLE001``) is justified for the same reason as
+        ``_capture_loop``: the orchestrator MUST translate cv2 /
+        DirectShow open errors to a typed history entry rather than
+        crash the daemon thread.
+        """
+        self._first_frame_event.clear()
+        for attempt_index, backoff_ms in enumerate(_REOPEN_BACKOFFS_MS, start=1):
+            if self._source is not None:
+                self._source.release()
+                self._source = None
+            if self._stop_event.wait(backoff_ms / _MS_PER_SEC):
+                return False
+            if self._device_index is None:
+                return False
+            try:
+                self._source = self._video_source_factory(
+                    self._device_index,
+                    self._current_width,
+                    self._current_height,
+                    self._config.capture_fps,
+                )
+            except Exception as exc:  # noqa: BLE001 -- documented translator
+                # Reopen factory-call bridge: cv2 / DirectShow errors
+                # translate into a typed reopen-history entry rather
+                # than crash the daemon thread silently.
+                self._reopen_history.append(
+                    (attempt_index, backoff_ms, str(exc))
+                )
+                self._logger.warning(
+                    "camera_reopen_attempt_failed",
+                    attempt=attempt_index,
+                    backoff_ms=backoff_ms,
+                    reason=str(exc),
+                )
+                continue
+            ok, _bgr = self._source.read()
+            if ok:
+                self._logger.warning(
+                    "camera_reopen_succeeded",
+                    attempt=attempt_index,
+                    backoff_ms=backoff_ms,
+                )
+                return True
+            self._reopen_history.append(
+                (
+                    attempt_index,
+                    backoff_ms,
+                    "first_frame_after_reopen_returned_False",
+                )
+            )
+            self._logger.warning(
+                "camera_reopen_attempt_failed",
+                attempt=attempt_index,
+                backoff_ms=backoff_ms,
+                reason="first_frame_after_reopen_returned_False",
+            )
+        return False
+
+    # -----------------------------------------------------------------------
+    # Resolution-fallback decision.
+    # -----------------------------------------------------------------------
+
+    def _maybe_fallback(self, p95: _P95Detector, now_ns: int) -> None:
+        """One-shot 1080p -> 720p fallback inside warmup window.
+
+        IO-CAM-03. CONTEXT.md Area 3 lock: never re-promote, never
+        re-fallback; already-720p case logs ERROR and continues
+        capturing (halting kills the only camera path).
+        """
+        if self._fallback_consumed:
+            return
+        if not p95.budget_breached_persistent(now_ns):
+            return
+        if self._device_index is None:
+            return
+        p95_ms = p95.current_p95_ns / _NS_PER_MS
+        budget_ms = p95.budget_ns / _NS_PER_MS
+        already_at_fallback = (
+            self._current_width == _FALLBACK_WIDTH
+            and self._current_height == _FALLBACK_HEIGHT
+        )
+        if already_at_fallback:
+            self._logger.error(
+                "camera_resolution_breach_at_720p",
+                p95_ms=p95_ms,
+                budget_ms=budget_ms,
+            )
+            self._fallback_consumed = True
+            return
+        if self._source is not None:
+            self._source.release()
+            self._source = None
+        self._source = self._video_source_factory(
+            self._device_index,
+            _FALLBACK_WIDTH,
+            _FALLBACK_HEIGHT,
+            self._config.capture_fps,
+        )
+        self._logger.warning(
+            "camera_resolution_fallback",
+            from_dim=f"{self._current_width}x{self._current_height}",
+            to_dim=f"{_FALLBACK_WIDTH}x{_FALLBACK_HEIGHT}",
+            p95_ms=p95_ms,
+            budget_ms=budget_ms,
+            device_index=self._device_index,
+        )
+        self._current_width = _FALLBACK_WIDTH
+        self._current_height = _FALLBACK_HEIGHT
+        self._fallback_consumed = True
+
+    # -----------------------------------------------------------------------
+    # Async iterator surface (consumer side).
+    # -----------------------------------------------------------------------
+
+    async def frames(self) -> AsyncIterator[Frame]:
+        """Async-iterable view of fresh Frames.
+
+        IO-CAM-04 consumer-side stale-drop: discards frames where
+        ``(time.perf_counter_ns() - frame.timestamp_ns) >
+        _STALE_FRAME_MAX_AGE_NS`` (100 ms) and logs WARN
+        ``frame_stale_dropped``. Surfaces any latched terminal error
+        once the queue drains (mirrors arduino_motor pattern).
+        """
+        while True:
+            if self._latched_error is not None and self._frames_queue.empty():
+                raise self._latched_error
+            frame = await self._frames_queue.get()
+            now_ns = time.perf_counter_ns()
+            age_ns = now_ns - frame.timestamp_ns
+            if age_ns > _STALE_FRAME_MAX_AGE_NS:
+                self._logger.warning(
+                    "frame_stale_dropped",
+                    age_ms=age_ns / _NS_PER_MS,
+                    threshold_ms=_STALE_FRAME_MAX_AGE_NS / _NS_PER_MS,
+                )
+                continue
+            yield frame
