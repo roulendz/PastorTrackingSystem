@@ -66,7 +66,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. With OBS Virtual Camera not running, capture exits loudly with the available device list — no silent fallback to a webcam
   3. When the per-frame budget is breached, capture auto-falls to 1280×720 and logs the resolution change once
   4. Every delivered frame carries a `perf_counter_ns()` timestamp; frames older than 100 ms are dropped at the queue boundary; a stall > 200 ms logs ERROR and restarts capture
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 03-01-PLAN.md — opencv-python + pygrabber deps + obs_camera transport seam (VideoSource Protocol + OpenCvVideoSource + discover_obs_camera_index + CameraError hierarchy + _P95Detector helper + Final constants) + FakeVideoSource fixture + discovery test matrix (Wave 1)
+- [ ] 03-02-PLAN.md — ObsCamera orchestrator (start/stop/frames + capture thread + asyncio bridge + bounded queue + fallback + stall recovery + status surface) + lifecycle/fallback/stall/stale-drop tests (Wave 2)
 **UI hint**: no
 
 ### Phase 4: Perception
@@ -140,7 +142,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Scaffold, Config, Core Math | 2/3 | In Progress|  |
 | 2. Arduino I/O | 0/3 | Not started | - |
-| 3. Camera I/O | 0/TBD | Not started | - |
+| 3. Camera I/O | 0/2 | Not started | - |
 | 4. Perception | 0/TBD | Not started | - |
 | 5. Intent and Control | 0/TBD | Not started | - |
 | 6. Pipeline Orchestrator | 0/TBD | Not started | - |
