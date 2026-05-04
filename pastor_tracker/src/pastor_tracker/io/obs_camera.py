@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import asyncio
 import collections
-import contextlib
 import enum
 import threading
 import time
@@ -705,8 +704,15 @@ class ObsCamera:
     def _enqueue_frame(self, frame: Frame) -> None:
         """Loop-thread synchronous enqueuer. Drop-oldest semantics."""
         if self._frames_queue.full():
-            with contextlib.suppress(asyncio.QueueEmpty):
-                self._frames_queue.get_nowait()
+            # WR-07: full() guarantees the queue has at least one
+            # element, so get_nowait() cannot raise QueueEmpty here.
+            # The previous contextlib.suppress(asyncio.QueueEmpty)
+            # was unreachable defensive code -- per CLAUDE.md rule
+            # 1 (tiger-style: fail fast, fail loud), unreachable
+            # error-suppression hides real bugs (e.g. a future
+            # refactor that drops the full() guard). Let any
+            # unexpected QueueEmpty propagate as a contract bug.
+            self._frames_queue.get_nowait()
             self._logger.warning(
                 "frames_queue_full",
                 dropped_timestamp_ns=frame.timestamp_ns,
