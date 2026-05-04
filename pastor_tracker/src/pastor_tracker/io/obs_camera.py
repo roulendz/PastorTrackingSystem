@@ -473,6 +473,11 @@ class ObsCamera:
         with the current state in the message. On first-frame timeout
         the source handle is released BEFORE the
         :class:`CameraOpenError` is raised (T-03-03 mitigation).
+
+        Pre-thread errors (discovery / initial factory open) are
+        translated to typed terminal states and latched on
+        ``last_error`` before propagating, so the dashboard can
+        distinguish "failed at discovery" from "still opening".
         """
         if self._state is not _CamState.DISCONNECTED:
             raise CameraError(
@@ -480,17 +485,36 @@ class ObsCamera:
             )
         self._loop = asyncio.get_running_loop()
         self._state = _CamState.OPENING
-        self._device_index = discover_obs_camera_index(
-            self._config.obs_camera_name,
-            factory=self._filter_graph_factory,
-            logger=self._logger,
-        )
-        self._source = self._video_source_factory(
-            self._device_index,
-            self._current_width,
-            self._current_height,
-            self._config.capture_fps,
-        )
+        try:
+            self._device_index = discover_obs_camera_index(
+                self._config.obs_camera_name,
+                factory=self._filter_graph_factory,
+                logger=self._logger,
+            )
+        except OBSCameraNotFoundError as exc:
+            # CR-03: latch terminal discovery failure so dashboard can
+            # observe FAULTED + last_error rather than a stuck OPENING.
+            self._state = _CamState.FAULTED
+            self._latched_error = exc
+            raise
+        try:
+            self._source = self._video_source_factory(
+                self._device_index,
+                self._current_width,
+                self._current_height,
+                self._config.capture_fps,
+            )
+        except Exception as exc:
+            # CR-03: cv2 / DirectShow open errors translate to a typed
+            # CameraOpenError on the lifecycle surface. The catch-and-
+            # re-raise (``raise ... from exc``) pattern is exempt from
+            # BLE001 because the typed re-raise IS the translation; no
+            # silent swallow.
+            self._state = _CamState.FAULTED
+            self._latched_error = CameraOpenError(
+                f"VideoCapture open failed: {exc!r}"
+            )
+            raise self._latched_error from exc
         self._capture_thread = threading.Thread(
             target=self._capture_loop,
             name="obs-camera-capture",
@@ -521,7 +545,12 @@ class ObsCamera:
                 "'Start Virtual Camera' toggled on?"
             )
             raise self._latched_error
-        self._state = _CamState.RUNNING
+        # CR-03: do not clobber a FAULTED state that the capture thread
+        # raced ahead of us to latch (e.g. read() raises immediately
+        # after the first frame). The fault path owns the terminal
+        # transition; only promote to RUNNING from OPENING.
+        if self._state is _CamState.OPENING:
+            self._state = _CamState.RUNNING
         self._logger.info(
             "camera_started",
             device_index=self._device_index,
@@ -536,6 +565,12 @@ class ObsCamera:
         Pitfall 7 close-order: ``_stop_event.set()`` BEFORE thread join
         BEFORE ``source.release()``. Releasing the source before joining
         the thread races the in-flight ``read()``.
+
+        CR-03: terminal :class:`_CamState.FAULTED` is preserved across
+        stop -- the dashboard distinguishes "stopped after fault" from
+        "stopped cleanly" via ``last_error``, so clobbering FAULTED to
+        CLOSED would erase the diagnostic and disagree with
+        ``last_error``.
         """
         self._stop_event.set()
         capture_thread = self._capture_thread
@@ -551,7 +586,8 @@ class ObsCamera:
         if self._source is not None:
             self._source.release()
             self._source = None
-        self._state = _CamState.CLOSED
+        if self._state is not _CamState.FAULTED:
+            self._state = _CamState.CLOSED
 
     # -----------------------------------------------------------------------
     # Capture thread (the only producer).
