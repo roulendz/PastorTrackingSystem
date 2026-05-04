@@ -14,14 +14,19 @@ Import path is ``tests.fixtures.camera_traces`` -- pytest ``rootdir`` is
 """
 from __future__ import annotations
 
+import asyncio
 import collections
 import threading
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import numpy as np
 import numpy.typing as npt
+
+from pastor_tracker.config import Config
+from pastor_tracker.io.obs_camera import ObsCamera, _CamState
 
 
 @dataclass(frozen=True)
@@ -87,3 +92,72 @@ def make_solid_bgr(width: int, height: int, color: tuple[int, int, int]) -> npt.
     frame: npt.NDArray[np.uint8] = np.zeros((height, width, 3), dtype=np.uint8)
     frame[:, :] = color
     return frame
+
+
+# ---------------------------------------------------------------------------
+# Plan 03-02: async lifecycle helpers (mirror arduino_traces.py:54-95).
+# ---------------------------------------------------------------------------
+
+
+async def _started_camera(
+    valid_config_dict: dict[str, object],
+    *,
+    script: list[_ScriptedFrame] | None = None,
+    devices: list[str] | None = None,
+) -> tuple[ObsCamera, FakeVideoSource]:
+    """Build a fake-backed :class:`ObsCamera`, start it, return ``(camera, fake)``.
+
+    Caller is responsible for ``await cam.stop()``.
+
+    Default script provides ~20 s of headroom (600 frames @ 33 ms == ~20 s
+    @ 30 fps) -- prevents script-exhaustion stall during lifecycle tests.
+    Override ``script=`` for stall / fallback cases that need scripted slow
+    grabs or read failures.
+    """
+    if script is None:
+        # Share a single ndarray across all scripted frames -- 600 distinct
+        # 1920x1080x3 buffers is ~3.6 GB and dominates per-test runtime
+        # via allocation + GC. The capture thread does NOT mutate the
+        # frame buffer (Frame.image is documented read-only -- core/types.py),
+        # so aliasing is safe.
+        shared_bgr = make_solid_bgr(1920, 1080, (0, 0, 0))
+        script = [
+            _ScriptedFrame(bgr=shared_bgr, ok=True, delay_sec=0.033)
+            for _ in range(600)
+        ]
+    fake = FakeVideoSource(script=script, width=1920, height=1080)
+    devices_list = devices if devices is not None else ["OBS Virtual Camera"]
+    cam = ObsCamera(
+        Config(**valid_config_dict),
+        video_source_factory=lambda *_args, **_kw: fake,
+        filter_graph_factory=lambda: SimpleNamespace(
+            get_input_devices=lambda: list(devices_list)
+        ),
+    )
+    await cam.start()
+    return cam, fake
+
+
+async def wait_for_state(
+    camera: ObsCamera,
+    target_state: _CamState,
+    timeout: float = 1.0,
+) -> None:
+    """Poll ``camera.state`` at 10 ms cadence until ``target_state`` or ``timeout``.
+
+    Replaces brittle ``asyncio.sleep`` cross-thread bridge waits.
+    10 ms is faster than the capture thread's tick cadence AND faster
+    than typical scheduler jitter, so polling overhead is bounded by
+    ``timeout``.
+
+    Raises :class:`TimeoutError` if state not reached within ``timeout``.
+    """
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        if camera.state == target_state:
+            return
+        await asyncio.sleep(0.01)
+    raise TimeoutError(
+        f"camera did not reach state={target_state.value!r} within {timeout}s "
+        f"(current state={camera.state.value!r})"
+    )
