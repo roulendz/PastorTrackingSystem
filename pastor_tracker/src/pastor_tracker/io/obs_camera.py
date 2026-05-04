@@ -677,7 +677,11 @@ class ObsCamera:
                     int(_WARMUP_WINDOW_SEC * _NS_PER_SEC)
                     - (now_ns - warmup_started_ns)
                 )
-                if warmup_remaining_ns >= 0 and self._maybe_fallback(
+                # WR-05: half-open window [0, W). At the exact
+                # boundary the warmup is over, so the fallback
+                # decision MUST NOT fire. CONTEXT.md "2 s warmup
+                # window" reads as "inside warmup" semantics.
+                if warmup_remaining_ns > 0 and self._maybe_fallback(
                     p95_detector, now_ns
                 ):
                     # CR-02: fallback released + reopened the source.

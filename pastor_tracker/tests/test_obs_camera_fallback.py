@@ -146,6 +146,29 @@ async def test_warmup_breach_triggers_fallback(
         await cam.stop()
 
 
+def test_warmup_window_is_half_open() -> None:
+    """WR-05 regression: warmup boundary uses '> 0', not '>= 0'.
+
+    The fallback decision must use a half-open window [0, W) so
+    the exact boundary instant counts as 'window expired' rather
+    than 'last-chance fire'. This unit-level guard pins the
+    arithmetic at the source level so a future refactor that
+    swaps back to '>= 0' is caught without depending on a
+    fragile timing-sensitive integration test.
+    """
+    import inspect
+
+    from pastor_tracker.io.obs_camera import ObsCamera
+
+    src = inspect.getsource(ObsCamera._capture_loop)
+    # Locked: the fallback gate uses strict '>' comparison.
+    assert "warmup_remaining_ns > 0" in src
+    # Locked: NO instance of '>= 0' on warmup_remaining_ns -- a
+    # straight string match is sufficient because the only place
+    # that variable is compared is the fallback gate.
+    assert "warmup_remaining_ns >= 0" not in src
+
+
 async def test_post_warmup_breach_inhibited(
     valid_config_dict: dict[str, object],
     monkeypatch: pytest.MonkeyPatch,
