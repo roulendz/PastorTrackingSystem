@@ -31,9 +31,7 @@ Architecture (RESEARCH 04 Pattern 5 + CONTEXT.md Subject Lock Lifecycle):
 """
 from __future__ import annotations
 
-import asyncio
 import enum
-from collections.abc import AsyncIterator
 from typing import Final
 
 import numpy as np
@@ -69,9 +67,6 @@ _LOCK_LOSS_TIMEOUT_SEC: Final[float] = 2.0  # PERC-05
 _HOLD_POSTERIOR_FRAME_THRESHOLD: Final[int] = 3  # PERC-07
 _NS_PER_SEC: Final[float] = 1_000_000_000.0
 _NS_PER_MS: Final[float] = 1_000_000.0
-
-# --- Output queue capacity (T-04-09 backpressure) ---
-_OUT_QUEUE_MAX: Final[int] = 256
 
 # --- Frame coordinate clip range ---
 _NORM_MIN: Final[float] = 0.0
@@ -124,12 +119,15 @@ def is_in_central_region(cx: float, cy: float) -> bool:
 class SubjectTracker:
     """Six-state lock + Kalman per-frame transformer.
 
-    Public surface (mirrors arduino_motor.events / obs_camera.frames):
+    Public surface (consume-based, per BL-01 simplification 2026-05-05):
         ``async def consume(detections, now_ns) -> TrackedSubject | None``:
             single-frame tick; returns the smoothed subject or None when
-            UNLOCKED / SEEKING / LOST.
-        ``async def tracked_subjects() -> AsyncIterator[TrackedSubject]``:
-            iterator over emitted subjects (drained from internal queue).
+            UNLOCKED / SEEKING / LOST. The Phase 6 orchestrator iterates
+            by composing this call inside its own outer loop -- there is
+            NO ``tracked_subjects()`` async iterator. The earlier BL-01
+            blocker (a deadlock-on-empty-queue iterator backed by a queue
+            nothing populated) was dropped in favour of consume()'s direct
+            return semantics.
 
     Read-only dashboard surface (CONTEXT.md Area 4):
         is_locked, current_track_id, last_lock_loss_ts_ns
@@ -146,9 +144,6 @@ class SubjectTracker:
         self._last_lock_loss_ts_ns: int | None = None
         self._consecutive_misses: int = 0
         self._latched_error: PerceptionError | None = None
-        self._out_queue: asyncio.Queue[TrackedSubject] = asyncio.Queue(
-            maxsize=_OUT_QUEUE_MAX
-        )
         self._holding_logged: bool = False  # one WARN per HOLDING entry
 
     # ---------- read-only dashboard surface ----------
@@ -203,13 +198,6 @@ class SubjectTracker:
                 return self._tick_holding(eligible, now_ns)
             case _LockState.LOST:
                 return self._try_reacquire(eligible, now_ns)
-
-    async def tracked_subjects(self) -> AsyncIterator[TrackedSubject]:
-        """Drain emitted subjects (orchestrator may push from `consume` then iterate)."""
-        while True:
-            self._raise_if_latched()
-            ts = await self._out_queue.get()
-            yield ts
 
     # ---------- state-machine handlers ----------
     def _try_lock(
