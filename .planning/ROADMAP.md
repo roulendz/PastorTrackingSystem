@@ -83,6 +83,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. The 4-state Kalman filter `[x, y, vx, vy]` in normalized coords predicts during gaps and updates on detection — output is lag-free relative to a raw EMA baseline
 **Plans**: TBD
 **UI hint**: no
+**Cross-phase contract notes** (from Phase 3 deep review, commit aac3da1):
+  - `Frame.__post_init__` now asserts `image.dtype == np.uint8` AND `image.flags["C_CONTIGUOUS"] is True`. YOLO/ultralytics path can rely on these — skip own dtype/contiguity guards. Test fixtures using `frame[..., ::-1]` views must wrap with `np.ascontiguousarray(...)`.
 
 ### Phase 5: Intent and Control
 **Goal**: Convert the Kalman trajectory into a rule-of-thirds framing target with hysteresis, then drive a two-stage critically-damped pan that produces no jerk, no overshoot, no oscillation — and emit motor commands only when they actually change the picture.
@@ -107,6 +109,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Lifecycle commands `start`, `pause`, `home`, `e-stop`, `quit` work via the orchestrator API (UI hotkey wiring lands in Phase 7) — `e-stop` halts motor within one heartbeat interval; `home` is rejected when 0° is outside software limits
 **Plans**: TBD
 **UI hint**: no
+**Cross-phase contract notes** (from Phase 3 deep review, commit aac3da1):
+  - `ObsCamera.frames()` now exits cleanly via `StopAsyncIteration` after `stop()` (B-02 fix). Orchestrator can write `async for frame in camera.frames(): ...` without catching `CameraStallError` to discriminate clean shutdown.
+  - `ObsCamera.start()` translates ALL DirectShow / DLL load failures (RPC_E_CHANGED_MODE, OSError, pywintypes.error) to typed `CameraOpenError` (B-04 fix). Orchestrator can use `try: await camera.start() except CameraError:` exclusively — no raw exception types leak.
+  - `ArduinoMotor` now reads `Config.arduino_protocol_version` at runtime (W-09 fix) — protocol bump requires both Config Literal widening AND host-module constant change.
 
 ### Phase 7: UI Dashboard
 **Goal**: A single-window DearPyGui operator dashboard with live preview, live tuning sliders, status panel, and hotkeys — so a human can run, tune, and emergency-stop the system on stage without touching code.
@@ -120,6 +126,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Hotkeys `S` (start), `P` (pause), `H` (home), `E` (e-stop), `Q` (quit) work in any focus state of the window
 **Plans**: TBD
 **UI hint**: yes
+**Cross-phase contract notes** (from Phase 3 deep review, commit aac3da1):
+  - New structured log keys available for dashboard widgets: `feedback_seq_regression.after_recovery: bool` (W-04 — distinguishes expected post-recovery regressions from unexpected ones); `camera_thread_join_timeout` / `rx_thread_join_timeout` WARN events (W-06 — surfaces handle-race risk on shutdown for status panel).
 
 ### Phase 8: End-to-End and Ship Gates
 **Goal**: Prove the whole system on a real stage with a real speaker, document install/setup/calibration/operation in the README, and pass the formal lint/type/commit ship gates.
