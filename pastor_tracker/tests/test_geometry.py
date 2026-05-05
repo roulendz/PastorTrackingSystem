@@ -8,6 +8,8 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from pastor_tracker.core.geometry import (
+    NORMALIZED_X_MAX,
+    NORMALIZED_X_MIN,
     angle_deg_to_normalized_x,
     normalized_x_to_angle_deg,
 )
@@ -118,3 +120,36 @@ def test_invalid_angle_raises() -> None:
         angle_deg_to_normalized_x(180.0, DEFAULT_FOV_DEG)
     with pytest.raises(ValueError, match="angle_deg"):
         angle_deg_to_normalized_x(-90.0, DEFAULT_FOV_DEG)
+
+
+@given(
+    fov=st.floats(
+        min_value=FOV_INNER_MIN,
+        max_value=FOV_INNER_MAX,
+        allow_nan=False,
+        allow_infinity=False,
+    ),
+    nx=st.floats(
+        min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False
+    ),
+)
+@settings(
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+    max_examples=HYP_MAX_EXAMPLES,
+)
+def test_inverse_map_output_in_unit_interval(fov: float, nx: float) -> None:
+    """W-01: ``angle_deg_to_normalized_x`` output MUST be in [0, 1].
+
+    The forward map's ULP drift at the half-FOV boundary, plus the
+    input-side ``_HALF_FOV_BOUNDARY_TOL_DEG`` tolerance, can produce
+    ``normalized = 1 + epsilon`` without the output-side clamp.
+    Downstream Pydantic DTOs (Detection / FramingTarget) reject with
+    ValidationError. This property test asserts the clamp holds.
+    """
+    angle = normalized_x_to_angle_deg(nx, fov)
+    nx_back = angle_deg_to_normalized_x(angle, fov)
+    assert NORMALIZED_X_MIN <= nx_back <= NORMALIZED_X_MAX, (
+        f"output out of [0, 1] for fov={fov}, nx={nx}, angle={angle}, "
+        f"nx_back={nx_back}"
+    )

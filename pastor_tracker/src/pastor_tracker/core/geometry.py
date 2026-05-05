@@ -79,4 +79,13 @@ def angle_deg_to_normalized_x(
         )
     half_fov_rad = math.radians(half_fov_deg)
     offset = math.tan(math.radians(angle_deg)) / math.tan(half_fov_rad)
-    return (offset + NORMALIZED_RANGE) * HALF
+    normalized = (offset + NORMALIZED_RANGE) * HALF
+    # W-01: clamp at the seam. The forward map ``atan(tan(half_fov))`` is
+    # mathematically exactly ``half_fov_deg`` but drifts by ~1 ULP for
+    # some FOVs. The input-side ``_HALF_FOV_BOUNDARY_TOL_DEG`` tolerates
+    # ~1e-9 deg of overshoot, but without an output-side clamp the drift
+    # propagates as ``normalized = 1 + epsilon``, which downstream
+    # Pydantic DTOs (Detection / TrackedSubject / FramingTarget --
+    # ``Field(ge=0.0, le=1.0)``) reject with ValidationError. Symmetric
+    # tolerance: tolerate input drift, produce in-domain output.
+    return min(NORMALIZED_X_MAX, max(NORMALIZED_X_MIN, normalized))
