@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 from multiprocessing import shared_memory
-from typing import Any
 
 import numpy as np
 import pytest
@@ -98,7 +97,7 @@ async def test_fake_pose_engine_yields_scripted_detections() -> None:
 
 
 @pytest.mark.asyncio
-async def test_pose_detector_start_stop_clean(valid_config_dict: dict[str, Any]) -> None:
+async def test_pose_detector_start_stop_clean(valid_config_dict: dict[str, object]) -> None:
     """Clean lifecycle: DISCONNECTED -> RUNNING -> CLOSED with no FAULT, no WARN."""
     from pastor_tracker.config import Config
     from pastor_tracker.perception.pose_detector import PoseDetector
@@ -113,7 +112,7 @@ async def test_pose_detector_start_stop_clean(valid_config_dict: dict[str, Any])
 
 
 @pytest.mark.asyncio
-async def test_pose_detector_double_start_raises(valid_config_dict: dict[str, Any]) -> None:
+async def test_pose_detector_double_start_raises(valid_config_dict: dict[str, object]) -> None:
     """Single-shot guard: a second start() after success raises PerceptionError."""
     from pastor_tracker.config import Config
     from pastor_tracker.perception.pose_detector import PoseDetector
@@ -130,7 +129,7 @@ async def test_pose_detector_double_start_raises(valid_config_dict: dict[str, An
 
 
 @pytest.mark.asyncio
-async def test_drop_oldest_when_inference_lags(valid_config_dict: dict[str, Any]) -> None:
+async def test_drop_oldest_when_inference_lags(valid_config_dict: dict[str, object]) -> None:
     """RESEARCH 04 Pattern 4: bursty consume() against slow engine -> drop-oldest WARN.
 
     W6 fix: hoist Config construction above the for-loop -- avoid rebuilding it 5+ times.
@@ -165,7 +164,7 @@ async def test_drop_oldest_when_inference_lags(valid_config_dict: dict[str, Any]
 
 
 @pytest.mark.asyncio
-async def test_detections_iterator_drains_in_order(valid_config_dict: dict[str, Any]) -> None:
+async def test_detections_iterator_drains_in_order(valid_config_dict: dict[str, object]) -> None:
     """Async iterator drains processed-frame results in submission order."""
     from pastor_tracker.config import Config
     from pastor_tracker.perception.pose_detector import PoseDetector
@@ -199,7 +198,7 @@ async def test_detections_iterator_drains_in_order(valid_config_dict: dict[str, 
 
 
 @pytest.mark.asyncio
-async def test_faulted_preserved_across_stop(valid_config_dict: dict[str, Any]) -> None:
+async def test_faulted_preserved_across_stop(valid_config_dict: dict[str, object]) -> None:
     """Phase 3 obs_camera precedent: FAULTED state survives stop()."""
     from pastor_tracker.config import Config
     from pastor_tracker.perception.pose_detector import PoseDetector
@@ -222,3 +221,114 @@ async def test_faulted_preserved_across_stop(valid_config_dict: dict[str, Any]) 
     assert detector.state is _DetectorState.FAULTED
     await detector.stop()
     assert detector.state is _DetectorState.FAULTED  # NOT CLOSED
+
+
+@pytest.mark.asyncio
+async def test_pose_detector_properties_reflect_state(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """Read-only dashboard surface: is_running, last_error track _state correctly."""
+    from pastor_tracker.config import Config
+    from pastor_tracker.perception.pose_detector import PoseDetector
+
+    detector = PoseDetector(
+        config=Config(**valid_config_dict), engine=FakePoseEngine(script=[]),
+    )
+    assert detector.is_running is False
+    assert detector.last_error is None
+    await detector.start()
+    assert detector.is_running is True
+    assert detector.state is _DetectorState.RUNNING
+    await detector.stop()
+    assert detector.is_running is False
+
+
+@pytest.mark.asyncio
+async def test_consume_before_start_raises(valid_config_dict: dict[str, object]) -> None:
+    """consume() while DISCONNECTED raises PerceptionError (state guard)."""
+    from pastor_tracker.config import Config
+    from pastor_tracker.perception.pose_detector import PoseDetector
+
+    cfg = Config(**valid_config_dict)
+    detector = PoseDetector(config=cfg, engine=FakePoseEngine(script=[]))
+    img = np.zeros((cfg.capture_height, cfg.capture_width, 3), dtype=np.uint8)
+    f = Frame(
+        image=img,
+        width=cfg.capture_width,
+        height=cfg.capture_height,
+        timestamp_ns=1_000,
+    )
+    with pytest.raises(PerceptionError, match=r"consume\(\) while state="):
+        await detector.consume(f)
+
+
+@pytest.mark.asyncio
+async def test_engine_close_failure_latches_faulted(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """W5 fix: a failed engine.close() during stop() latches FAULTED + last_error.
+
+    Cover the close-time translator that converts a generic engine close
+    exception into a typed PerceptionError + FAULTED gate.
+    """
+    from pastor_tracker.config import Config
+    from pastor_tracker.perception.pose_detector import PoseDetector
+
+    class _CloseFailureEngine:
+        def __init__(self) -> None:
+            self._closed = False
+
+        async def detect(self, frame: Frame) -> list[Detection]:
+            return []
+
+        async def close(self) -> None:
+            raise RuntimeError("simulated close failure")
+
+    cfg = Config(**valid_config_dict)
+    detector = PoseDetector(config=cfg, engine=_CloseFailureEngine())
+    await detector.start()
+    await detector.stop()
+    assert detector.state is _DetectorState.FAULTED
+    err = detector.last_error
+    assert err is not None
+    assert "engine close failed" in str(err)
+
+
+@pytest.mark.asyncio
+async def test_non_perception_error_translates_to_perception_error(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """A non-PerceptionError exception from engine.detect() is translated.
+
+    Covers the generic-Exception translator branch in ``_infer_one``: the
+    error is wrapped in PerceptionError, latched, and state goes FAULTED.
+    """
+    from pastor_tracker.config import Config
+    from pastor_tracker.perception.pose_detector import PoseDetector
+
+    class _BareErrorEngine:
+        async def detect(self, frame: Frame) -> list[Detection]:
+            raise RuntimeError("bare engine fault")
+
+        async def close(self) -> None:
+            return None
+
+    cfg = Config(**valid_config_dict)
+    detector = PoseDetector(config=cfg, engine=_BareErrorEngine())
+    await detector.start()
+    img = np.zeros((cfg.capture_height, cfg.capture_width, 3), dtype=np.uint8)
+    f = Frame(
+        image=img,
+        width=cfg.capture_width,
+        height=cfg.capture_height,
+        timestamp_ns=1_000,
+    )
+    await detector.consume(f)
+    await asyncio.sleep(0.05)  # let _infer_one complete
+    assert detector.state is _DetectorState.FAULTED
+    err = detector.last_error
+    assert err is not None
+    assert "engine detect failed" in str(err)
+    assert "bare engine fault" in str(err)
+    await detector.stop()
+    assert detector.state is _DetectorState.FAULTED
