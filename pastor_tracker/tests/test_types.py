@@ -63,6 +63,22 @@ def test_frame_rejects_negative_timestamp() -> None:
         Frame(image=_make_image(), width=4, height=4, timestamp_ns=-1)
 
 
+def test_frame_rejects_non_uint8_dtype() -> None:
+    """B-03: ``Frame.image`` must be ``np.uint8`` -- Phase 4 YOLO contract.
+
+    A float32 / int16 array would either crash YOLO11-pose or trigger a
+    silent dtype copy on the GPU hot path. Catch at the boundary.
+    """
+    bad = np.zeros((4, 4, 3), dtype=np.float32)
+    with pytest.raises(ValueError, match="dtype"):
+        Frame(
+            image=bad,  # type: ignore[arg-type]
+            width=4,
+            height=4,
+            timestamp_ns=1,
+        )
+
+
 def test_detection_rejects_mutation() -> None:
     det = Detection(
         subject_center_x_normalized=0.5,

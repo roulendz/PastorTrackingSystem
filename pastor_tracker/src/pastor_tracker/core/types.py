@@ -39,6 +39,12 @@ _IMAGE_HEIGHT_AXIS: int = 0
 _IMAGE_WIDTH_AXIS: int = 1
 _IMAGE_CHANNEL_AXIS: int = 2
 _TIMESTAMP_NS_MIN: int = 0
+# B-03: Phase 4 (perception/YOLO11-pose via ultralytics) requires uint8
+# BGR. The static ``ImageArray = NDArray[np.uint8]`` alias is purely
+# compile-time -- runtime numpy arrays carry an arbitrary dtype, so the
+# tiger-style boundary check belongs here in __post_init__ (CLAUDE.md
+# rule 1: fail-fast at boundaries).
+_IMAGE_DTYPE_EXPECTED: np.dtype[np.uint8] = np.dtype(np.uint8)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +75,14 @@ class Frame:
             raise ValueError(
                 f"Frame.image must have {_IMAGE_CHANNELS_EXPECTED} channels "
                 f"(BGR), got shape {self.image.shape}"
+            )
+        if self.image.dtype != _IMAGE_DTYPE_EXPECTED:
+            # B-03: Phase 4 perception (YOLO11-pose / ultralytics) expects
+            # uint8 BGR. A float32 / int16 array would either crash the
+            # detector or trigger a silent dtype copy on the GPU hot path.
+            raise ValueError(
+                f"Frame.image must have dtype {_IMAGE_DTYPE_EXPECTED}, "
+                f"got dtype={self.image.dtype}"
             )
         image_height = int(self.image.shape[_IMAGE_HEIGHT_AXIS])
         image_width = int(self.image.shape[_IMAGE_WIDTH_AXIS])
