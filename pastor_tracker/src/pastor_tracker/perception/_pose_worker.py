@@ -34,6 +34,21 @@ _shm_name: str | None = None
 # Pitfall 10: warm with a 640x640 zero-image; matches YOLO's default imgsz.
 _WARMUP_IMG_SIZE: Final[int] = 640
 
+# WR-04 normalized-coord clamp range.
+_NORM_MIN: Final[float] = 0.0
+_NORM_MAX: Final[float] = 1.0
+
+
+def _clamp01(value: float) -> float:
+    """Clamp a normalized coord into [0, 1].
+
+    WR-04: ultralytics returns xyxyn / kpts.xyn via floating-point arithmetic
+    that can yield values like 1.0000001; Pydantic ``Field(ge=0, le=1)`` on
+    ``_PoseDetection`` would otherwise raise inside the worker on the
+    marginal case. Mirrors the existing centroid clamp pattern (Pitfall 12).
+    """
+    return float(min(max(value, _NORM_MIN), _NORM_MAX))
+
 
 class _PoseDetection(BaseModel):
     """Picklable per-detection payload returned by ``infer``.
@@ -125,6 +140,12 @@ def infer(
         device=device,
         verbose=False,
     )
+    # WR-03 fix: ultralytics is contractually expected to return a single-element
+    # list per single-image call, but a future version returning [] for a
+    # zero-detection frame would otherwise raise IndexError -> FAULTED on a
+    # recoverable empty-result. Treat empty as "no detections" instead.
+    if not results:
+        return PoseEngineResult(detections=[])
     return _translate(results[0], timestamp_ns)
 
 
@@ -163,12 +184,16 @@ def _translate(result: object, timestamp_ns: int) -> PoseEngineResult:
         return PoseEngineResult(detections=[])
     detections: list[_PoseDetection] = []
     for idx in range(int(xyxyn.shape[0])):
-        x1, y1, x2, y2 = (
-            float(xyxyn[idx, 0]),
-            float(xyxyn[idx, 1]),
-            float(xyxyn[idx, 2]),
-            float(xyxyn[idx, 3]),
-        )
+        # WR-04 fix: clamp bbox coords to [0,1] for the same fp-rounding reason
+        # the centroid is clamped (Pitfall 12). ultralytics' xyxyn is normalized
+        # via floating-point arithmetic and can return values like 1.0000001;
+        # the Detection Pydantic validator (Field(ge=0, le=1)) would otherwise
+        # raise ValidationError inside the worker -> FAULTED on a recoverable
+        # marginal result.
+        x1 = _clamp01(float(xyxyn[idx, 0]))
+        y1 = _clamp01(float(xyxyn[idx, 1]))
+        x2 = _clamp01(float(xyxyn[idx, 2]))
+        y2 = _clamp01(float(xyxyn[idx, 3]))
         if x2 <= x1 or y2 <= y1:
             continue  # degenerate bbox -- Detection validator would reject
         # PERC-02 (B1): weighted-keypoint mean centroid + mean kp conf over the
@@ -177,8 +202,15 @@ def _translate(result: object, timestamp_ns: int) -> PoseEngineResult:
         cx, cy, mean_kp_conf = weighted_keypoint_centroid(kp_xyn[idx], kp_conf[idx])
         # Clamp into [0, 1] to honour Detection validators if the weighted mean
         # marginally exits the unit square due to fp rounding (Pitfall 12).
-        cx = float(min(max(cx, 0.0), 1.0))
-        cy = float(min(max(cy, 0.0), 1.0))
+        cx = _clamp01(cx)
+        cy = _clamp01(cy)
+        # WR-02 fix: defensively bounds-check track_ids[idx] in case a future
+        # ultralytics version desynchronises boxes.id length from boxes.xyxyn
+        # length (e.g. ReID buffer mismatch). An out-of-range index would raise
+        # IndexError inside the worker -> FAULTED on a recoverable corner case.
+        track_id_for_idx: int | None = None
+        if track_ids is not None and idx < len(track_ids):
+            track_id_for_idx = track_ids[idx]
         det = _PoseDetection(
             subject_center_x_normalized=cx,
             subject_center_y_normalized=cy,
@@ -188,7 +220,7 @@ def _translate(result: object, timestamp_ns: int) -> PoseEngineResult:
             bbox_x2_normalized=x2,
             bbox_y2_normalized=y2,
             timestamp_ns=timestamp_ns,
-            track_id=track_ids[idx] if track_ids is not None else None,
+            track_id=track_id_for_idx,
         )
         detections.append(det)
     return PoseEngineResult(detections=detections)
