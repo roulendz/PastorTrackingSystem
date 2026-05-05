@@ -442,10 +442,18 @@ class ArduinoMotor:
         self._enqueue(event)
 
     def _enqueue(self, event: ProtocolEvent) -> None:
-        """Drop-oldest semantics on a full bounded queue."""
+        """Drop-oldest semantics on a full bounded queue.
+
+        W-03: ``full()`` guarantees the queue has at least one element on
+        the next line, so ``get_nowait()`` cannot raise QueueEmpty here.
+        Mirrors the obs_camera ``_enqueue_frame`` WR-07 fix: per
+        CLAUDE.md rule 1 (tiger-style: fail fast, fail loud),
+        unreachable error-suppression hides real bugs (e.g. a future
+        refactor that drops the full() guard). Let any unexpected
+        QueueEmpty propagate as a contract bug.
+        """
         if self._rx_queue.full():
-            with contextlib.suppress(asyncio.QueueEmpty):
-                self._rx_queue.get_nowait()
+            self._rx_queue.get_nowait()
             self._logger.warning(
                 "rx_queue_full", dropped_event_type=type(event).__name__
             )
