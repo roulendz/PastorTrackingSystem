@@ -308,10 +308,27 @@ class ArduinoMotor:
 
         Skips :class:`SettingsInfo` and :class:`FeedbackHeader` (Pitfall 1
         -- the 3-line preamble).
+
+        W-09: ``expected`` is sourced from ``self._config.arduino_protocol_version``
+        (operator-visible knob, type-pinned to ``Literal[2]`` in v1) rather
+        than from the host-side ``PROTOCOL_VERSION_MAJOR`` module constant.
+        Without this, the config field was an unread tunable masquerading
+        as enforced. A future bump to ``Literal[2, 3]`` will exercise the
+        host-vs-config consistency guard below; today it always agrees,
+        but the consistency check is now real rather than aspirational.
         """
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._config.arduino_ready_timeout_sec
-        expected = PROTOCOL_VERSION_MAJOR
+        expected = self._config.arduino_protocol_version
+        if expected != PROTOCOL_VERSION_MAJOR:
+            # Defensive: config asks for a version this host wasn't built
+            # against. Today this branch is unreachable (Literal[2] +
+            # constant=2) but keeps the contract honest if the Literal
+            # widens or PROTOCOL_VERSION_MAJOR moves.
+            raise ProtocolVersionMismatchError(
+                f"config arduino_protocol_version={expected} but host "
+                f"is built for v{PROTOCOL_VERSION_MAJOR}"
+            )
         while True:
             remaining = deadline - loop.time()
             if remaining <= 0.0:
