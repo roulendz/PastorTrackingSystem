@@ -129,6 +129,17 @@ def infer(
             _shm.close()
         _shm = shared_memory.SharedMemory(name=shm_name)  # attach existing
         _shm_name = shm_name
+    # WR-05 fix: numpy will happily construct an ndarray view that overruns the
+    # underlying shm buffer (undefined behavior, possible segfault, or silent
+    # garbage in the view). The Frame __post_init__ on the parent side validates
+    # contiguity + dtype + shape, but cannot validate against THIS process's
+    # shm allocation size. Guard at the worker seam before constructing the view.
+    required_bytes = int(np.prod(shape)) * np.dtype(np.uint8).itemsize
+    if required_bytes > _shm.size:
+        raise ValueError(
+            f"frame shape {shape} requires {required_bytes} bytes; "
+            f"shm block has only {_shm.size}"
+        )
     frame_view: npt.NDArray[np.uint8] = np.ndarray(shape, dtype=np.uint8, buffer=_shm.buf)
     model = _ensure_model(model_path, device)
     tracker_arg = botsort_yaml_path if botsort_yaml_path is not None else "botsort.yaml"
