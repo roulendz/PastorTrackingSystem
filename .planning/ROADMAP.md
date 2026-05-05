@@ -82,7 +82,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Lock loss > 2.0 s triggers re-acquisition via the central-frame heuristic and logs WARN; 3 consecutive frames with no detection holds the last position and logs WARN
   5. The 4-state Kalman filter `[x, y, vx, vy]` in normalized coords predicts during gaps and updates on detection — output is lag-free relative to a raw EMA baseline
 **Plans**: 3 plans
-- [ ] 04-01-PLAN.md — Deps (ultralytics + filterpy) + Config fields (yolo_model_path / yolo_device / botsort_yaml_path) + Detection.track_id + PoseEngine Protocol + _pose_worker.py spawn-safe target + UltralyticsPoseEngine lifecycle skeleton + FakePoseEngine fixture + Wave-0 verifications (Wave 1)
+- [x] 04-01-PLAN.md — Deps (ultralytics + filterpy) + Config fields (yolo_model_path / yolo_device / botsort_yaml_path) + Detection.track_id + PoseEngine Protocol + _pose_worker.py spawn-safe target + UltralyticsPoseEngine lifecycle skeleton + FakePoseEngine fixture + Wave-0 verifications (Wave 1)
 - [ ] 04-02-PLAN.md — _kalman.py (filterpy 4-state CV with variable-dt + posterior-freeze) + subject_tracker.py (6-state lock state machine + PERC-02 centroid + PERC-04 central-60% heuristic + PERC-05 lock-loss + PERC-07 HOLDING) + 17 unit tests on real filterpy (Wave 2)
 - [ ] 04-03-PLAN.md — PoseDetector orchestrator (drop-oldest at ingress + async iterator + FAULTED preserve) + e2e FakePoseEngine→PoseDetector→SubjectTracker integration test (Wave 3)
 **UI hint**: no
