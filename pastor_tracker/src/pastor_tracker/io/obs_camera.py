@@ -582,6 +582,19 @@ class ObsCamera:
             await asyncio.to_thread(
                 capture_thread.join, _CAPTURE_JOIN_TIMEOUT_SEC
             )
+            if capture_thread.is_alive():
+                # W-06: structured WARN on join timeout. The capture thread
+                # is most likely still inside ``_video_source_factory(...)``
+                # (cv2.VideoCapture cold-open on CAP_DSHOW can take 2-3 s
+                # [CITED OpenCV forum]); stop() proceeds to release() which
+                # races the in-flight read(). The operator at least sees
+                # the leak rather than diagnosing a "phantom RUNNING state"
+                # downstream.
+                self._logger.warning(
+                    "camera_thread_join_timeout",
+                    timeout_sec=_CAPTURE_JOIN_TIMEOUT_SEC,
+                    note="release proceeding; potential handle race",
+                )
             self._logger.info(
                 "camera_thread_exited",
                 clean=not capture_thread.is_alive(),

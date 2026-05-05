@@ -280,6 +280,18 @@ class ArduinoMotor:
         rx_thread = self._rx_thread
         if rx_thread is not None:
             await asyncio.to_thread(rx_thread.join, _RX_JOIN_TIMEOUT_SEC)
+            if rx_thread.is_alive():
+                # W-06: structured WARN on join timeout. The RX thread is
+                # most likely blocked inside a long ``read_line`` call
+                # (PySerial blocking-read on a slow USB stack can exceed
+                # the join budget); close() proceeds to transport.close()
+                # which races the in-flight read. The operator sees the
+                # leak rather than diagnosing it after the fact.
+                self._logger.warning(
+                    "rx_thread_join_timeout",
+                    timeout_sec=_RX_JOIN_TIMEOUT_SEC,
+                    note="transport close proceeding; potential handle race",
+                )
             self._logger.info(
                 "rx_thread_exited", clean=not rx_thread.is_alive()
             )
