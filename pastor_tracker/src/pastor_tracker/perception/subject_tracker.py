@@ -52,16 +52,6 @@ from pastor_tracker.perception.pose_detector import PerceptionError
 _CENTRAL_REGION_FRACTION: Final[float] = 0.6
 _CENTRAL_HALF: Final[float] = (1.0 - _CENTRAL_REGION_FRACTION) / 2.0  # 0.2
 
-# --- PERC-02 weighted-keypoint-mean centroid + COCO-17 indices ---
-_NOSE_KP_INDEX: Final[int] = 0
-_LEFT_SHOULDER_KP_INDEX: Final[int] = 5
-_RIGHT_SHOULDER_KP_INDEX: Final[int] = 6
-_LEFT_HIP_KP_INDEX: Final[int] = 11
-_RIGHT_HIP_KP_INDEX: Final[int] = 12
-_WEIGHT_NOSE: Final[float] = 0.4
-_WEIGHT_SHOULDER_MID: Final[float] = 0.4
-_WEIGHT_HIP_MID: Final[float] = 0.2
-
 # --- Lifecycle thresholds ---
 _LOCK_LOSS_TIMEOUT_SEC: Final[float] = 2.0  # PERC-05
 _HOLD_POSTERIOR_FRAME_THRESHOLD: Final[int] = 3  # PERC-07
