@@ -119,3 +119,39 @@ def test_protocol_version_default_is_2() -> None:
     """Default value is the only legal value."""
     cfg = Config()
     assert cfg.arduino_protocol_version == 2
+
+
+# ---------- Phase 4 / Plan 01: Perception (YOLO11-pose + BoT-SORT) fields ----------
+
+
+def test_yolo_fields_validation(valid_config_dict: dict[str, Any]) -> None:
+    """yolo_device defaults to 'auto', yolo_model_path to 'yolo11n-pose.pt',
+    botsort_yaml_path to None. Invalid yolo_device rejected; valid Literal accepted."""
+    cfg = Config(**valid_config_dict)
+    assert cfg.yolo_device == "auto"
+    assert cfg.yolo_model_path == Path("yolo11n-pose.pt")
+    assert cfg.botsort_yaml_path is None
+    with pytest.raises(ValidationError):
+        Config(**valid_config_dict, yolo_device="invalid")  # type: ignore[arg-type]
+    cfg_cuda = Config(**valid_config_dict, yolo_device="cuda")
+    assert cfg_cuda.yolo_device == "cuda"
+
+
+def test_yolo_model_path_must_be_path_type(
+    valid_config_dict: dict[str, Any],
+) -> None:
+    """A string is coerced to Path; an explicit Path is preserved."""
+    cfg_str = Config(**valid_config_dict, yolo_model_path="not/a/path")  # type: ignore[arg-type]
+    assert cfg_str.yolo_model_path == Path("not/a/path")
+    cfg_path = Config(**valid_config_dict, yolo_model_path=Path("/abs/some.pt"))
+    assert cfg_path.yolo_model_path == Path("/abs/some.pt")
+
+
+def test_botsort_yaml_path_optional(valid_config_dict: dict[str, Any]) -> None:
+    """Default is None; explicit Path accepted."""
+    cfg_default = Config(**valid_config_dict)
+    assert cfg_default.botsort_yaml_path is None
+    cfg_explicit = Config(
+        **valid_config_dict, botsort_yaml_path=Path("custom.yaml")
+    )
+    assert cfg_explicit.botsort_yaml_path == Path("custom.yaml")
