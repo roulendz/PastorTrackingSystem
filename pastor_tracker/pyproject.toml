@@ -83,7 +83,7 @@ warn_unused_ignores = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["cv2.*", "dearpygui.*", "pygrabber.*", "ultralytics.*", "filterpy.*", "serial.*"]
+module = ["cv2.*", "dearpygui.*", "pygrabber.*", "ultralytics.*", "filterpy.*", "serial.*", "scipy.*"]
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -98,7 +98,13 @@ minversion = "8.0"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = ["-ra", "--strict-markers", "--strict-config"]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # filterpy 1.4.5 ships docstrings with literal '\Sum' that Python 3.12
+    # treats as SyntaxWarning; cosmetic upstream issue (RESEARCH 04 A1) --
+    # genuine numpy DeprecationWarning still escalates to error.
+    "ignore::SyntaxWarning",
+]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
