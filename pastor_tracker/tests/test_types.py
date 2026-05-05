@@ -79,6 +79,22 @@ def test_frame_rejects_non_uint8_dtype() -> None:
         )
 
 
+def test_frame_rejects_non_contiguous_image() -> None:
+    """W-08: ``Frame.image`` must be C-contiguous -- Phase 4 zero-copy GPU.
+
+    cv2.VideoCapture.read() always returns C-contiguous BGR uint8, so
+    production is fine -- but a fake source that builds a frame via
+    slicing (e.g. RGB->BGR view) produces a non-contiguous view. YOLO
+    would either crash or trigger an implicit ascontiguousarray copy
+    on the hot path.
+    """
+    base = np.zeros((4, 4, 6), dtype=np.uint8)
+    view = base[:, :, ::2]  # non-contiguous view, shape (4, 4, 3)
+    assert not view.flags["C_CONTIGUOUS"]
+    with pytest.raises(ValueError, match="C-contiguous"):
+        Frame(image=view, width=4, height=4, timestamp_ns=1)
+
+
 def test_detection_rejects_mutation() -> None:
     det = Detection(
         subject_center_x_normalized=0.5,

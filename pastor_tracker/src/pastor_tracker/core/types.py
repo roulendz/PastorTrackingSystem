@@ -84,6 +84,18 @@ class Frame:
                 f"Frame.image must have dtype {_IMAGE_DTYPE_EXPECTED}, "
                 f"got dtype={self.image.dtype}"
             )
+        if not self.image.flags["C_CONTIGUOUS"]:
+            # W-08: Phase 4 YOLO11-pose / ultralytics requires C-contiguous
+            # arrays for zero-copy GPU upload. cv2.VideoCapture.read() always
+            # returns C-contiguous BGR uint8, so production is fine -- but a
+            # FakeVideoSource that builds a frame via slicing (e.g.
+            # ``frame[..., ::-1]`` for RGB->BGR) produces a non-contiguous
+            # view. Catch at the boundary; let callers ``ascontiguousarray``
+            # explicitly if they need to (CLAUDE.md rule 1).
+            raise ValueError(
+                f"Frame.image must be C-contiguous; got "
+                f"strides={self.image.strides}, shape={self.image.shape}"
+            )
         image_height = int(self.image.shape[_IMAGE_HEIGHT_AXIS])
         image_width = int(self.image.shape[_IMAGE_WIDTH_AXIS])
         if image_width != self.width or image_height != self.height:
