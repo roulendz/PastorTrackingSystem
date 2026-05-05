@@ -668,37 +668,37 @@ def is_in_central_region(cx: float, cy: float) -> bool:
 
 **Risk hierarchy:** A1 is the highest-risk assumption (could block Wave 0). A4 is the next (could redefine architecture if dev box is CPU-only and slow). All others are low-risk implementation details verifiable inline.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Bounded-queue size for inference ingress (Claude's discretion per CONTEXT)**
    - What we know: CONTEXT says "1–4: only the freshest frame matters"; current Future-driven design works with size-1 in-flight (Pattern 4)
    - What's unclear: Whether to keep an explicit `asyncio.Queue` ahead of `executor.submit` or just track `_inflight: Future | None` directly
-   - Recommendation: **No queue; track `_inflight` directly.** Cleaner. Queue adds latency and a knob with no payoff at size-1.
+   - RESOLVED: **No queue; track `_inflight` directly.** Cleaner. Queue adds latency and a knob with no payoff at size-1.
 
 2. **Exact Q (process noise) and R (measurement noise) values for normalized-coord Kalman**
    - What we know: Code Example 1 starts at Q=1e-3, R=1e-4; CONTEXT permits Claude discretion
    - What's unclear: Stage tuning hasn't happened (Phase 8 task)
-   - Recommendation: **Hard-code as module-level Final constants in `_kalman.py` with docstring "v1 starting values; tune in Phase 8 / QA-04". Do NOT expose to Config in v1** (live tuning is Phase 7 dashboard scope; Q/R are not in PROMPT.md Config block).
+   - RESOLVED: **Hard-code as module-level Final constants in `_kalman.py` with docstring "v1 starting values; tune in Phase 8 / QA-04". Do NOT expose to Config in v1** (live tuning is Phase 7 dashboard scope; Q/R are not in PROMPT.md Config block).
 
 3. **Custom `botsort.yaml` override path**
    - What we know: Pitfall 5 — defaults may be too low for stage
    - What's unclear: Whether to ship a `pastor_tracker/perception/botsort.yaml` in the package or rely on ultralytics defaults
-   - Recommendation: **v1 = ultralytics default.** Add `Config.botsort_yaml_path: Path | None = None` (Claude's discretion field) so an operator can drop a tuned file at deploy time without code change. Document path semantics: relative to CWD if not None, else `"botsort.yaml"` string handed to ultralytics (which resolves to bundled).
+   - RESOLVED: **v1 = ultralytics default.** Add `Config.botsort_yaml_path: Path | None = None` (Claude's discretion field) so an operator can drop a tuned file at deploy time without code change. Document path semantics: relative to CWD if not None, else `"botsort.yaml"` string handed to ultralytics (which resolves to bundled).
 
 4. **Where does `device='auto'` resolve to `cuda` vs `cpu`?**
    - What we know: ultralytics `device=None` (and likely `device='auto'` if accepted) auto-selects via `torch.cuda.is_available()`
    - What's unclear: Whether ultralytics accepts the literal string `"auto"`
-   - Recommendation: **Resolve in `Config.yolo_device` validator.** `"auto"` → `"cuda"` if `torch.cuda.is_available()` else `"cpu"`, log the resolution. Always pass an explicit `"cuda"` or `"cpu"` to `model.track()`. Also catches the "user said cuda but no GPU" fail-loud case at start.
+   - RESOLVED: **Resolve in `Config.yolo_device` validator.** `"auto"` → `"cuda"` if `torch.cuda.is_available()` else `"cpu"`, log the resolution. Always pass an explicit `"cuda"` or `"cpu"` to `model.track()`. Also catches the "user said cuda but no GPU" fail-loud case at start.
 
 5. **Lifecycle of the shared_memory block across `PoseDetector.start()` retries**
    - What we know: Phase 3 `ObsCamera.start()` is single-shot
    - What's unclear: If user re-starts the orchestrator (Phase 6 lifecycle), does the previous shm block leak?
-   - Recommendation: **Single-shot per Phase 2/3 precedent.** Restart = construct fresh `PoseDetector`. Document. Phase 6 orchestrator constructs new instances on restart anyway.
+   - RESOLVED: **Single-shot per Phase 2/3 precedent.** Restart = construct fresh `PoseDetector`. Document. Phase 6 orchestrator constructs new instances on restart anyway.
 
 6. **Does YOLO11-pose return None for `boxes.id` on the first frame (before BoT-SORT initializes), even with `persist=True`?**
    - What we know: discussions report `boxes.id is None` is possible
    - What's unclear: Frequency
-   - Recommendation: **Guard at the seam.** `_translate(...)` returns empty `list[Detection]` when `boxes.id is None`; subject_tracker stays in UNLOCKED for that frame. Test in `FakePoseEngine` by scripting a "first-frame-no-ids" sequence.
+   - RESOLVED: **Guard at the seam.** `_translate(...)` returns empty `list[Detection]` when `boxes.id is None`; subject_tracker stays in UNLOCKED for that frame. Test in `FakePoseEngine` by scripting a "first-frame-no-ids" sequence.
 
 ## Environment Availability
 
