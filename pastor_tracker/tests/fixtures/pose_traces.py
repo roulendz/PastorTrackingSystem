@@ -72,6 +72,69 @@ class FakePoseEngine:
         return self._closed
 
 
+class SlowFakePoseEngine:
+    """Fake PoseEngine that sleeps inside ``detect()`` to simulate inference lag.
+
+    Used by the drop-oldest test: ``consume()`` at 30 fps while ``detect()``
+    takes 100 ms forces the orchestrator to emit ``inference_drop_oldest``
+    WARN on the lagging frames.
+    """
+
+    def __init__(
+        self,
+        *,
+        per_call_delay_sec: float = 0.1,
+        script: Iterable[list[Detection]] | None = None,
+    ) -> None:
+        import asyncio  # local import keeps fixtures-import cheap
+
+        self._delay = per_call_delay_sec
+        self._script: collections.deque[list[Detection]] = collections.deque(
+            script if script is not None else []
+        )
+        self._closed = False
+        self._asyncio = asyncio
+
+    async def detect(self, frame: Frame) -> list[Detection]:
+        await self._asyncio.sleep(self._delay)
+        if not self._script:
+            return []
+        return self._script.popleft()
+
+    async def close(self) -> None:
+        self._closed = True
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+
+class FailingPoseEngine:
+    """Fake PoseEngine that raises ``PerceptionError`` from ``detect()``.
+
+    Used by the FAULTED-preservation test to drive the orchestrator's
+    latched-error gate without any real inference machinery.
+    """
+
+    def __init__(self, *, error_message: str = "simulated engine fault") -> None:
+        self._closed = False
+        self._msg = error_message
+
+    async def detect(self, frame: Frame) -> list[Detection]:
+        # Local import keeps fixtures import-light + avoids a fixtures->perception
+        # import cycle at collect-time.
+        from pastor_tracker.perception.pose_detector import PerceptionError
+
+        raise PerceptionError(self._msg)
+
+    async def close(self) -> None:
+        self._closed = True
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+
 # --- Scripted traces (Plan 02 + Plan 03 will add more) ----------------------
 
 POSE_TRACE_INITIAL_LOCK: list[list[Detection]] = [
