@@ -790,7 +790,12 @@ class ObsCamera:
         prior_state = self._state
         if prior_state is _CamState.RUNNING:
             self._state = _CamState.REOPENING
-        self._first_frame_event.clear()
+        # W-05: ``_first_frame_event`` is single-shot after start(). The
+        # capture loop only ever ``set()``s it (idempotent); no path waits
+        # on it after start() returns. Clearing it here was a no-op that
+        # mis-led readers into thinking a first-frame handshake re-runs on
+        # reopen. start() is documented single-shot ("calling twice raises
+        # CameraError"), so reopen-after-restart is not a real path.
         for attempt_index, backoff_ms in enumerate(_REOPEN_BACKOFFS_MS, start=1):
             if self._source is not None:
                 self._source.release()
