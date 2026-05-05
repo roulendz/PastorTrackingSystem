@@ -26,6 +26,7 @@ from pastor_tracker.config import Config
 from pastor_tracker.core.types import MotorCommand
 from pastor_tracker.io.arduino_motor import (
     ArduinoMotor,
+    FirmwareErrorReceived,
     LinkLostError,
     WatchdogResetError,
     _MotorState,
@@ -186,6 +187,61 @@ async def test_motor_angle_paused_during_recovery(
         )
         m_count_after = sum(1 for w in fake.captured_writes if w.startswith(b"M:"))
         assert m_count_after == m_count_during + 1
+    finally:
+        await motor.close()
+
+
+async def test_firmware_error_during_recovery_preserves_firmware_error(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """B-01: firmware ERROR mid-recovery MUST NOT clobber to WatchdogResetError.
+
+    Trace:
+    1. Mid-session READY:v2 -> _on_rx_event spawns _recover.
+    2. _recover sends S: then awaits Settings ack via _wait_for_event.
+    3. Firmware emits ERROR:11 (or any code). RX thread bridges it.
+    4. _on_rx_event Error branch sets _latched_error = FirmwareErrorReceived
+       AND enqueues the Error into _rx_queue.
+    5. _wait_for_event pulls the Error, sees it is not Settings, discards.
+    6. Eventually _wait_for_event times out (no Settings arrives).
+    7. _recover's ack-timeout except branch fires. Without B-01 it would
+       overwrite _latched_error with WatchdogResetError -- losing the
+       operator-actionable FirmwareErrorReceived(HEARTBEAT_TIMEOUT, ...).
+
+    Assertion: latched error after recovery completes MUST still be
+    FirmwareErrorReceived; the next send_* raises that, not the generic
+    WatchdogResetError.
+    """
+    cfg_kwargs: dict[str, object] = {
+        **valid_config_dict,
+        "arduino_ready_timeout_sec": 0.2,  # short ack timeout for fast test
+    }
+    fake = FakeSerialTransport()
+    fake.feed_rx(b"SETTINGS: defaults (no valid EEPROM)")
+    fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+    fake.feed_rx(b"READY:v2")
+    motor = ArduinoMotor(fake, Config(**cfg_kwargs))
+    await motor.start()
+    try:
+        # Trigger recovery; do NOT feed Settings ack -- recovery sits paused.
+        fake.feed_rx(b"SETTINGS: loaded from EEPROM")
+        fake.feed_rx(b"FB_HEADER:currentAngle,targetAngle,speed,isRunning,timestampMicros,sequence,accelState")
+        fake.feed_rx(b"READY:v2")
+        await wait_for_state(motor, _MotorState.RECOVERING, timeout=1.0)
+        # Firmware emits ERROR while _recover is awaiting Settings ack.
+        # ERROR:11 = HEARTBEAT_TIMEOUT per protocol.h.
+        fake.feed_rx(b"ERROR:11 - PC heartbeat lost")
+        # Wait for FAULTED -- _recover times out + clobber-guard runs.
+        await wait_for_state(motor, _MotorState.FAULTED, timeout=2.0)
+        assert isinstance(motor._latched_error, FirmwareErrorReceived), (
+            f"expected FirmwareErrorReceived, got "
+            f"{type(motor._latched_error).__name__}: {motor._latched_error}"
+        )
+        # Next send_* surfaces the firmware error, not WatchdogResetError.
+        with pytest.raises(FirmwareErrorReceived):
+            await motor.send_motor_angle(
+                MotorCommand(target_angle_deg=0.0, timestamp_ns=1)
+            )
     finally:
         await motor.close()
 

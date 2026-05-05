@@ -655,14 +655,30 @@ class ArduinoMotor:
                     Limits, timeout=timeout, stage="limits"
                 )
             except (asyncio.TimeoutError, asyncio.QueueEmpty) as exc:  # noqa: UP041
-                self._latched_error = WatchdogResetError(
-                    f"recovery ack timeout: {exc}"
-                )
+                # B-01: do NOT overwrite a more specific latched error.
+                # If the firmware emitted ERROR:<code> (or USB unplugged)
+                # while _recover was awaiting an ack, _on_rx_event has
+                # already latched FirmwareErrorReceived / LinkLostError.
+                # The Error event in _rx_queue is then discarded by
+                # _wait_for_event (it is not a Settings / Limits ack),
+                # which causes this timeout branch to fire. Without the
+                # guard, the more specific typed error gets clobbered
+                # to a generic WatchdogResetError, breaking operator
+                # triage and Phase 7 dashboard logic that branches on
+                # error subclass type. Fail-loud + fail-accurate.
+                if not isinstance(
+                    self._latched_error,
+                    (FirmwareErrorReceived, LinkLostError),
+                ):
+                    self._latched_error = WatchdogResetError(
+                        f"recovery ack timeout: {exc}"
+                    )
                 self._state = _MotorState.FAULTED
                 self._logger.error(
                     "watchdog_recovery_failed",
                     reason="ack_timeout",
                     stage_exc=str(exc),
+                    latched_type=type(self._latched_error).__name__,
                 )
                 return
             except LinkLostError as exc:
@@ -681,14 +697,22 @@ class ArduinoMotor:
                 # 47-byte TX buffer guard tripped while re-issuing
                 # settings/limits (e.g., config drift). Latch
                 # deterministically.
-                self._latched_error = WatchdogResetError(
-                    f"recovery write error: {exc}"
-                )
+                # B-01: same guard as the ack-timeout branch -- if a
+                # firmware ERROR has already latched a more specific
+                # error, do not downgrade it to WatchdogResetError.
+                if not isinstance(
+                    self._latched_error,
+                    (FirmwareErrorReceived, LinkLostError),
+                ):
+                    self._latched_error = WatchdogResetError(
+                        f"recovery write error: {exc}"
+                    )
                 self._state = _MotorState.FAULTED
                 self._logger.error(
                     "watchdog_recovery_failed",
                     reason="invalid_payload",
                     stage_exc=str(exc),
+                    latched_type=type(self._latched_error).__name__,
                 )
                 return
             except asyncio.CancelledError:
