@@ -188,6 +188,14 @@ class SubjectTracker:
                 return self._tick_holding(eligible, now_ns)
             case _LockState.LOST:
                 return self._try_reacquire(eligible, now_ns)
+            case _:
+                # WR-08 fix: exhaustiveness guard (Tiger-style fail-loud on
+                # contract violation). All six current _LockState members are
+                # covered above; this catches a future enum member added
+                # without a matching dispatch arm.
+                raise PerceptionError(
+                    f"unhandled _LockState in consume: {self._state!r}"
+                )
 
     # ---------- state-machine handlers ----------
     def _try_lock(
