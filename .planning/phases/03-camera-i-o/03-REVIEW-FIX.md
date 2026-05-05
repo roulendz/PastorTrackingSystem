@@ -1,293 +1,294 @@
 ---
 phase: 03-camera-i-o
-fixed_at: 2026-05-04T23:43:00Z
+fixed_at: 2026-05-05T07:45:05Z
 review_path: .planning/phases/03-camera-i-o/03-REVIEW.md
-iteration: 1
-findings_in_scope: 10
-fixed: 10
-skipped: 0
-status: all_fixed
+iteration: 3
+findings_in_scope: 13
+fixed: 12
+skipped: 1
+status: partial
 ---
 
-# Phase 3: Code Review Fix Report
+# Phase 3: Code Review Fix Report (Iteration 3)
 
-**Fixed at:** 2026-05-04T23:43:00Z
-**Source review:** `.planning/phases/03-camera-i-o/03-REVIEW.md`
-**Iteration:** 1
-**Fix scope:** critical_warning (CR-01..CR-03 + WR-01..WR-07)
+**Fixed at:** 2026-05-05T07:45:05Z
+**Source review:** `.planning/phases/03-camera-i-o/03-REVIEW.md` (iter3 project-wide cross-phase sweep -- 4 BLOCKER + 9 WARNING)
+**Iteration:** 3
+**Fix scope:** critical_warning (B-01..B-04 + W-01..W-09)
 
 **Summary:**
-- Findings in scope: 10 (3 critical + 7 warning)
-- Fixed: 10
-- Skipped: 0
+- Findings in scope: 13 (4 blocker + 9 warning)
+- Fixed: 12 (4 blocker + 8 warning)
+- Skipped: 1 (W-07, see "Skipped Issues" below)
 
 ## Verification Snapshot
 
 | Gate | Status |
 |---|---|
-| pytest (full suite, 240 tests) | passed |
+| pytest (full suite) | 247 passed (was 240; +7 new regression tests) |
 | ruff check src tests | clean |
-| mypy --strict src | clean |
-| New regression tests added | 3 (CR-01, CR-02, WR-05) |
-| Pre-existing test fixed by CR-03 | 1 (test_capture_thread_exception_latches_stall_error -- was timing-flaky against the FAULTED-vs-RUNNING race that CR-03 closes) |
+| mypy --strict src | clean (17 source files) |
+| New regression tests added | 7 (B-01, B-02, B-03, B-04, W-01, W-04, W-08) |
+| Pre-existing tests broken | 0 |
 
-The 237-test baseline grew to 240 with the new regressions; all
-240 pass on every run since CR-03 landed.
+The full suite was re-run after every commit; no commit caused a
+regression. One pre-existing flake (`test_golden_trace_replay`) was
+observed under full-suite contention on the first baseline run but
+passed on every subsequent run -- this is a known timing-sensitive
+test (see commit `5a68cce`'s 5 s drain-budget fix); it is unrelated
+to any of the iter3 changes.
+
+## Per-Finding Result Table
+
+| ID | Severity | File:Line | Commit | Regression test | Status |
+|----|----------|-----------|--------|-----------------|--------|
+| B-01 | BLOCKER | `pastor_tracker/src/pastor_tracker/io/arduino_motor.py:609,632` | `8b47694` | yes -- `test_firmware_error_during_recovery_preserves_firmware_error` | fixed |
+| B-02 | BLOCKER | `pastor_tracker/src/pastor_tracker/io/obs_camera.py:982` | `a005127` | yes -- `test_frames_returns_cleanly_after_stop` | fixed |
+| B-03 | BLOCKER | `pastor_tracker/src/pastor_tracker/core/types.py:62-84` | `c714930` | yes -- `test_frame_rejects_non_uint8_dtype` | fixed |
+| B-04 | BLOCKER | `pastor_tracker/src/pastor_tracker/io/obs_camera.py:486-498` | `c13b9a2` | yes -- `test_start_translates_graph_factory_failure` | fixed |
+| W-01 | WARNING | `pastor_tracker/src/pastor_tracker/core/geometry.py:57-82` | `dca9c0e` | yes -- `test_inverse_map_output_in_unit_interval` (hypothesis property) | fixed |
+| W-02 | WARNING | `pastor_tracker/src/pastor_tracker/io/arduino_motor.py:309-312` | `5f6779b` | no (constant rename only) | fixed |
+| W-03 | WARNING | `pastor_tracker/src/pastor_tracker/io/arduino_motor.py:439-447` | `f1bf64f` | no (mirrors WR-07 obs_camera unreachable removal) | fixed |
+| W-04 | WARNING | `pastor_tracker/src/pastor_tracker/io/arduino_motor.py:449-479` | `e6214fa` | yes -- `test_seq_regression_records_after_recovery_flag` | fixed |
+| W-05 | WARNING | `pastor_tracker/src/pastor_tracker/io/obs_camera.py:793` | `8a5c1cf` | no (no-op removal -- documented in commit) | fixed |
+| W-06 | WARNING | `pastor_tracker/src/pastor_tracker/io/obs_camera.py:566-594` and `arduino_motor.py:264-282` | `368dff6` | no (WARN-only diagnostic; race window pre-existing) | fixed (partial -- WARN logs only; join-timeout raise deferred) |
+| W-07 | WARNING | `pastor_tracker/src/pastor_tracker/io/arduino_motor.py:264-273` | (n/a) | (n/a) | skipped (see below) |
+| W-08 | WARNING | `pastor_tracker/src/pastor_tracker/core/types.py:62-84` | `04e6998` | yes -- `test_frame_rejects_non_contiguous_image` | fixed |
+| W-09 | WARNING | `pastor_tracker/src/pastor_tracker/config.py:98` and `arduino_motor.py:296-297` | `88cb5d0` | covered by existing `test_protocol_version_default_is_2` (the read path is now exercised) | fixed |
 
 ## Fixed Issues
 
-### CR-01: `_maybe_fallback` factory call not wrapped -- silent thread death on cv2 open error
+### B-01: Watchdog recovery overwrites firmware ERROR latch with WatchdogResetError
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
-- `pastor_tracker/tests/test_obs_camera_fallback.py`
+- `pastor_tracker/src/pastor_tracker/io/arduino_motor.py` (`_recover` two except branches)
+- `pastor_tracker/tests/test_arduino_motor_recovery.py`
 
-**Commit:** `70ed036`
+**Commit:** `8b47694`
 
-**Applied fix:** Wrapped the post-release fallback factory call in
-a `try/except Exception` translator with `# noqa: BLE001`,
-mirroring the existing translators in `_capture_loop` and
-`_attempt_reopen`. On factory failure, log
-`camera_fallback_factory_failed` and route through
-`_fault_with_stall(exc)` so the typed `CameraStallError` surfaces
-on `cam.last_error` and `cam.state` transitions to FAULTED.
-Added regression test `test_fallback_factory_exception_latches_stall_error`
-modelled on the existing `test_reopen_factory_exception_recorded_in_history`.
+**Applied fix:** Added `isinstance(self._latched_error, (FirmwareErrorReceived, LinkLostError))` guard before the unconditional `self._latched_error = WatchdogResetError(...)` assignment in BOTH the `(asyncio.TimeoutError, asyncio.QueueEmpty)` branch (line 609) AND the parallel `ValueError` (write-error) branch (line 632). The guard is symmetric: if `_on_rx_event` already latched a more specific typed error while `_recover` was awaiting an ack, that typed error survives. Logs `latched_type` so post-mortems show which typed error survived.
+
+The regression test feeds `READY:v2` mid-session, lets `_recover` start, then feeds `ERROR:11 - PC heartbeat lost` while `_recover` is blocked on Settings ack. After the recovery times out, asserts `motor._latched_error` is `FirmwareErrorReceived` (not `WatchdogResetError`) and the next `send_motor_angle` raises `FirmwareErrorReceived`.
 
 ---
 
-### CR-02: Fallback transition deterministically trips false stall detection in production
+### B-02: `ObsCamera.frames()` raises synthetic `CameraStallError` after clean `stop()`
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
-- `pastor_tracker/tests/test_obs_camera_fallback.py`
+- `pastor_tracker/src/pastor_tracker/io/obs_camera.py` (`frames()` async generator)
+- `pastor_tracker/tests/test_obs_camera_lifecycle.py`
 
-**Commit:** `a7f0d31`
+**Commit:** `a005127`
 
-**Applied fix:** Took the reviewer's preferred Option A. Changed
-`_maybe_fallback` to return `bool` (True iff the source was
-actually swapped). `_capture_loop` now branches on that signal:
-when fallback fires, `last_grab_ns = None; continue` -- mirroring
-the stall-recovery pattern at the existing reopen sites
-(lines 597-598 / 617-618). This prevents the new 720p source's
-CAP_DSHOW first-frame latency (documented as up to 3 s) from
-being charged against the pre-fallback grab timestamp and
-tripping the 200 ms stall detector.
+**Applied fix:** Inside the `except TimeoutError:` block of `frames()`, added an early `return` when `self._state is _CamState.CLOSED`. The WR-06 thread-dead branch still fires for the ungraceful case (capture thread died WITHOUT reaching CLOSED). Phase 6's `async for frame in cam.frames():` consumer now sees `StopAsyncIteration` on clean shutdown rather than a synthetic `CameraStallError` masquerading as "camera crashed".
 
-Added regression test `test_fallback_does_not_trip_stall_on_slow_first_frame`
-that pins a 400 ms simulated first-frame latency on the post-
-fallback source. Verified by stashing the fix: the regression
-test correctly fires `camera_stall_detected` with `delta_ms=400`,
-so the test exercises the buggy code path.
+The regression test starts the camera, calls `stop()`, then iterates over `frames()` with a monkey-patched `_FIRST_FRAME_TIMEOUT_SEC=0.1` and `_STALE_FRAME_MAX_AGE_NS=0` (so any buffered frames are stale-dropped). Asserts the generator returns cleanly with `yielded == []`.
 
 ---
 
-### CR-03: `start()` swallows pre-thread errors and `stop()` clobbers `_CamState.FAULTED`
+### B-03: `Frame.__post_init__` does not validate `image.dtype`
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
+- `pastor_tracker/src/pastor_tracker/core/types.py` (added `_IMAGE_DTYPE_EXPECTED` constant + check in `__post_init__`)
+- `pastor_tracker/tests/test_types.py`
 
-**Commit:** `33d2ea2`
+**Commit:** `c714930`
 
-**Applied fix:** Three coupled changes:
+**Applied fix:** Added `_IMAGE_DTYPE_EXPECTED: np.dtype[np.uint8] = np.dtype(np.uint8)` module constant and a runtime check after the channel-count check: if `self.image.dtype != _IMAGE_DTYPE_EXPECTED` raise `ValueError`. Closes the gap between the static `ImageArray = NDArray[np.uint8]` type alias (compile-time only) and the runtime contract.
 
-1. **start() pre-thread errors:** Wrapped `discover_obs_camera_index`
-   in `try/except OBSCameraNotFoundError` and the initial
-   `_video_source_factory` call in `try/except Exception`. Both
-   handlers latch `_state = _CamState.FAULTED` and `_latched_error`
-   before re-raising, so the dashboard can distinguish "failed at
-   discovery" from "still opening". The factory translator uses
-   `raise CameraOpenError(...) from exc` (BLE001 is exempt because
-   the typed re-raise IS the translation).
-
-2. **start() RUNNING transition guard:** The final
-   `self._state = _CamState.RUNNING` is now gated by
-   `if self._state is _CamState.OPENING`. This prevents the loop
-   thread from clobbering a FAULTED state that the capture thread
-   raced ahead to latch (e.g. a `read()` that raises immediately
-   after the first successful frame). This race was previously
-   surfaced by `test_capture_thread_exception_latches_stall_error`
-   failing intermittently on the worktree (1/3 runs).
-
-3. **stop() FAULTED preservation:** The unconditional
-   `self._state = _CamState.CLOSED` is now gated by
-   `if self._state is not _CamState.FAULTED`. Terminal fault
-   diagnostics no longer disagree with `last_error` after the
-   user-initiated `stop()` for cleanup.
-
-**Note (logic / state-machine):** Per `<verification_strategy>` in
-the agent contract, this fix touches the lifecycle state machine
-and state-transition guards. Tier 1 (re-read) and Tier 2 (mypy
-+ ruff + 240-test suite) all pass and the previously-flaky test
-`test_capture_thread_exception_latches_stall_error` now passes
-deterministically. Logic correctness is well-pinned by the
-existing test surface, but **flagging for human verification**
-of the FAULTED-preservation contract: any future test that
-asserts `state == CLOSED` after a fault path must be updated
-(none currently exist; `test_start_then_stop_clean` only asserts
-CLOSED on the success path).
+Existing callers (`obs_camera._capture_loop` builds `Frame(image=bgr, ...)` from `cv2.VideoCapture.read()` or `FakeVideoSource.read()` outputs, which are uint8 by construction) all pass uint8. Test fixtures `make_solid_bgr` use `np.zeros(..., dtype=np.uint8)`; verified by re-running the full obs_camera test suite (47 tests).
 
 ---
 
-### WR-01: Silent thread exit when `self._source is None`
+### B-04: `ObsCamera.start()` does not catch graph-factory failures
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
+- `pastor_tracker/src/pastor_tracker/io/obs_camera.py` (added `except Exception` after `except OBSCameraNotFoundError`)
+- `pastor_tracker/tests/test_obs_camera_lifecycle.py`
 
-**Commit:** `9f544f0`
+**Commit:** `c13b9a2`
 
-**Applied fix:** Replaced the silent `return` on `self._source is None`
-with `_fault_with_stall(RuntimeError("capture loop observed source=None; recovery path bug"))`
-+ `return`. Per CLAUDE.md rule 1 (tiger-style: fail fast, fail
-loud), defensive silent suppression is forbidden.
+**Applied fix:** Added a second `except Exception as exc:` clause to the `try: self._device_index = discover_obs_camera_index(...)` block. The handler latches `_state = _CamState.FAULTED` and `_latched_error = CameraOpenError(f"DirectShow enumeration failed: {exc!r}")` then re-raises the typed error from the original cause. This is symmetric with the cv2 / DirectShow open path immediately below (the CR-03 pattern). Closes the OSError / pythoncom.com_error / pywintypes.error escape route.
 
-Also hardened `_fault_with_stall` to set `_stop_event` after
-dispatch -- without this, a fault raised mid-loop (e.g.
-`_maybe_fallback`'s factory-exception path which does NOT itself
-return from `_capture_loop`) lets the loop continue, hit the new
-`source=None` guard, and re-fire `_fault_with_stall`, clobbering
-the original latched error with a generic 'source=None'
-RuntimeError. This was caught when `test_fallback_factory_exception_latches_stall_error`
-(the CR-01 regression) failed after introducing the WR-01 guard.
-The `_stop_event.set()` makes `_fault_with_stall` self-terminating
-across all call sites.
+The regression test injects a `_bad_factory` lambda that raises `OSError("quartz.dll not found (simulated)")`, asserts `start()` raises `CameraOpenError(match="DirectShow")`, `cam.state is _CamState.FAULTED`, and `isinstance(cam.last_error, CameraOpenError)`.
 
-No new test added -- the WR-01 path is unreachable today (CR-01
-closed the only known route), so a test would have to manufacture
-an unreachable state.
+`# noqa: BLE001` was attempted but ruff reported it as unused (the `OBSCameraNotFoundError` clause above narrows the type-tracker's view of what can leak into the bare `except Exception`); removed it. Lint is clean.
 
 ---
 
-### WR-02: `_attempt_reopen` does not release the final failed source
+### W-01: `geometry.angle_deg_to_normalized_x` can return values slightly outside [0, 1]
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
+- `pastor_tracker/src/pastor_tracker/core/geometry.py` (output clamp)
+- `pastor_tracker/tests/test_geometry.py` (new property test + `NORMALIZED_X_MIN`/`NORMALIZED_X_MAX` re-export)
 
-**Commit:** `70bb64d`
+**Commit:** `dca9c0e`
 
-**Applied fix:** Appended the symmetric `self._source.release(); self._source = None`
-after the FINAL iteration's `camera_reopen_attempt_failed` log,
-matching the release pattern at the top of each loop body
-(line 697-699). The 3rd-attempt failure no longer leaks the
-VideoCapture handle until `stop()` runs.
+**Applied fix:** After computing `normalized = (offset + NORMALIZED_RANGE) * HALF`, return `min(NORMALIZED_X_MAX, max(NORMALIZED_X_MIN, normalized))`. Symmetric tolerance: tolerate `_HALF_FOV_BOUNDARY_TOL_DEG=1e-9` of input drift on the half-FOV boundary, produce strictly in-domain `[0, 1]` output. Downstream Pydantic DTOs (`Detection`, `TrackedSubject`, `FramingTarget` -- `Field(ge=0.0, le=1.0)`) no longer raise `ValidationError` from float ULP drift.
+
+New property test `test_inverse_map_output_in_unit_interval` runs hypothesis over `(fov, nx)` in `(1.0, 170.0) x [0, 1]`, computes the round-trip `nx -> angle -> nx_back`, and asserts `0 <= nx_back <= 1`.
 
 ---
 
-### WR-03: `start()` first-frame timeout path does not null `self._capture_thread`
+### W-02: `arduino_motor._wait_for_ready` magic number `0.05`
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
+- `pastor_tracker/src/pastor_tracker/io/arduino_motor.py`
 
-**Commit:** `dd852f2`
+**Commit:** `5f6779b`
 
-**Applied fix:** Added `self._capture_thread = None` after the
-join in the timeout branch, mirroring stop()'s symmetric
-join-then-null block. A subsequent `stop()` for cleanup no
-longer logs a redundant `camera_thread_exited` for the already-
-joined thread.
+**Applied fix:** Lifted the `0.05` literal to a module-level `Final` constant `_HANDSHAKE_WAIT_FOR_SLACK_SEC: Final[float] = 0.05` alongside the existing `_RECOVERY_TRAILING_DRAIN_SEC`. Updated the call site at line 311. No behavioral change; pure CLAUDE.md rule 6 compliance.
 
 ---
 
-### WR-04: `_CamState.REOPENING` declared but never assigned
+### W-03: `_enqueue` inconsistency between arduino_motor and obs_camera
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
+- `pastor_tracker/src/pastor_tracker/io/arduino_motor.py` (`_enqueue` method)
 
-**Commit:** `68f9a84`
+**Commit:** `f1bf64f`
 
-**Applied fix:** Took the wire-it-in option (the plan documents
-lock all 6 states in `03-01-PLAN.md` and `03-PATTERNS.md`).
-`_attempt_reopen` now sets `_state = _CamState.REOPENING` on
-entry (only when prior state is RUNNING -- never clobber a
-terminal state) and back to RUNNING on success (only when state
-is still REOPENING). On failure the loop returns False and the
-caller calls `_fault_with_stall`, which transitions
-REOPENING -> FAULTED via `_on_capture_failed`.
-
-`is_running` (which only checks `state is RUNNING`) correctly
-returns False during REOPENING -- consumers querying
-"should I read a frame now?" get the right answer. Python
-attribute writes are atomic so no lock is needed for the
-daemon-thread mutation.
-
-The pre-existing `test_stall_reopen_succeeds_attempt_1` line 141
-already hedges with `cam.state in (_CamState.RUNNING, _CamState.REOPENING)`
-anticipating this transition; that test still passes.
+**Applied fix:** Mirrored the WR-07 obs_camera fix: removed the `with contextlib.suppress(asyncio.QueueEmpty):` wrapper around `self._rx_queue.get_nowait()`. The `full()` guard guarantees `get_nowait()` cannot raise. Per CLAUDE.md rule 1, unreachable error-suppression is forbidden. Now `arduino_motor._enqueue` and `obs_camera._enqueue_frame` are structurally identical for future readers.
 
 ---
 
-### WR-05: Warmup-window boundary uses `>= 0` instead of `> 0`
+### W-04: `_check_seq_gap` does not record watchdog-reset signal in regression branch
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
-- `pastor_tracker/tests/test_obs_camera_fallback.py`
+- `pastor_tracker/src/pastor_tracker/io/arduino_motor.py` (added `after_recovery` field to `feedback_seq_regression` log)
+- `pastor_tracker/tests/test_arduino_motor_seq_gap.py`
 
-**Commit:** `eba7978`
+**Commit:** `e6214fa`
 
-**Applied fix:** Changed the gate from `warmup_remaining_ns >= 0`
-to `warmup_remaining_ns > 0`. Half-open semantics `[0, W)` --
-the exact boundary instant `now_ns - warmup_started_ns ==
-_WARMUP_WINDOW_SEC * _NS_PER_SEC` now counts as 'window expired'
-rather than 'last-chance fire'. CONTEXT.md "2 s warmup window"
-reads as 'inside warmup'.
+**Applied fix:** Added `after_recovery=(self._state is _MotorState.RECOVERING)` keyword to the `feedback_seq_regression` log emit. Phase 7 dashboard logic can now distinguish "regression we expected because the orchestrator already spawned `_recover`" from "regression we did not expect" without timestamp correlation.
 
-Added unit-level regression `test_warmup_window_is_half_open`
-that uses `inspect.getsource(ObsCamera._capture_loop)` to assert
-`"warmup_remaining_ns > 0"` is present and `"warmup_remaining_ns >= 0"`
-is absent. This is a string-level guard rather than a fragile
-timing-sensitive integration test pinned to the boundary.
+The regression test sets `motor._last_seq=10` then calls `_check_seq_gap(_make_fb(0))` with `_state=RUNNING` (asserts `after_recovery is False`) and again with `_state=RECOVERING` (asserts `after_recovery is True`).
 
 ---
 
-### WR-06: `frames()` raises latched error after queue drain -- but the queue may NEVER drain if producer dies
+### W-05: `ObsCamera._first_frame_event` cleared during reopen but never waited on after start()
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
+- `pastor_tracker/src/pastor_tracker/io/obs_camera.py` (removed `self._first_frame_event.clear()` from `_attempt_reopen`)
 
-**Commit:** `696d0fa`
+**Commit:** `8a5c1cf`
 
-**Applied fix:** Wrapped `_frames_queue.get()` in
-`asyncio.wait_for(..., timeout=_FIRST_FRAME_TIMEOUT_SEC)`. On
-`TimeoutError`: if `self._capture_thread is None or not is_alive()`
-AND `self._latched_error is None`, synthesize a typed
-`CameraStallError(attempts=[(0, 0, "capture thread dead, no error latched")])`.
-Otherwise (thread alive, OR error latched and racing the next
-iteration's empty-check), continue waiting. The synthetic stall
-exposes the silent-death symptom on the consumer side rather
-than hanging the event loop.
+**Applied fix:** Removed the no-op `self._first_frame_event.clear()` call. After `start()` returns, no path waits on the event; the capture loop only ever `set()`s it (idempotent). Removing the clear documents that the event is single-use after start. Replaced the misleading line with a documenting comment.
 
-Today the path is unreachable (CR-01 + WR-01 closed every known
-route); the watchdog is defense-in-depth against future
-regressions.
+`start()` is documented single-shot ("calling twice raises CameraError"), so reopen-after-restart is not a real path.
 
 ---
 
-### WR-07: `_enqueue_frame` `contextlib.suppress(asyncio.QueueEmpty)` is unreachable
+### W-06: `ObsCamera.stop()` releases source even if a concurrent `_attempt_reopen` is mid-factory
 
 **Files modified:**
-- `pastor_tracker/src/pastor_tracker/io/obs_camera.py`
+- `pastor_tracker/src/pastor_tracker/io/obs_camera.py` (`stop()` -- WARN log)
+- `pastor_tracker/src/pastor_tracker/io/arduino_motor.py` (`close()` -- symmetric WARN log)
 
-**Commit:** `5d578e5`
+**Commit:** `368dff6`
 
-**Applied fix:** Removed the `with contextlib.suppress(asyncio.QueueEmpty):`
-wrapper around `self._frames_queue.get_nowait()`. The block is
-gated by `self._frames_queue.full()`, so the queue is non-empty
-by definition; `get_nowait()` cannot raise `QueueEmpty`. Per
-CLAUDE.md rule 1 (tiger-style: fail fast, fail loud), the
-suppression was masking a contract bug. If a future refactor
-drops the `full()` guard, an unexpected `QueueEmpty` will now
-propagate.
+**Applied fix (partial):** Added structured WARN logs `camera_thread_join_timeout` (obs_camera) and `rx_thread_join_timeout` (arduino_motor) when the join times out. Operators see the leak rather than diagnosing it after the fact. The reviewer's other recommendation -- raising `_CAPTURE_JOIN_TIMEOUT_SEC` and `_RX_JOIN_TIMEOUT_SEC` from 1.0 s to 4.0 s -- was deliberately deferred:
 
-Also dropped the now-unused `import contextlib`.
+* Tests do not parameterise the timeout; raising it would compound test-suite runtime and could expose new flakes under contention.
+* The race window is a pre-existing inheritance from Phase 2 (W-06 itself notes this), not a Phase 3 regression.
+* The WARN log surfaces the symptom; the operator can act on the leak without us first lengthening every clean-shutdown path.
+
+If Phase 6 wiring later proves the longer timeout is required, the constant lift is a one-line follow-up that does not require re-touching call sites.
+
+---
+
+### W-08: `Frame` does not assert `image.flags['C_CONTIGUOUS']`
+
+**Files modified:**
+- `pastor_tracker/src/pastor_tracker/core/types.py` (added contiguity check in `__post_init__`)
+- `pastor_tracker/tests/test_types.py`
+
+**Commit:** `04e6998`
+
+**Applied fix:** After the dtype check, added `if not self.image.flags["C_CONTIGUOUS"]: raise ValueError(...)`. Production callers (`cv2.VideoCapture.read()`) always return C-contiguous arrays; the guard catches a future `FakeVideoSource` or perception-stage refactor that builds a non-contiguous view.
+
+The regression test constructs `np.zeros((4, 4, 6), dtype=np.uint8)[:, :, ::2]` (a non-contiguous view of shape `(4, 4, 3)`), confirms `flags["C_CONTIGUOUS"] is False`, and asserts `Frame(image=view, ...)` raises `ValueError(match="C-contiguous")`.
+
+---
+
+### W-09: `Config.arduino_protocol_version` `Literal[2]` does not feed `arduino_motor` runtime check
+
+**Files modified:**
+- `pastor_tracker/src/pastor_tracker/io/arduino_motor.py` (`_wait_for_ready` reads `self._config.arduino_protocol_version` + consistency guard)
+
+**Commit:** `88cb5d0`
+
+**Applied fix:** Took the reviewer's option 2 (read the config field at runtime) rather than option 1 (drop the field). Two reasons:
+
+1. Dropping `arduino_protocol_version` is a public Config contract change that ripples through `tests/conftest.py:18` (the `valid_config_dict` fixture) AND every consumer that builds `Config(**valid_config_dict)`. Read-it-at-runtime is purely additive.
+2. Existing tests `test_protocol_version_must_be_2` + `test_protocol_version_default_is_2` already pin the field's behaviour; the read-at-runtime change makes those tests exercise the actual orchestrator path rather than just the type system.
+
+Added a defensive consistency guard: if `expected != PROTOCOL_VERSION_MAJOR`, raise `ProtocolVersionMismatchError`. Today the branch is unreachable (Literal[2] + constant=2) but a future widen to `Literal[2, 3]` automatically activates the guard.
 
 ## Skipped Issues
 
-None -- all 10 in-scope findings (3 critical + 7 warning) were
-fixed and committed atomically. Info-level findings (IN-01..IN-04)
-were out of scope per `fix_scope: critical_warning`.
+### W-07: `arduino_motor.close()` Exception suppression breadth
+
+**File:** `pastor_tracker/src/pastor_tracker/io/arduino_motor.py:264-273`
+
+**Reason:** The reviewer's recommended narrowing from `contextlib.suppress(asyncio.CancelledError, Exception)` to `contextlib.suppress(asyncio.CancelledError, ArduinoError)` **breaks an existing explicit design contract** validated by `test_heartbeat_task_unexpected_exception_latches` (`tests/test_arduino_motor_heartbeat.py:45-81`).
+
+That test deliberately monkey-patches `motor.send_query` to raise `RuntimeError`, asserts that the W-05 done-callback installed by `start()` translates the `RuntimeError` into a latched `LinkLostError`, then calls `await motor.close()` inside a `try/finally`. The current behaviour is: close() awaits the heartbeat task, the heartbeat task re-raises the original `RuntimeError`, and `contextlib.suppress(Exception)` swallows it because the W-05 done-callback already retrieved + latched the typed `LinkLostError` from it.
+
+Narrowing to `ArduinoError` lets the original `RuntimeError` escape `close()`, which fails the test:
+```
+src\pastor_tracker\io\arduino_motor.py:278: in close
+    await self._heartbeat_task
+src\pastor_tracker\io\arduino_motor.py:574: in _heartbeat_loop
+    await self.send_query()
+RuntimeError: simulated programmer bug
+```
+
+The intent the reviewer flagged ("a `KeyError` or `RuntimeError` from cancellation cleanup would be hidden even if it's a legitimate bug") is real -- BUT the W-05 done-callback already handles it: any unexpected exception type from the task is captured + translated to a latched `LinkLostError` BEFORE `close()` runs, with full diagnostic preserved via `__cause__`. The `Exception` suppression in `close()` is just preventing a re-raise of the same exception that the done-callback already turned into a typed surface. Narrowing it would lose the deterministic close-path drain that the test pins.
+
+**Rolled back via `git checkout -- arduino_motor.py`** before the change was committed; the working tree is clean and the test suite stayed green at every commit boundary. To revisit W-07 properly, the agent would need to either:
+* Refactor the done-callback to make the suppress redundant (tracking that the exception was already retrieved), OR
+* Update `test_heartbeat_task_unexpected_exception_latches` to assert that `close()` raises and add a try/except around the close call.
+
+Both are non-trivial design changes outside the scope of "narrow the exception class". Skipping per `<critical_rules>`: "DO skip findings that cannot be applied cleanly -- do not force broken fixes."
+
+## Plan Impact
+
+This sweep touched cross-phase contracts that downstream phase plans (4-7) reference. Orchestrator should propagate the changes to those plans:
+
+### Phase 4 (Perception) -- Frame DTO contract tightening (B-03 + W-08)
+
+`Frame.__post_init__` now enforces TWO new invariants, both of which Phase 4's YOLO11-pose / ultralytics path was already implicitly assuming:
+
+1. `image.dtype == np.uint8` (B-03)
+2. `image.flags["C_CONTIGUOUS"] is True` (W-08)
+
+**Plan update needed:** `04-PLAN.md` (when written) can rely on these guarantees and skip its own dtype / contiguity guard (`np.ascontiguousarray` would be a no-op). Frame builders in tests/fixtures can no longer slice with `frame[..., ::-1]` patterns; they must `np.ascontiguousarray(...)` if they do. No public API change -- just a tighter precondition.
+
+### Phase 6 (Pipeline orchestration) -- camera lifecycle surface (B-02 + B-04)
+
+Two cross-phase orchestration contracts were tightened:
+
+1. **B-02:** Phase 6's `async for frame in camera.frames():` now terminates cleanly with `StopAsyncIteration` after `camera.stop()` -- previously the orchestrator would have to catch `CameraStallError` and discriminate "stopped on demand" from "real stall" by checking `camera.state == CLOSED` itself. Phase 6 plan can now write the simpler shutdown idiom.
+2. **B-04:** Phase 6's `try: await camera.start() except CameraError:` now reliably catches DirectShow / DLL load failures as `CameraOpenError` (the typed CameraError family), not as a raw `OSError` / `pywintypes.error`. Phase 6 plan can document the typed-only exception surface.
+
+### Phase 7 (Dashboard) -- diagnostic richness (W-04 + W-06)
+
+Two new structured log keys appear that Phase 7 dashboard widgets can consume:
+
+1. **`feedback_seq_regression.after_recovery: bool`** (W-04) -- distinguishes expected (post-recovery) vs unexpected sequence regressions.
+2. **`camera_thread_join_timeout` / `rx_thread_join_timeout`** (W-06) -- new WARN events surfacing handle-race risk on shutdown.
+
+### Phase 6 -- protocol-version negotiation surface (W-09)
+
+`ArduinoMotor` now reads `Config.arduino_protocol_version` at runtime instead of the host-side constant. Today `Literal[2]` pins this to a single value, but if a future protocol bump widens the literal, the `_wait_for_ready` consistency guard auto-activates. Phase 6 plan should note that the orchestrator's protocol-version is now config-driven (one-line constant change in arduino_protocol.py would no longer be sufficient on its own).
+
+### W-07 (skipped) -- close-path exception contract
+
+The `close()` exception-suppression contract is wider than tiger-style usually allows BECAUSE the W-05 done-callback front-loads the typed-error translation. If a future refactor makes the done-callback simpler (e.g. by using `task.add_done_callback(lambda t: self._latched_error or t.exception())`), W-07 should be re-opened. For now, document the contract: "close() drains any task exception silently because the done-callback has already translated it; never narrow this except clause without also updating `test_heartbeat_task_unexpected_exception_latches`."
 
 ---
 
-_Fixed: 2026-05-04T23:43:00Z_
+_Fixed: 2026-05-05T07:45:05Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 3_
