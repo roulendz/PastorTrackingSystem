@@ -10,7 +10,7 @@ from __future__ import annotations
 import structlog
 
 from pastor_tracker.config import Config
-from pastor_tracker.io.arduino_motor import ArduinoMotor
+from pastor_tracker.io.arduino_motor import ArduinoMotor, _MotorState
 from pastor_tracker.io.arduino_protocol import SEQ_MODULUS, Feedback
 from pastor_tracker.io.arduino_transport import FakeSerialTransport
 
@@ -84,6 +84,39 @@ def test_seq_forward_gap_within_threshold_silent(
         for r in caplog
     ), f"unexpected log on contiguous seq: {caplog!r}"
     assert motor._last_seq == 102
+
+
+def test_seq_regression_records_after_recovery_flag(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """W-04: feedback_seq_regression carries after_recovery flag.
+
+    Phase 7 dashboard distinguishes "regression we expected because the
+    orchestrator already spawned _recover" from "regression we did not
+    expect" without timestamp correlation across log events.
+    """
+    motor = ArduinoMotor(FakeSerialTransport(), Config(**valid_config_dict))
+    motor._last_seq = 10
+
+    # Case 1: state=RUNNING -- after_recovery is False.
+    with structlog.testing.capture_logs() as caplog_running:
+        motor._check_seq_gap(_make_fb(0))
+    regressions_running = [
+        r for r in caplog_running if r.get("event") == "feedback_seq_regression"
+    ]
+    assert len(regressions_running) == 1
+    assert regressions_running[0]["after_recovery"] is False
+
+    # Case 2: state=RECOVERING -- after_recovery is True.
+    motor._last_seq = 20
+    motor._state = _MotorState.RECOVERING
+    with structlog.testing.capture_logs() as caplog_recovering:
+        motor._check_seq_gap(_make_fb(0))
+    regressions_recovering = [
+        r for r in caplog_recovering if r.get("event") == "feedback_seq_regression"
+    ]
+    assert len(regressions_recovering) == 1
+    assert regressions_recovering[0]["after_recovery"] is True
 
 
 def test_seq_rollover_at_modulus_boundary_is_forward_not_regression(

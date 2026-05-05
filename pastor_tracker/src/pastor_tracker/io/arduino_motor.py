@@ -475,10 +475,16 @@ class ArduinoMotor:
         if gap > SEQ_MODULUS // 2:
             # Backwards delta: the new seq is "before" the last one. Treat
             # as a regression rather than a gigantic forward gap (W-04).
+            # ``after_recovery`` flags regressions that the orchestrator
+            # already expected (mid-session Ready spawned _recover, the
+            # firmware reset its sequence counter to 0). Phase 7 dashboard
+            # uses this to suppress the diagnostic noise without losing
+            # genuine unexpected regressions.
             self._logger.warning(
                 "feedback_seq_regression",
                 from_seq=self._last_seq,
                 to_seq=fb.sequence,
+                after_recovery=(self._state is _MotorState.RECOVERING),
             )
             self._last_seq = fb.sequence
             return
