@@ -88,3 +88,49 @@ POSE_TRACE_LOW_CONF_REJECT: list[list[Detection]] = [
     [make_detection(cx=0.5, cy=0.5, track_id=3, conf=0.40, timestamp_ns=1_000_000)],
 ]
 """Central person with mean kp conf < 0.55 (PERC-02 floor)."""
+
+
+# Locked subject for 5 frames, then 3 empty frames (HOLDING trigger), then 5 more.
+POSE_TRACE_OCCLUSION_3F: list[list[Detection]] = (
+    [
+        [make_detection(cx=0.5, cy=0.5, track_id=1, conf=0.9, timestamp_ns=k * 33_000_000)]
+        for k in range(5)
+    ]
+    + [[] for _ in range(3)]
+    + [
+        [make_detection(cx=0.5, cy=0.5, track_id=1, conf=0.9, timestamp_ns=k * 33_000_000)]
+        for k in range(8, 13)
+    ]
+)
+"""5 frames locked, 3 empty (HOLDING), 5 more locked. PERC-07 + recovery."""
+
+POSE_TRACE_LOCK_LOSS_2S: list[list[Detection]] = (
+    [
+        [make_detection(cx=0.5, cy=0.5, track_id=1, conf=0.9, timestamp_ns=k * 33_000_000)]
+        for k in range(3)
+    ]
+    + [[] for _ in range(80)]  # ~2.6 s at 30 fps
+    + [[make_detection(cx=0.5, cy=0.5, track_id=2, conf=0.9, timestamp_ns=83 * 33_000_000)]]
+)
+"""Lock track_id=1, then 2.6 s gap, then track_id=2 -- forces LOST -> RE_ACQUIRING."""
+
+POSE_TRACE_TRACK_ID_PERSIST: list[list[Detection]] = [
+    [
+        make_detection(
+            cx=0.5 + 0.01 * k, cy=0.5, track_id=42, conf=0.9, timestamp_ns=k * 33_000_000
+        )
+    ]
+    for k in range(10)
+]
+"""Same physical subject, stable track_id=42 across 10 frames (rightward motion)."""
+
+POSE_TRACE_TWO_PERSON_CENTRAL: list[list[Detection]] = [
+    [
+        make_detection(cx=0.5, cy=0.5, track_id=1, conf=0.9, timestamp_ns=1_000_000),
+        make_detection(cx=0.05, cy=0.5, track_id=2, conf=0.95, timestamp_ns=1_000_000),
+    ],
+]
+"""Two persons: track_id=1 central conf 0.9, track_id=2 off-center conf 0.95.
+
+PERC-04 must lock track_id=1 (central beats higher-conf-but-off-center).
+"""

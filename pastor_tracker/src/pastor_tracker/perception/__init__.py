@@ -5,8 +5,8 @@ Public surface:
       tests: ``FakePoseEngine`` in ``tests.fixtures.pose_traces``).
     * ``PoseDetector`` -- orchestrator (Plan 04-03, Wave 3).
     * ``UltralyticsPoseEngine`` -- production engine.
+    * ``SubjectTracker`` -- 6-state lock + Kalman per-frame transformer.
     * ``PerceptionError``, ``PoseEngineUnavailableError`` -- typed errors.
-    * ``SubjectTracker`` lands in Plan 04-02 (Wave 2).
 """
 from pastor_tracker.perception.pose_detector import (
     PerceptionError,
@@ -15,11 +15,13 @@ from pastor_tracker.perception.pose_detector import (
     PoseEngineUnavailableError,
     UltralyticsPoseEngine,
 )
+from pastor_tracker.perception.subject_tracker import SubjectTracker
 
 __all__ = [
     "PerceptionError",
     "PoseDetector",
     "PoseEngine",
     "PoseEngineUnavailableError",
+    "SubjectTracker",
     "UltralyticsPoseEngine",
 ]

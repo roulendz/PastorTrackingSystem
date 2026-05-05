@@ -115,5 +115,11 @@ class _KalmanWrapper:
         """Pitfall 4: return frozen posterior position (no predict, no update).
 
         Repeated calls return the same value -- covariance does NOT grow.
+
+        Note: filterpy initializes ``kf.x_post`` as a column vector ``(dim_x, 1)``
+        but flattens it to ``(dim_x,)`` after the first ``update()`` call. We
+        flatten defensively so callers see a consistent scalar regardless of
+        whether HOLDING is reached before any measurement was applied.
         """
-        return float(kf.x_post[0]), float(kf.x_post[1])
+        x_post = np.asarray(kf.x_post).ravel()
+        return float(x_post[0]), float(x_post[1])
