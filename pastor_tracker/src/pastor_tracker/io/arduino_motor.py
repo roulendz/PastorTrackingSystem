@@ -95,6 +95,11 @@ _RX_THREAD_READ_TIMEOUT_SEC: Final[float] = 0.1      # short tick -> responsive 
 _DECIMAL_DEG_PRECISION: Final[int] = 3               # Pitfall 5 -- keep TX line <= 47 bytes
 # WARN 6 -- drain trailing "SETTINGS: saved to EEPROM" SettingsInfo line.
 _RECOVERY_TRAILING_DRAIN_SEC: Final[float] = 0.1
+# W-02: scheduler-jitter slack on top of the transport's own ``read_line``
+# timeout. ``asyncio.wait_for(asyncio.to_thread(...), timeout=remaining +
+# slack)`` lets the thread complete its blocking read up to ``remaining``
+# without the asyncio side firing a TimeoutError on the boundary.
+_HANDSHAKE_WAIT_FOR_SLACK_SEC: Final[float] = 0.05
 
 
 class _MotorState(enum.Enum):
@@ -308,7 +313,7 @@ class ArduinoMotor:
                 )
             line = await asyncio.wait_for(
                 asyncio.to_thread(self._transport.read_line, remaining),
-                timeout=remaining + 0.05,
+                timeout=remaining + _HANDSHAKE_WAIT_FOR_SLACK_SEC,
             )
             if line is None:
                 continue
