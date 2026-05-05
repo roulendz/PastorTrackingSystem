@@ -167,3 +167,31 @@ async def test_status_properties_during_running(
         assert cam.last_error is None
     finally:
         await cam.stop()
+
+
+async def test_start_translates_graph_factory_failure(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """B-04: filter-graph factory failure (DLL missing, COM init error)
+    translates to a typed CameraOpenError + FAULTED, not a stuck OPENING.
+
+    Previously the ``except OBSCameraNotFoundError`` block only handled
+    the discovery-empty case; an OSError / pywintypes.error from the
+    FilterGraph constructor escaped untyped and left state at OPENING,
+    confusing the dashboard and Phase 6 orchestrator.
+    """
+
+    def _bad_factory() -> object:
+        raise OSError("quartz.dll not found (simulated)")
+
+    cam = ObsCamera(
+        Config(**valid_config_dict),
+        video_source_factory=lambda *_a, **_kw: pytest.fail(
+            "video_source_factory should not be reached"
+        ),
+        filter_graph_factory=_bad_factory,  # type: ignore[arg-type]
+    )
+    with pytest.raises(CameraOpenError, match="DirectShow"):
+        await cam.start()
+    assert cam.state is _CamState.FAULTED
+    assert isinstance(cam.last_error, CameraOpenError)

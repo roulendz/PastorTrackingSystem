@@ -496,6 +496,21 @@ class ObsCamera:
             self._state = _CamState.FAULTED
             self._latched_error = exc
             raise
+        except Exception as exc:
+            # B-04: graph-factory failures (FilterGraph CoInitialize race,
+            # missing quartz.dll / mfplat.dll, pythoncom.com_error) MUST
+            # translate to a typed CameraOpenError on the lifecycle surface.
+            # Without this catch, raw OSError / pywintypes.error escape and
+            # state stays at OPENING forever (CR-03's typed-terminal-state
+            # pattern was missing this branch). The catch-and-translate is
+            # symmetric with the cv2 / DirectShow open path below; BLE001
+            # is exempt because the typed re-raise IS the translation, no
+            # silent swallow.
+            self._state = _CamState.FAULTED
+            self._latched_error = CameraOpenError(
+                f"DirectShow enumeration failed: {exc!r}"
+            )
+            raise self._latched_error from exc
         try:
             self._source = self._video_source_factory(
                 self._device_index,
