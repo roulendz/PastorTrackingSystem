@@ -344,6 +344,53 @@ Read-only dashboard surface for Phase 7 is unchanged from Plan 04-02:
 - `detector.state: _DetectorState`
 - `detector.last_error: PerceptionError | None`
 
+## Addendum (2026-05-05 deep-review fix — BL-02 + WR-01..05)
+
+The Plan 03 ship had `UltralyticsPoseEngine.detect` raising
+`NotImplementedError` — the production engine was unrunnable even though
+the orchestrator-side plumbing (drop-oldest, queue, FAULTED preservation)
+was fully wired. Per the BL-02 deep-review fix, the production path is
+now implemented:
+
+```python
+async def detect(self, frame: Frame) -> list[Detection]:
+    # state guard -> shm-size guard -> view copy -> executor.submit
+    # -> _pose_worker.infer -> Detection.model_validate(...) translation
+```
+
+Test policy unchanged: there is **no CI test** for this method — it
+requires real torch + ultralytics + model weights. Deferred to Phase 8
+QA-04 stage smoke per CONTEXT.md Area 1. The PoseEngine Protocol seam +
+FakePoseEngine continue to cover every CI path; the production seam is
+exercised end-to-end on stage. The previous review note "PERC-01 not
+demonstrably satisfied by ANY automated test" is now contained: PERC-01
+remains seam-tested in CI and hardware-tested in QA-04, with the
+production code path actually present and runnable.
+
+Companion deep-review fixes landed alongside BL-02:
+
+- **WR-01**: documented why the two `except Exception` translators at
+  `_resolve_device` (line 173) and engine.start boundary (line 329) do
+  not need `# noqa: BLE001` — BLE001 does not fire because both
+  immediately re-raise as a typed `PerceptionError` /
+  `PoseEngineUnavailableError`.
+- **WR-02**: `_pose_worker._translate` bounds-checks `track_ids[idx]`
+  against `len(track_ids)` — defensive against a future ultralytics
+  version desynchronising `boxes.id` from `boxes.xyxyn`.
+- **WR-03**: `_pose_worker.infer` bounds-checks `results[0]` — empty
+  results list (zero-detection frame) returns empty `PoseEngineResult`
+  instead of raising IndexError.
+- **WR-04**: new `_clamp01` helper at the worker seam; `xyxyn` bbox
+  coords are now clamped to `[0, 1]` (same Pitfall-12 fp-rounding
+  pattern the centroid already used).
+- **WR-05**: shm-size guard at the worker entry — refuses to construct
+  an ndarray view that overruns the shm block. Parent-side mirror lives
+  in `UltralyticsPoseEngine.detect` (added with BL-02).
+
+All 22 perception tests pass after these fixes (no test-side changes
+required); ruff src+tests clean; mypy --strict clean (22 src files);
+288 full-suite tests pass.
+
 ## Self-Check: PASSED
 
 - `pastor_tracker/src/pastor_tracker/perception/pose_detector.py` — FOUND (full orchestrator)

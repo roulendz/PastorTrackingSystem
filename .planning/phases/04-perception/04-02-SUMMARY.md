@@ -194,6 +194,39 @@ The internal `_out_queue` (capacity 256) is reserved for an
 the orchestrator decides to decouple consume() from downstream — for now
 `consume()` returns the emitted subject directly.
 
+## Addendum (2026-05-05 deep-review fix — BL-01)
+
+The `_out_queue` and `tracked_subjects()` async iterator described above
+were **never wired** by Plan 03 — the iterator awaited `_out_queue.get()`
+on a queue nothing populated, deadlocking on first iteration. Per the
+BL-01 fix, both have been deleted. The public surface is now
+**consume-based only**:
+
+```python
+async def consume(detections, now_ns) -> TrackedSubject | None
+```
+
+Phase 6 orchestrator composes the iteration via its own outer loop
+(``PoseDetector.detections() -> SubjectTracker.consume()`` per frame).
+`asyncio` and `AsyncIterator` imports were dropped from
+`subject_tracker.py`. Other dashboard surfaces (`is_locked`,
+`current_track_id`, `last_lock_loss_ts_ns`, `state`, `last_error`)
+remain unchanged.
+
+The WR-06 deep-review fix also dropped 8 lines of dead-duplicate
+keypoint constants from the top of `subject_tracker.py` — PERC-02
+weights and COCO-17 indices live exclusively in `_keypoints.py` now.
+
+WR-07 made the `_KalmanWrapper` dataclass fields load-bearing:
+`reset_for_new_track` now forwards `process_noise_var`,
+`measurement_noise_var`, `initial_vel_cov`, `initial_pos_cov` to
+`make_kalman_for_subject`. Defaults still come from the module Final
+constants, so behaviour is unchanged for current callers; a future
+Phase 7 dashboard live-tuning shim will see custom values take effect.
+
+WR-08 added a `case _: raise PerceptionError(...)` exhaustiveness guard
+to the `consume()` `match self._state` block.
+
 ## Self-Check: PASSED
 
 - `pastor_tracker/src/pastor_tracker/perception/_kalman.py` — FOUND

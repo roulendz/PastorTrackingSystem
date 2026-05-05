@@ -74,7 +74,8 @@ Detect the pastor on every frame with YOLO11-pose, lock onto them as the primary
 - Behaviour during gap > 3 frames (PERC-07) = hold last filter posterior — stop predicting forward, output = last update mean, log WARN; track stays alive until the 2.0 s lock-loss timeout fires
 
 ### Output Surface & Test Strategy (Area 4, all accepted)
-- Public API = `async def tracked_subjects(self) -> AsyncIterator[TrackedSubject]:` (mirrors Phase 2 `motor.events()` and Phase 3 `camera.frames()`)
+- Public API = `async def consume(self, detections, now_ns) -> TrackedSubject | None:` per BL-01 simplification (2026-05-05 deep-review fix). The earlier `tracked_subjects()` async-iterator surface deadlocked on an empty queue — Phase 6 orchestrator iterates by composing this consume() call inside its own outer loop (mirrors `PoseDetector.detections() -> SubjectTracker.consume()` flow). Phase 2 `motor.events()` and Phase 3 `camera.frames()` remain iterator-based; SubjectTracker is consume-based by design.
+- `UltralyticsPoseEngine.detect` is fully implemented as of BL-02 fix (2026-05-05). Production path (executor.submit + shm copy + `_pose_worker.infer`) is wired; CI tests still go through `FakePoseEngine` (zero ML deps). Production seam exercised on stage in Phase 8 QA-04 hardware run.
 - Test seam = `PoseEngine` `Protocol` wrapping YOLO + BoT-SORT; in-tree zero-deps `FakePoseEngine` produces scripted detections (track ids + keypoints + conf) — covers lock acquisition, occlusion, ID switch, conf-floor reject without GPU / model weights in CI
 - Observable state for Phase 7 dashboard = read-only properties `is_locked: bool`, `current_track_id: int | None`, `last_lock_loss_ts_ns: int | None` (minimal, no implementation leak)
 - Coverage target = ≥ 90 % line on `subject_tracker.py` + `pose_detector.py`; 100 % on lock-acquisition + Kalman-update branches (matches Phase 3's safety-critical 100% rule)
