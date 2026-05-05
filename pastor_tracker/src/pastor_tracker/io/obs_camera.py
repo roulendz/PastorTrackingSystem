@@ -1002,6 +1002,16 @@ class ObsCamera:
                     timeout=_FIRST_FRAME_TIMEOUT_SEC,
                 )
             except TimeoutError:
+                # B-02: clean-shutdown surface. After stop(), state is
+                # CLOSED, the capture thread is None, and the queue
+                # stops being filled -- the wait_for() naturally times
+                # out within _FIRST_FRAME_TIMEOUT_SEC. Treat this as a
+                # generator-clean exit so consumers iterating via
+                # ``async for frame in cam.frames()`` see
+                # StopAsyncIteration, NOT a synthetic CameraStallError
+                # masquerading as "camera crashed".
+                if self._state is _CamState.CLOSED:
+                    return
                 # WR-06: only treat the timeout as fatal if the
                 # producer is gone AND no error is latched. If a
                 # latched error exists (race with the loop-thread

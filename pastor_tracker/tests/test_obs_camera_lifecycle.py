@@ -169,6 +169,48 @@ async def test_status_properties_during_running(
         await cam.stop()
 
 
+async def test_frames_returns_cleanly_after_stop(
+    valid_config_dict: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B-02: frames() generator MUST exit cleanly after stop().
+
+    Phase 6 orchestrator consumes the generator via ``async for frame in
+    camera.frames():``. Clean shutdown should surface as
+    StopAsyncIteration (the generator returns) -- NOT a synthetic
+    CameraStallError. Previously, after stop(), the queue stopped
+    being filled, the wait_for() inside frames() timed out within
+    _FIRST_FRAME_TIMEOUT_SEC, and the watchdog raised a fake
+    CameraStallError masquerading as 'camera crashed'.
+
+    Buffered frames in the queue at stop-time are drained first
+    (mirrors arduino_motor's queue-drain pattern); the regression is
+    that AFTER drain, the next wait_for timeout MUST return rather
+    than raising synthetic CameraStallError.
+    """
+    cam, _fake = await _started_camera(valid_config_dict)
+    # Shorten the timeout so the post-drain wait_for fires quickly.
+    monkeypatch.setattr(
+        "pastor_tracker.io.obs_camera._FIRST_FRAME_TIMEOUT_SEC", 0.1
+    )
+    # Also shorten the stale-frame window so any buffered frames are
+    # discarded immediately rather than yielded before the test gets to
+    # the post-drain timeout we want to exercise.
+    monkeypatch.setattr(
+        "pastor_tracker.io.obs_camera._STALE_FRAME_MAX_AGE_NS", 0
+    )
+    await cam.stop()
+    assert cam.state is _CamState.CLOSED
+    yielded: list[int] = []
+    async for f in cam.frames():
+        yielded.append(f.timestamp_ns)
+    assert yielded == [], (
+        "frames() yielded after stop() -- with stale-drop=0 every "
+        "buffered frame is discarded; the generator should then return "
+        "without raising CameraStallError"
+    )
+
+
 async def test_start_translates_graph_factory_failure(
     valid_config_dict: dict[str, object],
 ) -> None:
