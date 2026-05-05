@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import enum
+from collections.abc import AsyncIterator
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import shared_memory
 from typing import Final, Protocol, runtime_checkable
@@ -32,6 +33,8 @@ _EXECUTOR_SHUTDOWN_TIMEOUT_SEC: Final[float] = 5.0
 _WORKER_WARMUP_TIMEOUT_SEC: Final[float] = 30.0  # Pitfall 10 -- CUDA JIT
 _NS_PER_SEC: Final[int] = 1_000_000_000
 _BYTES_PER_PIXEL: Final[int] = 3  # BGR uint8
+_OUT_QUEUE_MAX: Final[int] = 256  # Phase 2/3 bounded-queue precedent
+_DETECTIONS_POLL_TIMEOUT_SEC: Final[float] = 0.5  # detections() get() poll cadence
 
 __all__ = [
     "PerceptionError",
@@ -204,9 +207,205 @@ class UltralyticsPoseEngine:
 
 
 class PoseDetector:
-    """Placeholder. Plan 04-03 (Wave 3) implements the full orchestrator."""
+    """Orchestrator: holds a ``PoseEngine``, drop-oldest at ingress, async iterator surface.
+
+    Architecture (RESEARCH 04 Pattern 4 + Open Question 1):
+        * In-flight slot = 1: ``_inflight: asyncio.Task | None`` IS the queue.
+          New ``consume()`` while an inference is still running cancels the
+          old task and emits ``inference_drop_oldest`` WARN.
+        * Output queue: ``asyncio.Queue[list[Detection]](maxsize=256)`` --
+          bounded per Phase 2/3 precedent. Consumer = downstream
+          ``SubjectTracker.consume`` via the orchestrator (Phase 6).
+        * Lifecycle (single-shot per Phase 2/3 precedent): ``start()`` opens
+          the engine; ``stop()`` cancels in-flight + closes engine + preserves
+          FAULTED (mirror obs_camera.py:581-622).
+
+    Public surface mirrors Phase 2 ``motor.events()`` and Phase 3
+    ``camera.frames()``: ``async def detections() -> AsyncIterator[list[Detection]]``.
+    """
 
     def __init__(self, *, config: Config, engine: PoseEngine) -> None:
         self._config = config
         self._engine = engine
         self._logger = structlog.get_logger(module="pose_detector_orchestrator")
+        self._state: _DetectorState = _DetectorState.DISCONNECTED
+        self._inflight: asyncio.Task[None] | None = None
+        self._out_queue: asyncio.Queue[list[Detection]] = asyncio.Queue(maxsize=_OUT_QUEUE_MAX)
+        self._latched_error: PerceptionError | None = None
+
+    # ---------- read-only status surface ----------
+    @property
+    def state(self) -> _DetectorState:
+        return self._state
+
+    @property
+    def is_running(self) -> bool:
+        return self._state is _DetectorState.RUNNING
+
+    @property
+    def last_error(self) -> PerceptionError | None:
+        return self._latched_error
+
+    # ---------- lifecycle ----------
+    async def start(self) -> None:
+        if self._state is not _DetectorState.DISCONNECTED:
+            raise PerceptionError(
+                f"start() called twice (state={self._state.value})"
+            )
+        self._state = _DetectorState.STARTING
+        # Production engine (UltralyticsPoseEngine) has its own start();
+        # FakePoseEngine has no start(). Honor whichever is available.
+        engine_start = getattr(self._engine, "start", None)
+        if callable(engine_start):
+            try:
+                maybe_coro = engine_start()
+                if asyncio.iscoroutine(maybe_coro):
+                    await maybe_coro
+            except PerceptionError as exc:
+                self._state = _DetectorState.FAULTED
+                self._latched_error = exc
+                raise
+            except Exception as exc:
+                self._state = _DetectorState.FAULTED
+                err = PerceptionError(f"engine start failed: {exc}")
+                self._latched_error = err
+                raise err from exc
+        self._state = _DetectorState.RUNNING
+        self._logger.info("pose_detector_started")
+
+    async def stop(self) -> None:
+        """Pitfall 7 close-order: cancel inflight first, then close engine.
+
+        Mirror obs_camera.py:581-622 -- preserve FAULTED across stop().
+        """
+        if self._inflight is not None and not self._inflight.done():
+            self._inflight.cancel()
+            try:
+                await self._inflight
+            except (asyncio.CancelledError, PerceptionError):
+                pass  # cancellation or fault is the expected path here
+            except Exception as exc:  # noqa: BLE001 -- documented translator (inflight swallow on stop)
+                self._logger.warning(
+                    "pose_detector_inflight_swallow_on_stop",
+                    error=str(exc),
+                )
+        self._inflight = None
+        try:
+            await self._engine.close()
+        except Exception as exc:  # noqa: BLE001 -- documented translator (engine boundary; W5 fix)
+            self._logger.warning(
+                "pose_engine_close_failed",
+                error=str(exc),
+            )
+            # W5 fix: a failed engine close is a fault. Latch FAULTED + typed
+            # PerceptionError so downstream callers / tests cannot mistake the
+            # state for a clean shutdown.
+            self._state = _DetectorState.FAULTED
+            self._latched_error = PerceptionError(
+                f"engine close failed: {exc}"
+            )
+        if self._state is not _DetectorState.FAULTED:
+            self._state = _DetectorState.CLOSED
+        self._logger.info("pose_detector_stopped", state=self._state.value)
+
+    # ---------- ingress ----------
+    async def consume(self, frame: Frame) -> None:
+        """RESEARCH 04 Pattern 4: drop-oldest at ingress (in-flight slot = 1).
+
+        New frame while inference still running:
+          * Log ``inference_drop_oldest`` WARN (Phase 2/3 drop-oldest precedent).
+          * Cancel the previous task; await its cancellation.
+          * Submit a new inference task tied to the new frame.
+
+        ``consume`` returns immediately; the result lands in ``_out_queue``
+        when the inference task completes.
+        """
+        self._raise_if_latched()
+        if self._state is not _DetectorState.RUNNING:
+            raise PerceptionError(
+                f"consume() while state={self._state.value}; expected RUNNING"
+            )
+        if self._inflight is not None and not self._inflight.done():
+            self._logger.warning(
+                "inference_drop_oldest",
+                reason="previous_inference_still_running",
+                dropped_timestamp_ns=frame.timestamp_ns,
+            )
+            self._inflight.cancel()
+            try:
+                await self._inflight
+            except (asyncio.CancelledError, PerceptionError):
+                pass
+            except Exception as exc:  # noqa: BLE001 -- documented translator (drop-oldest swallow); see comment block below
+                # The cause is already routed through ``_infer_one`` (latched
+                # in ``_latched_error`` + ``pose_engine_fault`` ERROR log).
+                # Here we only log at DEBUG so cancellation noise doesn't
+                # shadow the real fault on the orchestrator surface.
+                self._logger.debug(
+                    "pose_detector_drop_oldest_swallow",
+                    error=str(exc),
+                )
+        self._inflight = asyncio.create_task(self._infer_one(frame))
+
+    async def _infer_one(self, frame: Frame) -> None:
+        """Single-frame worker: call engine.detect, route result or fault."""
+        try:
+            detections = await self._engine.detect(frame)
+        except asyncio.CancelledError:
+            raise
+        except PerceptionError as exc:
+            self._latched_error = exc
+            self._state = _DetectorState.FAULTED
+            self._logger.error(
+                "pose_engine_fault",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 -- documented translator (engine boundary)
+            err = PerceptionError(f"engine detect failed: {exc}")
+            self._latched_error = err
+            self._state = _DetectorState.FAULTED
+            self._logger.error(
+                "pose_engine_fault",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
+            return
+        # Route result. If queue is full, drop-oldest there too (mirror Phase 3).
+        if self._out_queue.full():
+            try:
+                _ = self._out_queue.get_nowait()
+                self._logger.warning(
+                    "pose_detector_output_drop_oldest",
+                    queue_size=self._out_queue.maxsize,
+                )
+            except asyncio.QueueEmpty:
+                pass
+        await self._out_queue.put(detections)
+
+    # ---------- egress ----------
+    async def detections(self) -> AsyncIterator[list[Detection]]:
+        """Async iterator over per-frame detection lists.
+
+        Mirrors Phase 2 ``motor.events()`` and Phase 3 ``camera.frames()``.
+        Exits cleanly via ``StopAsyncIteration`` after stop() drains the queue.
+        """
+        while True:
+            if self._state in (_DetectorState.CLOSED, _DetectorState.FAULTED):
+                if self._latched_error is not None and self._out_queue.empty():
+                    raise self._latched_error
+                if self._out_queue.empty():
+                    return  # clean StopAsyncIteration
+            try:
+                dets = await asyncio.wait_for(
+                    self._out_queue.get(), timeout=_DETECTIONS_POLL_TIMEOUT_SEC,
+                )
+            except TimeoutError:
+                continue
+            yield dets
+
+    # ---------- helpers ----------
+    def _raise_if_latched(self) -> None:
+        if self._latched_error is not None:
+            raise self._latched_error
