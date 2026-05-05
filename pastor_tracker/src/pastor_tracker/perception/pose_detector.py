@@ -21,6 +21,7 @@ from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import shared_memory
 from typing import Final, Protocol, runtime_checkable
 
+import numpy as np
 import structlog
 
 from pastor_tracker.config import Config
@@ -181,10 +182,70 @@ class UltralyticsPoseEngine:
         self._state = _DetectorState.RUNNING
 
     async def detect(self, frame: Frame) -> list[Detection]:
-        """Plan 03 implements drop-oldest + executor.submit. Plan 01 NotImplemented."""
-        raise NotImplementedError(
-            "UltralyticsPoseEngine.detect lands in Plan 04-03 (Wave 3)"
+        """Production inference path: copy frame into shm, submit to worker, await result.
+
+        BL-02 fix (2026-05-05 review): the previous implementation raised
+        NotImplementedError, which would have latched FAULTED on the very
+        first frame for any orchestrator wired to this production engine
+        (PoseDetector.consume() -> _infer_one() -> engine.detect() ->
+        NotImplementedError). The runtime path now mirrors RESEARCH 04
+        Pattern 4 and the Plan 04-03 PoseDetector orchestrator-side wiring:
+
+            1. Validate state == RUNNING (fail-fast outside lifecycle).
+            2. Copy frame.image bytes into the long-lived SharedMemory
+               block (the only copy in the pipeline; the IPC handoff to
+               the worker is zero-copy from this side onward).
+            3. Submit ``_pose_worker.infer`` with (shm_name, shape,
+               timestamp_ns, device, model_path, botsort_yaml_path) and
+               await the Future via ``loop.run_in_executor``.
+            4. Translate the picklable ``PoseEngineResult`` into the
+               public ``Detection`` DTOs (re-validates field invariants
+               at the trust boundary).
+
+        Test coverage policy: there is NO CI test for this method --
+        it requires real torch + ultralytics + model weights and is
+        deferred to the Phase 8 QA-04 on-stage hardware run per
+        CONTEXT.md Area 1 + 04-03-SUMMARY.md "Out-of-Scope Deferrals".
+        The seam (PoseEngine Protocol + FakePoseEngine) covers every
+        orchestrator-side path in CI; this method is the production
+        plumbing that closes the loop.
+        """
+        if self._state is not _DetectorState.RUNNING:
+            raise PerceptionError(
+                f"detect() while state={self._state.value}; expected RUNNING"
+            )
+        assert self._shm is not None, "shm allocated in start()"
+        assert self._executor is not None, "executor allocated in start()"
+        assert self._loop is not None, "loop captured in start()"
+        assert self._resolved_device is not None, "device resolved in start()"
+        # WR-05 mirror: refuse to copy a frame whose bytes overrun the long-lived
+        # shm block (e.g. camera reconfigured to a higher resolution mid-run).
+        # The matching worker-side guard lives in _pose_worker.infer.
+        if frame.image.nbytes > self._shm.size:
+            raise PerceptionError(
+                f"frame {frame.image.shape} requires {frame.image.nbytes} bytes; "
+                f"shm block has only {self._shm.size}"
+            )
+        view = np.ndarray(
+            frame.image.shape, dtype=np.uint8, buffer=self._shm.buf,
         )
+        view[:] = frame.image
+        botsort_arg = (
+            str(self._config.botsort_yaml_path)
+            if self._config.botsort_yaml_path is not None
+            else None
+        )
+        result = await self._loop.run_in_executor(
+            self._executor,
+            _pose_worker.infer,
+            self._shm.name,
+            frame.image.shape,
+            frame.timestamp_ns,
+            self._resolved_device,
+            str(self._config.yolo_model_path),
+            botsort_arg,
+        )
+        return [Detection.model_validate(d.model_dump()) for d in result.detections]
 
     async def close(self) -> None:
         await self._teardown_partial()
