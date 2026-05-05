@@ -208,3 +208,42 @@ def test_motor_command_rejects_mutation() -> None:
     mc = MotorCommand(target_angle_deg=12.5, timestamp_ns=1)
     with pytest.raises(ValidationError):
         mc.target_angle_deg = 0.0  # type: ignore[misc]
+
+
+def test_detection_track_id_optional() -> None:
+    """Phase 4 Plan 01: Detection.track_id is optional; None default; ge=0 rejects negatives."""
+    det_default = Detection(
+        subject_center_x_normalized=0.5,
+        subject_center_y_normalized=0.5,
+        mean_keypoint_confidence=0.9,
+        bbox_x1_normalized=0.4,
+        bbox_y1_normalized=0.4,
+        bbox_x2_normalized=0.6,
+        bbox_y2_normalized=0.6,
+        timestamp_ns=1,
+    )
+    assert det_default.track_id is None
+    det_with_id = Detection(
+        subject_center_x_normalized=0.5,
+        subject_center_y_normalized=0.5,
+        mean_keypoint_confidence=0.9,
+        bbox_x1_normalized=0.4,
+        bbox_y1_normalized=0.4,
+        bbox_x2_normalized=0.6,
+        bbox_y2_normalized=0.6,
+        timestamp_ns=1,
+        track_id=42,
+    )
+    assert det_with_id.track_id == 42
+    with pytest.raises(ValidationError):
+        Detection(
+            subject_center_x_normalized=0.5,
+            subject_center_y_normalized=0.5,
+            mean_keypoint_confidence=0.9,
+            bbox_x1_normalized=0.4,
+            bbox_y1_normalized=0.4,
+            bbox_x2_normalized=0.6,
+            bbox_y2_normalized=0.6,
+            timestamp_ns=1,
+            track_id=-1,
+        )

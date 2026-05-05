@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 03-02-PLAN.md (Phase 3 done)
-last_updated: "2026-05-05T10:40:54.050Z"
-last_activity: 2026-05-05 -- Phase 4 planning complete
+last_updated: "2026-05-05T10:41:41.082Z"
+last_activity: 2026-05-05 -- Phase 04 execution started
 progress:
   total_phases: 8
   completed_phases: 3
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** Cinematic, jitter-free auto-tracking of a single primary speaker — no overshoot, no oscillation, no lock-loss, no audible motor jerk.
-**Current focus:** Phase 03 — Camera I/O
+**Current focus:** Phase 04 — Perception
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-05-05 -- Phase 4 planning complete
+Phase: 04 (Perception) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 04
+Last activity: 2026-05-05 -- Phase 04 execution started
 
 Progress: [██████████] 100%
 

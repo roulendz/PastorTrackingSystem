@@ -124,6 +124,35 @@ class Config(BaseSettings):
         default=70.0, gt=_FOV_MIN_DEG, lt=_FOV_MAX_DEG
     )
 
+    # --- Perception (YOLO11-pose + BoT-SORT) ---
+    yolo_model_path: Path = Field(
+        default=Path("yolo11n-pose.pt"),
+        description=(
+            "Path to YOLO11-pose weights file. Default resolves to ultralytics' "
+            "auto-download cache (~/.cache/Ultralytics) on first use. ASVS V5: "
+            "operator MUST verify SHA256 of weights file before deployment "
+            "(see README — pinned hash for yolo11n-pose.pt)."
+        ),
+    )
+    yolo_device: Literal["auto", "cuda", "cpu"] = Field(
+        default="auto",
+        description=(
+            "Inference device selection. 'auto' resolves to 'cuda' if "
+            "torch.cuda.is_available() else 'cpu' at PoseDetector.start(). "
+            "Explicit 'cuda' fail-fasts loud if no CUDA device is present "
+            "(RESEARCH 04 Open Question 4)."
+        ),
+    )
+    botsort_yaml_path: Path | None = Field(
+        default=None,
+        description=(
+            "Optional override for ultralytics' bundled botsort.yaml. None "
+            "uses the bundled default (track_high_thresh=0.25). Set when "
+            "stage tuning requires custom thresholds (RESEARCH 04 Pitfall 5; "
+            "Open Question 3)."
+        ),
+    )
+
     # --- Detection / motion ---
     detection_confidence_min: float = Field(
         default=0.55, ge=_PROBABILITY_MIN, le=_PROBABILITY_MAX

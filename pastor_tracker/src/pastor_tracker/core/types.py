@@ -122,6 +122,10 @@ class Detection(_FrozenModel):
     Cross-field invariants (WR-03 — tiger-style fail-fast on degenerate bboxes):
     - ``bbox_x2_normalized > bbox_x1_normalized``
     - ``bbox_y2_normalized > bbox_y1_normalized``
+
+    - ``track_id`` is the BoT-SORT track identifier when present; None on the
+      very first frame before BoT-SORT initializes (RESEARCH 04 Pitfall 3,
+      Open Question 6) and on synthetic/fake detections that bypass tracking.
     """
 
     subject_center_x_normalized: float = Field(ge=0.0, le=1.0)
@@ -132,6 +136,7 @@ class Detection(_FrozenModel):
     bbox_x2_normalized: float = Field(ge=0.0, le=1.0)
     bbox_y2_normalized: float = Field(ge=0.0, le=1.0)
     timestamp_ns: int = Field(ge=0)
+    track_id: int | None = Field(ge=0, default=None)
 
     @model_validator(mode="after")
     def _bbox_well_ordered(self) -> Detection:
