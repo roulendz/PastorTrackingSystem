@@ -170,7 +170,10 @@ class UltralyticsPoseEngine:
             self._latched_error = exc
             await self._teardown_partial()
             raise
-        except Exception as exc:  # documented translator (cross-process boundary)
+        # documented translator (cross-process boundary): immediately re-raised
+        # as typed PoseEngineUnavailableError below; BLE001 does not fire because
+        # this catch is not a silent swallow.
+        except Exception as exc:
             self._state = _DetectorState.FAULTED
             err = PoseEngineUnavailableError(
                 expected=self._config.yolo_device,
@@ -326,6 +329,9 @@ class PoseDetector:
                 self._state = _DetectorState.FAULTED
                 self._latched_error = exc
                 raise
+            # documented translator (engine.start boundary): immediately
+            # re-raised as typed PerceptionError below; BLE001 does not fire
+            # because this catch is not a silent swallow.
             except Exception as exc:
                 self._state = _DetectorState.FAULTED
                 err = PerceptionError(f"engine start failed: {exc}")
