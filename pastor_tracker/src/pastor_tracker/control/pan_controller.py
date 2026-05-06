@@ -148,13 +148,26 @@ class PanController:
         return new_angle
 
     def _hold(self) -> float | None:
-        """Hold-on-None (D-07).
+        """Hold-on-None (D-07 + BL-01 fix).
 
-        Does NOT clear ``_state`` (contrast with Plan-03 Framer's
-        clear-on-indeterminate). The damper FollowerState is held in place so
-        that when the framer's target returns the resume is smooth, with no
-        re-seed transient. Returns the last emitted angle, or None pre-seed.
+        Preserves damper FollowerState (no re-seed transient on resume) BUT
+        clears ``_last_upstream_ts_ns`` so that the next real frame computes
+        ``dt`` from the ``1 / capture_fps`` floor, not from the wall-clock-
+        sized gap accumulated across the None run. Without this clear, a
+        long None gap produces a single-step "snap" to target on resume:
+        (a) the Holden damper decay collapses (``exp(-k * dt)`` -> 0 for
+        large ``dt``), so ``new_position ~= target`` in one step, and
+        (b) the velocity clamp is parameterised by ``vmax * dt_sec``, so
+        with ``dt_sec`` order-seconds the clamp ceiling exceeds the entire
+        FOV and never engages. The two failures compound into a one-frame
+        full-FOV jump that violates the project core value (no audible
+        motor jerk).
+
+        Contrast: ``_state`` is INTENTIONALLY retained so the resume tracks
+        from where the damper left off. Only the upstream-timestamp witness
+        is cleared, because it is wall-clock evidence, not damper state.
         """
+        self._last_upstream_ts_ns = None
         return self._last_emitted_angle_deg
 
     def _compute_dt_sec(self, current_upstream_ts_ns: int) -> float:

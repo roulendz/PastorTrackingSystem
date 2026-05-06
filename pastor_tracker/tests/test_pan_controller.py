@@ -340,6 +340,42 @@ def test_hold_does_not_advance_damper(
     assert abs(resumed - seed) < _APPROX_TOL
 
 
+def test_long_none_gap_then_new_target_does_not_snap(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """BL-01 regression: long None gap must not produce a single-frame FOV jump.
+
+    Before the fix, ``_hold()`` retained ``_last_upstream_ts_ns`` across the
+    gap; the next real frame computed ``dt = T_gap`` (~5 s here), which both
+    collapsed the damper decay (snap to target) AND inflated the velocity
+    clamp ceiling beyond the FOV (clamp never engages). Result: a one-frame
+    full-FOV jump from the seed angle to ~+fov/2.
+
+    With the fix, ``_hold()`` clears ``_last_upstream_ts_ns``; the resume
+    frame uses the ``1 / capture_fps`` floor for ``dt``, so the per-step
+    angle delta is bounded by ``vmax * dt_floor``.
+    """
+    controller = _make_pan_controller(valid_config_dict)
+    seed = asyncio.run(controller.consume(_ft(0.5, _T0_NS), now_ns=_T0_NS))
+    assert seed is not None
+    # 5-second None gap -- before the fix the dt on resume would be ~5 s.
+    long_gap_ts = _T0_NS + 5 * 1_000_000_000
+    asyncio.run(controller.consume(None, now_ns=long_gap_ts))
+    # New target at the opposite edge of the normalized range.
+    resume_ts = long_gap_ts + _DT_30HZ_NS
+    resumed = asyncio.run(controller.consume(_ft(1.0, resume_ts), now_ns=resume_ts))
+    assert resumed is not None
+    vmax = float(valid_config_dict["pan_max_velocity_deg_per_sec"])
+    capture_fps = float(valid_config_dict["capture_fps"])
+    # Floor dt is exactly 1 / capture_fps (see _compute_dt_sec).
+    dt_floor_sec = 1.0 / capture_fps
+    max_one_step_jump = vmax * dt_floor_sec + _CLAMP_VERIFICATION_TOL
+    assert abs(resumed - seed) <= max_one_step_jump, (
+        f"jump {abs(resumed - seed)} after 5s None gap exceeds vmax*dt_floor "
+        f"{max_one_step_jump} -- BL-01 fix regressed"
+    )
+
+
 # ---------------------------------------------------------------------------
 # dt floor (non-monotonic upstream)
 # ---------------------------------------------------------------------------
