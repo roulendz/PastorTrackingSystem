@@ -13,7 +13,9 @@ D-05: damper steps in DEGREE DOMAIN (Framer steps in normalized-x).
 D-06: first non-None target seeds at angle, velocity 0.0.
 D-07: target=None holds damper FollowerState; emit _last_emitted_angle_deg.
 D-09: clamp OVERWRITES FollowerState.position (not just emission). Anti-windup
-       without an integrator (Pitfall 2: NOT PID).
+       without an integrator (Pitfall 2: NOT PID). FollowerState.velocity is
+       NOT overwritten -- the Holden update bleeds residual energy across
+       subsequent steps (see WR-04 in-source comment for the full rationale).
 D-10: deadband is on _last_emitted_angle_deg, not on _state.position
        (Pitfall 3: damper keeps stepping; only emission gated).
 """
@@ -120,6 +122,21 @@ class PanController:
         prev_position = self._state.position
         new_state = self._damper.step(self._state, target=angle_deg, dt=dt_sec)
         # --- velocity clamp (CTRL-03 / D-09) ---
+        # WR-04: anti-windup overwrites POSITION only; FollowerState.velocity
+        # is intentionally LEFT at the unclamped value. This is by design --
+        # the Holden update on the next step computes
+        #   new_velocity = decay * (state.velocity - j1 * y * dt)
+        # which dampens the residual energy across subsequent ticks, so the
+        # position-only overwrite is enough to bound per-step deltas
+        # (proven by test_velocity_clamp_caps_step_size: every per-step
+        # delta under sustained over-target drive equals vmax * dt within
+        # float tolerance). Re-deriving velocity from the clipped delta
+        # (e.g. velocity = clipped/dt) was considered and rejected: it
+        # breaks the damper's continuous-time physics and introduces a
+        # discontinuity at the clamp boundary, which the existing
+        # observable invariant test would no longer cover. The trade-off
+        # is documented here so future maintainers do not "fix" the
+        # apparent inconsistency without first invalidating the test.
         delta = new_state.position - prev_position
         max_delta = self._config.pan_max_velocity_deg_per_sec * dt_sec
         if abs(delta) > max_delta:
