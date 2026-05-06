@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: Arduino I/O** - Async serial driver with VID:PID auto-detect, boot handshake, heartbeat, RX parser, watchdog-reset recovery — verified against real Uno
 - [ ] **Phase 3: Camera I/O** - Async OBS Virtual Camera frame source with DirectShow, frame-staleness drop, perf-counter timestamps
 - [ ] **Phase 4: Perception** - YOLO11-pose detection, BoT-SORT primary-subject ID lock, 4-state Kalman smoothing
-- [ ] **Phase 5: Intent and Control** - Motion analyzer with hysteresis, rule-of-thirds framer, two-stage damped pan controller, rate-limited command dispatcher
+- [x] **Phase 5: Intent and Control** - Motion analyzer with hysteresis, rule-of-thirds framer, two-stage damped pan controller, rate-limited command dispatcher (completed 2026-05-06)
 - [ ] **Phase 6: Pipeline Orchestrator** - Asyncio orchestrator wiring all stages, lifecycle (start/pause/home/e-stop/quit)
 - [ ] **Phase 7: UI Dashboard** - DearPyGui live preview, tuning sliders, status panel, hotkeys
 - [ ] **Phase 8: End-to-End and Ship Gates** - On-stage smoke test, README + FOV calibration, final lint/type/commit gates
@@ -105,7 +105,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 05-03-PLAN.md - Framer (rule-of-thirds + stage-1 damper) + tests (Wave 1)
 - [x] 05-04-PLAN.md - PanController (FOV + stage-2 damper + clamp + deadband) + tests (Wave 2)
 - [x] 05-05-PLAN.md - CommandDispatcher (sync delta+interval gate) + tests (Wave 2)
-- [ ] 05-06-PLAN.md - Composition smoke test across all four stages (Wave 3)
+- [x] 05-06-PLAN.md - Composition smoke test across all four stages (Wave 3)
 **UI hint**: no
 
 ### Phase 6: Pipeline Orchestrator
@@ -161,7 +161,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Arduino I/O | 0/3 | Not started | - |
 | 3. Camera I/O | 0/2 | Not started | - |
 | 4. Perception | 0/3 | Not started | - |
-| 5. Intent and Control | 0/6 | Planned | - |
+| 5. Intent and Control | 6/6 | Complete   | 2026-05-06 |
 | 6. Pipeline Orchestrator | 0/TBD | Not started | - |
 | 7. UI Dashboard | 0/TBD | Not started | - |
 | 8. End-to-End and Ship Gates | 0/TBD | Not started | - |

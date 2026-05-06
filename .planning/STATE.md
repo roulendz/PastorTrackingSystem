@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-05-06T09:58:30.206Z"
+last_updated: "2026-05-06T10:08:40.495Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 17
-  completed_plans: 16
-  percent: 94
+  completed_plans: 17
+  percent: 100
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 
 Phase: 05 (Intent and Control) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-06
 
-Progress: [█████████░] 94%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [█████████░] 94%
 | Phase 05 P03 | 5min | 2 tasks | 3 files |
 | Phase 05 P04 | 13min | 2 tasks | 5 files |
 | Phase 05 P05 | 7min | 2 tasks tasks | 3 files files |
+| Phase 05 P06 | 12min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 05-05: Pitfall 7 None-upstream non-update verified across multi-tick gap -- 3 None ticks at 1/2/3s after seed produce no state change; subsequent real call's interval is measured from the original seed timestamp, not the latest None tick
 - [Phase 05]: Plan 05-05: Issue 9 ramp upper bound formula floor(T*1000/min_interval_ms) + 2 (NOT + 1) -- +1 first-call seed + +1 boundary-frame slack at gate quantization; Issue 12 defensive assert min_interval_ms > 0 before division
 - [Phase 05]: Plan 05-05: Coverage CLI uses --cov=src/pastor_tracker/control (directory form) not module-dotted -- pytest-cov 6.3 + numpy 2.4 hits cannot-load-module-twice on dotted form; directory form matches Plan 04 working invocation
+- [Phase ?]: Plan 05-06: dwell_then_walk over ramp for the velocity-clamp test -- D-06 at-target seed makes pure-ramp clamp tests vacuously pass; dwell_then_walk forces a real center-then-third target transition that exercises both dampers
+- [Phase ?]: Plan 05-06: ramp/dwell_then_walk constant-vx dilution -- helpers produce vx = (x_end - x_start) / total_sec; cap total_sec at min(time_budget, span_max/walk_vx - margin) so analyzer flips
 
 ### Pending Todos
 
@@ -132,6 +135,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-06T09:57:29.804Z
+Last session: 2026-05-06T10:08:34.718Z
 Stopped at: Completed 05-04-PLAN.md
 Resume file: None
