@@ -71,6 +71,30 @@ class MotionAnalyzer:
     """
 
     def __init__(self, config: Config) -> None:
+        # WR-03: defense-in-depth fail-loud guards. Config already enforces
+        # gt=0.0 on both fields via Pydantic, but the analyzer is the
+        # boundary that uses these thresholds and must not silently degrade
+        # if a future Config tweak ever relaxes the constraint. Tiger-style:
+        # validate at the boundary, fail loud at construction.
+        if config.dwell_threshold_norm_per_sec <= 0.0:
+            raise ValueError(
+                f"dwell_threshold_norm_per_sec must be > 0 for the analyzer "
+                f"to classify dwell, got "
+                f"{config.dwell_threshold_norm_per_sec}"
+            )
+        if (
+            config.motion_threshold_norm_per_sec
+            <= config.dwell_threshold_norm_per_sec
+        ):
+            raise ValueError(
+                f"motion_threshold_norm_per_sec "
+                f"({config.motion_threshold_norm_per_sec}) must be > "
+                f"dwell_threshold_norm_per_sec "
+                f"({config.dwell_threshold_norm_per_sec}) so the dead band "
+                f"is non-empty; otherwise a single vx value can satisfy "
+                f"both '> move_thr' and '< dwell_thr', making "
+                f"classification non-deterministic"
+            )
         self._config = config
         self._logger = structlog.get_logger(module="motion_analyzer")
         self._first_right_crossing_ts_ns: int | None = None
