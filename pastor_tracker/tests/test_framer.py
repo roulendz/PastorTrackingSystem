@@ -39,6 +39,11 @@ _NS_PER_SEC: Final[int] = 1_000_000_000
 
 
 def _make_framer(valid_config_dict: dict[str, object]) -> Framer:
+    """Build a Framer from the conftest-owned config dict.
+
+    ``valid_config_dict`` is a SHARED pytest fixture (conftest.py); tests
+    that need overrides MUST ``dict(valid_config_dict)``-copy first and
+    mutate the copy. NEVER mutate the fixture in place (WR-06)."""
     return Framer(Config(**valid_config_dict))  # type: ignore[arg-type]
 
 

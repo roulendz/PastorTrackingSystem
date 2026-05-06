@@ -35,6 +35,15 @@ _RAMP_BOUNDARY_SLACK: Final[int] = 2  # +1 first-call seed, +1 boundary-frame sl
 
 
 def _make_dispatcher(valid_config_dict: dict[str, object]) -> CommandDispatcher:
+    """Build a CommandDispatcher from the conftest-owned config dict.
+
+    ``valid_config_dict`` is a SHARED pytest fixture (conftest.py); tests
+    that need overrides MUST ``dict(valid_config_dict)``-copy first and
+    mutate the copy. NEVER mutate the fixture in place -- pytest reuses
+    the same dict across tests in the same module, so an in-place
+    ``valid_config_dict["..."] = x`` or ``valid_config_dict.update(...)``
+    would silently leak state into every subsequent test (WR-06).
+    """
     return CommandDispatcher(Config(**valid_config_dict))  # type: ignore[arg-type]
 
 

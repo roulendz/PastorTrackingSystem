@@ -56,6 +56,11 @@ _DEADBAND_TARGET_NX: Final[float] = 0.7  # ~13 deg @ fov=70 -- well above deadba
 
 
 def _make_pan_controller(valid_config_dict: dict[str, object]) -> PanController:
+    """Build a PanController from the conftest-owned config dict.
+
+    ``valid_config_dict`` is a SHARED pytest fixture (conftest.py); tests
+    that need overrides MUST ``dict(valid_config_dict)``-copy first and
+    mutate the copy. NEVER mutate the fixture in place (WR-06)."""
     return PanController(Config(**valid_config_dict))  # type: ignore[arg-type]
 
 
