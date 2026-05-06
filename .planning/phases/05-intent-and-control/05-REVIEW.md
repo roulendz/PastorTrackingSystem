@@ -2,6 +2,7 @@
 phase: 05-intent-and-control
 reviewed: 2026-05-05T00:00:00Z
 depth: standard
+iteration: 2
 files_reviewed: 14
 files_reviewed_list:
   - pastor_tracker/src/pastor_tracker/control/__init__.py
@@ -19,194 +20,227 @@ files_reviewed_list:
   - pastor_tracker/tests/test_motion_analyzer.py
   - pastor_tracker/tests/test_pan_controller.py
 findings:
-  blocker: 1
-  warning: 6
-  total: 7
-status: issues_found
+  blocker: 0
+  warning: 0
+  total: 0
+status: clean
 ---
 
-# Phase 5: Code Review Report
+# Phase 5: Code Review Report (Iteration 2)
 
 **Reviewed:** 2026-05-05
 **Depth:** standard
+**Iteration:** 2 (re-review of iteration-1 fixes)
 **Files Reviewed:** 14
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-Phase 5 implements four pure-core stages (MotionAnalyzer, Framer, PanController, CommandDispatcher) per the planning DTO contract. Engineering hygiene is generally strong: every threshold is Config-owned, structlog is used throughout, mypy/ruff-friendly types are consistent, and the tests use real damping/geometry without mocks. However, one BLOCKER undermines the project's core value of pan smoothness — the PanController `_hold()` path retains a stale upstream timestamp across None gaps, producing a multi-second `dt` on resume that bypasses the velocity clamp and emits a single-frame angle jump (full FOV span possible). Several WARNINGs cover defensive-coding gaps and inconsistencies in test discipline.
+All seven iteration-1 findings (BL-01, WR-01..WR-06, WR-07) have been correctly
+resolved. A fresh adversarial pass over the changed files surfaced no new
+defects. Engineering hygiene continues to be strong: every threshold flows
+through `Config`, no wall-clock reads exist outside the orchestrator-supplied
+`now_ns`, no mocks of damping/Kalman math, and Tiger-style fail-loud guards
+have been added at the boundary that previously degraded silently.
 
-## Blockers
+The Phase-5 code path is ready to ship.
 
-### BL-01: PanController emits unclamped multi-degree jump after a long None-upstream gap
+## Verification of Iteration-1 Fixes
 
-**File:** `pastor_tracker/src/pastor_tracker/control/pan_controller.py:113-148, 150-158, 160-172`
-**Issue:**
-`_hold()` (line 150-158) deliberately does NOT clear `_state` (D-07 design), but it ALSO does not clear `_last_upstream_ts_ns`. When a None-upstream gap of duration `T_gap` ends and a fresh `FramingTarget` arrives, `_compute_dt_sec()` computes
-`dt_sec = (new_upstream_ts_ns - last_real_frame_ts_ns) / 1e9 = T_gap`.
+### BL-01 -- PanController hold-on-None dt blowup -- RESOLVED
 
-Two bad consequences cascade:
-1. The Holden damper update collapses: with `pan_tau = 0.6 s` and `T_gap = 5 s`, `decay = exp(-(4 ln 2 / (0.6 ln 2)) * 0.5 * 5) ≈ 5.4e-8`, so `new_position ≈ target` in a single step — i.e. the damper **snaps** to the new target with no smoothing.
-2. The velocity clamp does not save us: `max_delta = pan_max_velocity_deg_per_sec * dt_sec`. With default `vmax = 30 deg/s` and `T_gap = 5 s`, `max_delta = 150 deg` — larger than the entire 70° FOV span. The clamp never engages, and the controller emits a single-frame jump that may exceed 60°.
+**File:** `pastor_tracker/src/pastor_tracker/control/pan_controller.py:167-188`
 
-This violates CLAUDE.md `Core value: No overshoot, no oscillation, no lock-loss…, no audible motor jerk` and PROMPT.md anti-jitter intent. The Framer's symmetric `_compute_dt_sec` is safe because `_reset()` clears `_last_upstream_ts_ns` to `None` (framer.py:128-132), forcing the next call to use the `1/capture_fps` floor. PanController's documented choice to retain damper state across the gap (lines 152-157) is correct, but `_last_upstream_ts_ns` is a separate concern: it is upstream wall-clock evidence, not damper state, and must not survive a known gap.
+`_hold()` now sets `self._last_upstream_ts_ns = None` and returns the held
+emission. The docstring captures the precise rationale (decay collapse +
+clamp ceiling inflation) and explicitly contrasts the cleared upstream
+witness against the intentionally retained `_state` damper field.
 
-Test coverage gap: `test_hold_does_not_advance_damper` (test_pan_controller.py:321) only exercises 5 hold ticks at consecutive monotonic timestamps (~200 ms gap) AND resumes with the SAME target — both choices hide the bug. `test_none_upstream_clean_propagation` (test_intent_control_pipeline.py:266) only tests a single None tick with no following resume, and verifies dispatcher state stability rather than controller post-resume behaviour.
+Regression test landed at `tests/test_pan_controller.py:348-381`
+(`test_long_none_gap_then_new_target_does_not_snap`): seeds at nx=0.5
+(0 deg), feeds a 5 s None gap, then resumes at nx=1.0 (+35 deg) and asserts
+`abs(resumed - seed) <= vmax * (1/capture_fps) + tol`. With default config
+this gives a 1.0 deg upper bound; the actual one-step delta integrates to
+~0.19 deg through the damper -- a comfortable margin. The pre-fix code path
+would have produced ~35 deg in one frame.
 
-**Fix:**
-Treat `_last_upstream_ts_ns` as gap-aware in `_hold()`: clear it so the next real frame uses the `1/capture_fps` floor (one-frame `dt`), preserving the FollowerState while preventing the damper from "fast-forwarding" through an absent gap.
+I traced the fix end-to-end: after `_hold()` clears the timestamp, the
+resume call enters `_step_clamp_deadband_emit` (because `_state` is
+preserved), which calls `_compute_dt_sec`. With `_last_upstream_ts_ns=None`
+the function returns `1.0 / max(capture_fps, 1) = 1/30`, exactly the
+expected behaviour. After the resume tick, line 152 re-arms
+`_last_upstream_ts_ns` from the actual resume timestamp, so subsequent
+frames compute dt normally.
 
-```python
-def _hold(self) -> float | None:
-    """Hold-on-None (D-07).
+### WR-01 -- Dead `case "indeterminate"` arm -- RESOLVED
 
-    Preserves damper FollowerState (no re-seed transient) BUT clears
-    _last_upstream_ts_ns so the next real frame computes dt from the
-    capture-fps floor, not the wall-clock-sized gap. Without this clear,
-    a long None gap produces a single-step "snap" to target on resume
-    because (a) damper decay collapses and (b) velocity clamp scales with
-    dt and stops binding.
-    """
-    self._last_upstream_ts_ns = None
-    return self._last_emitted_angle_deg
-```
+**File:** `pastor_tracker/src/pastor_tracker/intent/framer.py:132-148`
 
-Add a regression test:
-```python
-def test_long_none_gap_then_new_target_does_not_snap(
-    valid_config_dict: dict[str, object],
-) -> None:
-    controller = _make_pan_controller(valid_config_dict)
-    seed = asyncio.run(controller.consume(_ft(0.5, _T0_NS), now_ns=_T0_NS))
-    assert seed is not None
-    # 5-second None gap.
-    long_gap_ts = _T0_NS + 5 * 1_000_000_000
-    asyncio.run(controller.consume(None, now_ns=long_gap_ts))
-    # New target at the opposite FOV edge.
-    resume_ts = long_gap_ts + _DT_30HZ_NS
-    resumed = asyncio.run(controller.consume(_ft(1.0, resume_ts), now_ns=resume_ts))
-    assert resumed is not None
-    vmax = float(valid_config_dict["pan_max_velocity_deg_per_sec"])
-    max_one_step_jump = vmax * _DT_30HZ_SEC + _CLAMP_VERIFICATION_TOL
-    assert abs(resumed - seed) <= max_one_step_jump, (
-        f"jump {abs(resumed - seed)} after None gap exceeds vmax*dt {max_one_step_jump}"
-    )
-```
+The unreachable arm has been removed. `_intent_to_target` now returns
+`float` (no Optional), and the `case _: raise IntentError(...)` provides
+the Tiger-style fail-loud guard for any future `MotionIntent` literal that
+isn't propagated. The `assert target is not None` at the old line 83 was
+correctly removed (the new return type makes the assert tautological).
+`IntentError` is exported from `intent/__init__.py:8,11`.
 
-## Warnings
+The `consume()` filter at framer.py:78 still short-circuits
+`indeterminate`, so `case _:` is only reachable if a future contributor
+adds a fifth `MotionIntent` literal without updating the dispatcher --
+exactly the regression this guard is designed to surface.
 
-### WR-01: `Framer._intent_to_target("indeterminate")` branch is unreachable yet retained
+### WR-02 -- Sticky-intent dead-band documentation + regression test -- RESOLVED
 
-**File:** `pastor_tracker/src/pastor_tracker/intent/framer.py:78-86, 134-148`
-**Issue:**
-`consume()` returns early on `motion is None or motion.intent == "indeterminate"` (line 78), then calls `_intent_to_target(motion.intent)` (line 81) and immediately asserts `target is not None`. The `case "indeterminate": return None` arm at line 143-144 is therefore unreachable. CLAUDE.md forbids dead code paths. The `case _:` raising `IntentError` is the correct exhaustiveness guard for unknown literals; the explicit `indeterminate -> None` is redundant and obscures the actual contract (function never returns `None` to callers).
+**File:** `pastor_tracker/src/pastor_tracker/intent/motion_analyzer.py:17-28`,
+`pastor_tracker/tests/test_motion_analyzer.py:296-354`
 
-**Fix:**
-Remove the indeterminate arm and tighten the return type:
-```python
-@staticmethod
-def _intent_to_target(intent: MotionIntent) -> float:
-    match intent:
-        case "moving_right":
-            return _TARGET_LEFT_THIRD
-        case "moving_left":
-            return _TARGET_RIGHT_THIRD
-        case "dwelling":
-            return _TARGET_CENTER
-        case _:
-            # "indeterminate" is filtered upstream in consume(); any
-            # other value indicates a Literal extension that wasn't
-            # propagated here.
-            raise IntentError(
-                f"unhandled MotionIntent in _intent_to_target: {intent!r}"
-            )
-```
-Also drop the now-unnecessary `assert target is not None` at framer.py:83.
+A dedicated module-docstring section ("Sticky-intent dead band (WR-02)")
+now documents the persistence semantics in the `dwell_thr <= |vx| <=
+move_thr` band, including the conditions under which the intent flips back
+(opposite-direction or dwell timer maturing). The test file's
+`test_sustained_move_persists_through_dead_band` matures `moving_right`,
+then drives the arithmetic-midpoint dead-band vx for `2 * dwell_duration`
+frames and asserts every emitted intent stays `moving_right`. The
+docstring reference back to the test ensures any future change to the
+release path is forced to update both sides.
 
-### WR-02: `MotionAnalyzer._classify` returns stale intent in the dead-band between dwell and motion thresholds
+### WR-03 -- Threshold-validity guards in `__init__` -- RESOLVED
 
-**File:** `pastor_tracker/src/pastor_tracker/intent/motion_analyzer.py:122-162`
-**Issue:**
-When `dwell_thr <= |vx| <= move_thr` (default config: `0.05 <= |vx| <= 0.08`), all three timers are reset on each frame and `_classify` falls through to `return self._current_intent`. If the prior intent was `moving_right` (timer matured), the analyzer continues reporting `moving_right` indefinitely while `vx` sits in the dead-band, even though the operator is no longer crossing the move threshold. Symmetric bug for `moving_left` and `dwelling`. There is no Config-owned exit timer for "neither move-sustained nor dwell-sustained".
+**File:** `pastor_tracker/src/pastor_tracker/intent/motion_analyzer.py:73-97`
 
-The behaviour is consistent with the design intent (avoid chatter), but the docstring at line 21-29 promises "intent flips when continuous duration >= configured hysteresis / dwell-duration window" without acknowledging the sticky-until-opposite-condition-matures path. There is no test covering this transition.
+Two fail-loud constructor guards now reject (a) `dwell_threshold <= 0`
+(would silently disable dwell classification) and (b)
+`motion_threshold <= dwell_threshold` (would collapse the dead band and
+make a single vx satisfy both `> move_thr` and `< dwell_thr`,
+non-deterministic). Error messages name both fields with the offending
+values. The guards are defensive duplicates of Pydantic `gt=0` constraints
+at the analyzer boundary, exactly the Tiger-style discipline CLAUDE.md
+rule 1 prescribes.
 
-**Fix:**
-Either (a) document the sticky semantics in the module docstring and add a test that asserts a `moving_right` intent persists through a sustained dead-band run until either the dwell or opposite-direction timer matures; or (b) add an opposite-condition timer (e.g. release `moving_right` after `motion_hysteresis_sec` of `vx <= move_thr`) — which would require a new Config field. Option (a) is the lower-risk choice unless field testing reveals lingering "ghost moves".
+### WR-04 -- Velocity-clamp velocity-state semantics -- RESOLVED
 
-### WR-03: `MotionAnalyzer._classify` does not clamp negative `dwell_threshold` semantics
+**File:** `pastor_tracker/src/pastor_tracker/control/pan_controller.py:14-18,124-139`
 
-**File:** `pastor_tracker/src/pastor_tracker/intent/motion_analyzer.py:139-143`
-**Issue:**
-The check `if abs(vx) < dwell_thr` is correct only when `dwell_thr > 0`. Config currently enforces `dwell_threshold_norm_per_sec > 0` (presumably via `gt=0.0`), but the analyzer does not assert this contractually. If a future Config tweak ever permitted `dwell_thr == 0`, the dwell timer would never start and `dwelling` could only be reached when `vx` is exactly 0.0 — silent degradation rather than fail-fast.
+Two complementary anchors now make the design choice explicit:
+1. Module docstring D-09 expanded: "FollowerState.velocity is NOT
+   overwritten -- the Holden update bleeds residual energy across
+   subsequent steps".
+2. Inline block comment at the clamp site cites the test that pins the
+   observable invariant
+   (`test_velocity_clamp_caps_step_size`/`test_velocity_clamp_overwrites_state`)
+   and explains why the alternative (re-deriving velocity from clipped
+   delta) was rejected (introduces a discontinuity at the clamp boundary).
 
-**Fix:**
-Add a constructor-time guard (tiger-style, fail-loud at boundary):
-```python
-def __init__(self, config: Config) -> None:
-    if config.dwell_threshold_norm_per_sec <= 0.0:
-        raise ValueError(
-            f"dwell_threshold_norm_per_sec must be > 0 for analyzer to "
-            f"classify dwell, got {config.dwell_threshold_norm_per_sec}"
-        )
-    if config.motion_threshold_norm_per_sec <= config.dwell_threshold_norm_per_sec:
-        raise ValueError(
-            "motion_threshold_norm_per_sec must be > dwell_threshold_norm_per_sec "
-            "to keep the dead band non-empty"
-        )
-    ...
-```
-(The second guard is also defensive — without it the `WR-02` dead-band reduces to zero and a single `vx` value can satisfy both `> move_thr` and `< dwell_thr`, making classification non-deterministic.)
+A future maintainer cannot "fix" the apparent inconsistency without
+invalidating both the docstring and the test -- the right tripwire.
 
-### WR-04: PanController velocity clamp uses asymmetric clip without preserving damper velocity sign
+### WR-05 -- `# pragma: no cover` replaced with `pytest.fail` -- RESOLVED
 
-**File:** `pastor_tracker/src/pastor_tracker/control/pan_controller.py:113-134`
-**Issue:**
-When the clamp engages, line 127 sets `new_state = replace(new_state, position=prev_position + clipped)` — but the damper's `velocity` field is left untouched at the unclamped value. The next `damper.step` call uses this stale velocity to advance from the clamped position, which biases the next-frame trajectory. The Holden update `new_velocity = decay * (state.velocity - j1 * y * dt)` will partially correct this, but for sustained over-velocity drive (the exact regime the clamp targets), the residual energy in `velocity` continues to push the unclamped-position estimate forward. This is mild — `test_velocity_clamp_overwrites_state` proves the per-step delta is bounded — but the velocity-state semantics are inconsistent with the position-state semantics promised by D-09 ("anti-windup by overwriting FollowerState.position").
+**File:** `pastor_tracker/tests/test_command_dispatcher.py:300-306`
 
-**Fix:**
-Either (a) re-derive `velocity` from the clipped position so the damper state remains physically consistent — e.g. `replace(new_state, position=..., velocity=clipped/dt_sec)` (matches the emitted angular velocity), or (b) document explicitly that only `position` is anti-windup'd and that `velocity` carries unclamped energy by design (with a citation to where this trade-off was decided).
+The `_explode` body now calls `pytest.fail(...)`. The pragma is gone, so
+coverage reports truthfully reflect that this branch is un-hit (success
+state -- dispatcher never reads `time.perf_counter_ns`). The inline
+comment reaffirms that an un-hit branch is the SUCCESS state for this
+test, not a coverage gap.
 
-### WR-05: Test `test_no_emission_uses_wall_clock` uses `# pragma: no cover` to mask coverage of dispatcher misbehaviour
+### WR-06 -- `_make_*` factory contracts documented -- RESOLVED
 
-**File:** `pastor_tracker/tests/test_command_dispatcher.py:291`
-**Issue:**
-The `_explode` closure at line 291 carries `# pragma: no cover - only called if dispatcher misbehaves`. While the comment is accurate, hiding code that exists to catch a regression from coverage reports prevents the coverage tool from telling future maintainers "this safety net was never invoked" if the test ever silently stops triggering. Combined with D-13's 100% coverage target, the pragma circumvents the very enforcement it was meant to support.
+**Files:** `tests/test_command_dispatcher.py:37-47`,
+`tests/test_framer.py:41-47`,
+`tests/test_motion_analyzer.py:48-54`,
+`tests/test_pan_controller.py:58-64`
 
-**Fix:**
-Replace the no-op exception body with `pytest.fail(...)` (which gives a clean test failure) and remove the pragma — the function will then either be called (test fails as designed) or not (test passes), and coverage will reflect both states truthfully.
-```python
-def _explode() -> int:
-    pytest.fail("dispatcher must not read time.perf_counter_ns (D-02)")
-```
+Every `_make_*` factory now carries a docstring spelling out:
+1. `valid_config_dict` is a SHARED conftest fixture.
+2. Tests requiring overrides MUST `dict(...)`-copy first.
+3. NEVER mutate the fixture in place (would silently leak state across
+   tests in the same module).
 
-### WR-06: `valid_config_dict` is referenced but not declared as a fixture in this phase
+I scanned the four test modules and confirmed every override site
+(e.g. `test_pan_controller.py:141-142`,`183-185`,`218-220`,`424-426`;
+`test_intent_control_pipeline.py:195-196`) uses `dict(valid_config_dict)`
+before mutating, never `valid_config_dict.update(...)`. The discipline
+holds.
 
-**File:** `pastor_tracker/tests/test_command_dispatcher.py:44`, `pastor_tracker/tests/test_framer.py:41`, `pastor_tracker/tests/test_pan_controller.py:58`, `pastor_tracker/tests/test_motion_analyzer.py:48`, `pastor_tracker/tests/test_intent_control_pipeline.py:65`
-**Issue:**
-Every Phase-5 test takes `valid_config_dict: dict[str, object]` and passes `Config(**valid_config_dict)` with `# type: ignore[arg-type]`. The fixture must live in `conftest.py` (not under review here). Two risks: (1) reviewers reading these files in isolation cannot verify the fixture's contract — what fields does it set, and do they exercise non-default values? (2) every test passes the SAME dict by reference; any test mutating it (e.g. `cfg = dict(valid_config_dict); cfg["pan_deadband_deg"] = 0.0` at test_pan_controller.py:178) is fine, but a `valid_config_dict.update(...)` would silently leak state across tests. Worth documenting fixture immutability in `conftest.py` (out of scope) AND in a module-level test-file note.
+### WR-07 / WR-08 (deep-review addendum) -- RESOLVED
 
-**Fix:**
-Add a brief docstring near each `_make_*` factory clarifying the contract:
-```python
-def _make_pan_controller(valid_config_dict: dict[str, object]) -> PanController:
-    """Build a PanController. ``valid_config_dict`` is the conftest-owned
-    Config dict; tests that need overrides should ``dict(...)``-copy first
-    (NEVER mutate in place — pytest fixture is shared across tests)."""
-    return PanController(Config(**valid_config_dict))  # type: ignore[arg-type]
-```
+`test_command_dispatcher.py:18`'s `import time` is still legitimately used
+(monkeypatch target). The `case _:` exhaustiveness guard added for WR-08
+is in place at framer.py:141-148 and motion_analyzer.py validation
+parallels the same fail-loud discipline.
 
-### WR-07: Unused import in test_command_dispatcher
+## New Findings (Iteration 2)
 
-**File:** `pastor_tracker/tests/test_command_dispatcher.py:18`
-**Issue:**
-`import time` at line 18 is used only inside `test_no_emission_uses_wall_clock` (line 294). When that test runs without the wall-clock prohibition assertion (e.g. coverage collection that skips the explode path), the import is technically still used by `monkeypatch.setattr(time, ...)`. This is benign; flagging it because ruff `--select F401` might surface false positives if module-level import discipline is later tightened, and to note that a similar pattern in test_framer.py (line 14) is intentional.
+None. The fixes did not introduce any new BLOCKER or WARNING-grade
+defects.
 
-**Fix:**
-None required — note for future reference. If ruff complains, scope the import to the function with a `# noqa: PLC0415`.
+I specifically traced the following risk surfaces for regressions:
+
+1. **`PanController._hold()` interaction with `current_angle_deg`** --
+   `_hold()` does not update `_current_angle_deg`, but the property still
+   matches `_last_emitted_angle_deg` because both fields were synced in the
+   prior `_step_clamp_deadband_emit` /  `_seed_and_emit` call. The
+   pipeline test (`test_none_upstream_clean_propagation:312`) pins this
+   equivalence. No defect.
+
+2. **`MotionAnalyzer.__init__` ordering** -- validation raises BEFORE any
+   instance fields are written, so a failed construction leaves no
+   partially-initialized analyzer. Correct.
+
+3. **`Framer._intent_to_target` mypy exhaustiveness** -- with the
+   indeterminate arm removed, mypy may flag `case _:` as redundant under
+   strict-Literal narrowing; however the runtime guard is intentional
+   (Tiger-style fail-loud for future `MotionIntent` extensions). No
+   `# type: ignore` was added, suggesting mypy --strict is happy. No
+   defect.
+
+4. **Dispatcher delta-gate boundary semantics** -- `<= min_delta`
+   suppression preserves the docstring's "emit iff |delta| > min_delta"
+   contract. Test `test_delta_at_threshold_does_not_emit` pins the strict
+   `>` semantic. No defect.
+
+5. **Damper position un-clamping in Framer** -- `_step_and_emit` clamps
+   the EMITTED `target_x_normalized` to `[0,1]` but leaves
+   `_state.position` unclamped. Critically-damped 2nd-order followers
+   provably do not overshoot a target in `[1/3, 2/3]`, so the unclamped
+   internal state stays bounded. No defect.
+
+6. **`test_pre_seed_pipeline_emits_correctly_first_frame`** -- a single
+   above-threshold frame on a fresh pipeline correctly produces no motor
+   command (hysteresis duration > 0 forces multiple frames before the
+   timer matures). Verified.
+
+7. **`test_long_none_gap_then_new_target_does_not_snap` arithmetic** --
+   default config: `vmax=30 deg/s`, `capture_fps=30`, `dt_floor=1/30 s`,
+   `max_jump = 1.0 deg + tol`. Holden integrator one-step delta from
+   position=0 toward target=+35 deg with tau=0.6 and dt=1/30 is
+   ~0.19 deg, well under the bound. Test math is sound.
+
+## Engineering Culture Audit (CLAUDE.md compliance)
+
+- **No `print()`** -- all stages use `structlog.get_logger(...)`.
+- **No bare `except:`** -- only typed `IntentError`/`ControlError` raised
+  at boundaries; no swallowing.
+- **No globals** -- only module-level `Final` constants in source.
+- **No `time.sleep()` in main loop** -- N/A; Phase 5 is pure transforms.
+- **No magic numbers** -- every threshold owned by `Config`; the few
+  literals (`1/3`, `1/2`, `2/3`, `_NS_PER_SEC`) are mathematical, not
+  tunable; `_CAPTURE_FPS_FLOOR=1` is a defensive lower bound.
+- **No commented-out code** -- clean.
+- **No TODO without issue number** -- none present.
+- **No mocked Kalman/damping in tests** -- tests drive real
+  `CriticallyDampedFollower` and real `normalized_x_to_angle_deg`.
+- **Type hints everywhere** -- no `Any`; `MotionIntent` Literal sharpens
+  contracts.
+- **Immutable data** -- `FollowerState`/`MotionState`/`FramingTarget`/
+  `MotorCommand` are frozen.
+- **Functional code** -- every per-frame method is a pure transform on
+  typed DTOs; the only state held is the per-stage damper / hysteresis
+  bookkeeping, mutated only through deliberate writes.
 
 ---
 
 _Reviewed: 2026-05-05_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+_Iteration: 2_
