@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-05-06T09:20:17.618Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-05-06T12:30:00.000Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 17
-  completed_plans: 13
-  percent: 76
+  completed_plans: 14
+  percent: 82
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Phase: 05 (Intent and Control) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-05-06
 
-Progress: [████████░░] 76%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [████████░░] 76%
 | Phase 03 P02 | 80m | 3 tasks | 6 files |
 | Phase 05 P01 | 4 min | 2 tasks | 2 files |
 | Phase 05 P02 | 5min | 2 tasks | 3 files |
+| Phase 05 P03 | 5min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 05-02: MotionAnalyzer single class (162 lines) — no helper module split since CONTEXT.md threshold of ~250 lines not approached
 - [Phase ?]: Plan 05-02: intent_change log fields {old, new, vx}; reason=upstream_none on D-04 None-upstream branch only
 - [Phase ?]: Plan 05-02: consume() return type MotionState | None mirrors SubjectTracker.consume for Pipeline orchestrator symmetry (D-01)
+- [Phase ?]: Plan 05-03: Framer stage-1 damping in normalized-x domain only; degree conversion deferred to PanController (D-05)
+- [Phase ?]: Plan 05-03: At-target seed (FollowerState(position=current_target, velocity=0.0)) — no warmup transient toward zero (D-06)
+- [Phase ?]: Plan 05-03: Hold-on-None / indeterminate clears full Framer state — clean re-seed at next non-indeterminate motion (D-07 + Pitfall 6)
+- [Phase ?]: Plan 05-03: framing_target_change INFO log gated on _last_discrete_target_x_normalized (NOT continuous damper position) — bounded by Plan 02 hysteresis
 
 ### Pending Todos
 
@@ -116,6 +121,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-06T09:20:17.602Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-05-06T12:30:00.000Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None

@@ -58,8 +58,8 @@
 
 - [x] **INTENT-01**: Motion analyzer — sustained `vx > 0.08` for ≥ 0.3 s = right-bound; `vx < -0.08` for ≥ 0.3 s = left-bound; `|vx| < 0.03` for ≥ 1.5 s = dwell
 - [x] **INTENT-02**: Hysteresis prevents thrash — thresholds + dwell duration in `Config`
-- [ ] **INTENT-03**: Framer maps intent → rule-of-thirds target — moving-right → left third (0.333); moving-left → right third (0.667); dwelling → center (0.500)
-- [ ] **INTENT-04**: Framing target smoothed with damping `framing_time_constant_sec ≈ 0.8 s`
+- [x] **INTENT-03**: Framer maps intent → rule-of-thirds target — moving-right → left third (0.333); moving-left → right third (0.667); dwelling → center (0.500)
+- [x] **INTENT-04**: Framing target smoothed with damping `framing_time_constant_sec ≈ 0.8 s`
 
 ### Control
 
@@ -165,8 +165,8 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | PERC-07 | Phase 4 | Pending |
 | INTENT-01 | Phase 5 | Complete |
 | INTENT-02 | Phase 5 | Complete |
-| INTENT-03 | Phase 5 | Pending |
-| INTENT-04 | Phase 5 | Pending |
+| INTENT-03 | Phase 5 | Complete |
+| INTENT-04 | Phase 5 | Complete |
 | CTRL-01 | Phase 5 | Pending |
 | CTRL-02 | Phase 5 | Pending |
 | CTRL-03 | Phase 5 | Pending |
