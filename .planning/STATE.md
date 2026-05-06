@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 03-02-PLAN.md (Phase 3 done)
-last_updated: "2026-05-06T09:03:55.782Z"
-last_activity: 2026-05-06 -- Phase 05 planning complete
+last_updated: "2026-05-06T09:11:29.499Z"
+last_activity: 2026-05-06
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 17
-  completed_plans: 11
-  percent: 65
+  completed_plans: 12
+  percent: 71
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** Cinematic, jitter-free auto-tracking of a single primary speaker — no overshoot, no oscillation, no lock-loss, no audible motor jerk.
-**Current focus:** Phase 04 — Perception
+**Current focus:** Phase 05 — Intent and Control
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
+Phase: 05 (Intent and Control) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-05-06 -- Phase 05 planning complete
+Last activity: 2026-05-06
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [██████████] 100%
 | Phase 02 P01 | 577 | 3 tasks | 2 files |
 | Phase 02 P03 | 12 | 3 tasks | 8 files |
 | Phase 03 P02 | 80m | 3 tasks | 6 files |
+| Phase 05 P01 | 4 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Pitfall 7 close-order: stop_event -> thread.join -> source.release -> CLOSED
 - [Phase ?]: T-03-03: start() releases source on first-frame timeout BEFORE raising CameraOpenError
 - [Phase ?]: Resolution fallback is one-shot inside 2 s warmup window only; never re-promote, never re-fallback
+- [Phase ?]: Plan 05-01: Trajectory fixtures parametrized via D-12 (helpers never hardcode Phase-5 thresholds)
+- [Phase ?]: Plan 05-01: itertools.pairwise replaces zip with strict=True for monotonicity (RUF007 + length-mismatch fix)
 
 ### Pending Todos
 
@@ -109,6 +112,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-04T23:15:33.739Z
+Last session: 2026-05-06T09:11:18.658Z
 Stopped at: Completed 03-02-PLAN.md (Phase 3 done)
 Resume file: None

@@ -86,7 +86,7 @@
 
 - [x] **TEST-01**: Property tests for `core/geometry.py` (hypothesis)
 - [x] **TEST-02**: Step-response test for `core/damping.py` — no overshoot
-- [ ] **TEST-03**: Unit tests for `motion_analyzer.py` (hysteresis + dwell), `framer.py` (third selection), `pan_controller.py` (deadband + clamp)
+- [x] **TEST-03**: Unit tests for `motion_analyzer.py` (hysteresis + dwell), `framer.py` (third selection), `pan_controller.py` (deadband + clamp)
 - [x] **TEST-04**: Integration test for Arduino protocol parser using fake-serial replay of canned `FB:` / `READY:` / `ERROR:` lines + heartbeat verification
 - [x] **TEST-05**: No mocked Kalman/damping math — test real implementations
 
@@ -181,7 +181,7 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | UI-05 | Phase 7 | Pending |
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Complete |
-| TEST-03 | Phase 5 | Pending |
+| TEST-03 | Phase 5 | Complete |
 | TEST-04 | Phase 2 | Complete |
 | TEST-05 | Phase 1 | Complete |
 | DOC-01 | Phase 8 | Pending |
