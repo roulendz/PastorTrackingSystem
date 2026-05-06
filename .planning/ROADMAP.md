@@ -101,7 +101,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Unit tests cover hysteresis + dwell (motion_analyzer), third selection (framer), deadband + velocity clamp (pan_controller) — using real damping math, no mocks
 **Plans**: 6 plans
 - [x] 05-01-PLAN.md - Test fixture trajectories.py + self-tests (Wave 0)
-- [ ] 05-02-PLAN.md - MotionAnalyzer (hysteresis classifier) + tests (Wave 1)
+- [x] 05-02-PLAN.md - MotionAnalyzer (hysteresis classifier) + tests (Wave 1)
 - [ ] 05-03-PLAN.md - Framer (rule-of-thirds + stage-1 damper) + tests (Wave 1)
 - [ ] 05-04-PLAN.md - PanController (FOV + stage-2 damper + clamp + deadband) + tests (Wave 2)
 - [ ] 05-05-PLAN.md - CommandDispatcher (sync delta+interval gate) + tests (Wave 2)
