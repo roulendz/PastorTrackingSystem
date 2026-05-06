@@ -40,30 +40,30 @@ created: 2026-05-06
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 5-W0-01 | W0 | 0 | TEST-03 | — | trajectory fixtures pure helpers | unit | `uv run pytest tests/fixtures/test_trajectories_self.py -x` (or import-only smoke if no self-test) | ❌ W0 | ⬜ pending |
-| 5-01-01 | 01 | 1 | INTENT-01 | V11 | sustained right-bound classifies after motion_hysteresis_sec | unit | `uv run pytest tests/test_motion_analyzer.py::test_sustained_right_flips_intent -x` | ❌ W0 | ⬜ pending |
-| 5-01-02 | 01 | 1 | INTENT-01 | V11 | sustained left-bound classifies after motion_hysteresis_sec | unit | `uv run pytest tests/test_motion_analyzer.py::test_sustained_left_flips_intent -x` | ❌ W0 | ⬜ pending |
-| 5-01-03 | 01 | 1 | INTENT-01 | V11 | sustained dwell classifies after dwell_duration_sec | unit | `uv run pytest tests/test_motion_analyzer.py::test_sustained_dwell_flips_intent -x` | ❌ W0 | ⬜ pending |
-| 5-01-04 | 01 | 1 | INTENT-02 | V11 | borderline chatter never flips intent (hypothesis property) | property | `uv run pytest tests/test_motion_analyzer.py::test_borderline_chatter_no_thrash -x` | ❌ W0 | ⬜ pending |
-| 5-01-05 | 01 | 1 | INTENT-02 | V11 | threshold un-cross resets crossing timer | unit | `uv run pytest tests/test_motion_analyzer.py::test_un_cross_resets_timer -x` | ❌ W0 | ⬜ pending |
-| 5-01-06 | 01 | 1 | INTENT-02 | V11 | None upstream resets all timers + emits indeterminate | unit | `uv run pytest tests/test_motion_analyzer.py::test_none_upstream_emits_indeterminate -x` | ❌ W0 | ⬜ pending |
-| 5-02-01 | 02 | 1 | INTENT-03 | V11 | moving_right → target 0.333 (left third) | unit | `uv run pytest tests/test_framer.py::test_moving_right_yields_left_third -x` | ❌ W0 | ⬜ pending |
-| 5-02-02 | 02 | 1 | INTENT-03 | V11 | moving_left → target 0.667 (right third) | unit | `uv run pytest tests/test_framer.py::test_moving_left_yields_right_third -x` | ❌ W0 | ⬜ pending |
-| 5-02-03 | 02 | 1 | INTENT-03 | V11 | dwelling → target 0.5 (center) | unit | `uv run pytest tests/test_framer.py::test_dwelling_yields_center -x` | ❌ W0 | ⬜ pending |
-| 5-02-04 | 02 | 1 | INTENT-03 | V11 | indeterminate → no target / held | unit | `uv run pytest tests/test_framer.py::test_indeterminate_holds_or_returns_none -x` | ❌ W0 | ⬜ pending |
-| 5-02-05 | 02 | 1 | INTENT-04 | V11 | step-response damped by stage-1 τ; no overshoot, monotonic | unit | `uv run pytest tests/test_framer.py::test_step_response_no_overshoot -x` | ❌ W0 | ⬜ pending |
-| 5-02-06 | 02 | 1 | INTENT-04 | V11 | damper state held during None upstream | unit | `uv run pytest tests/test_framer.py::test_hold_during_none_upstream -x` | ❌ W0 | ⬜ pending |
-| 5-03-01 | 03 | 2 | CTRL-01 | V11 | step-response damped by stage-2 τ; no overshoot | unit | `uv run pytest tests/test_pan_controller.py::test_step_response_no_overshoot -x` | ❌ W0 | ⬜ pending |
-| 5-03-02 | 03 | 2 | CTRL-01 | V11 | FOV conversion: target=0.5 maps to angle=0.0 | unit | `uv run pytest tests/test_pan_controller.py::test_center_target_maps_to_zero_angle -x` | ❌ W0 | ⬜ pending |
-| 5-03-03 | 03 | 2 | CTRL-02 | V11 | small delta returns previous emitted angle | unit | `uv run pytest tests/test_pan_controller.py::test_deadband_suppresses_small_changes -x` | ❌ W0 | ⬜ pending |
-| 5-03-04 | 03 | 2 | CTRL-02 | V11 | damper continues stepping during deadband (catch-up smoothness) | unit | `uv run pytest tests/test_pan_controller.py::test_deadband_does_not_freeze_damper -x` | ❌ W0 | ⬜ pending |
-| 5-03-05 | 03 | 2 | CTRL-03 | V11 | per-step delta ≤ pan_max_velocity_deg_per_sec * dt | unit | `uv run pytest tests/test_pan_controller.py::test_velocity_clamp_caps_step_size -x` | ❌ W0 | ⬜ pending |
-| 5-03-06 | 03 | 2 | CTRL-03 | V11 | after clamp, FollowerState.position == clamped (anti-windup) | unit | `uv run pytest tests/test_pan_controller.py::test_velocity_clamp_overwrites_state -x` | ❌ W0 | ⬜ pending |
-| 5-04-01 | 04 | 2 | CTRL-04 | V11 | Δ ≤ command_min_delta_deg → no emission | unit | `uv run pytest tests/test_command_dispatcher.py::test_small_delta_suppressed -x` | ❌ W0 | ⬜ pending |
-| 5-04-02 | 04 | 2 | CTRL-04 | V11 | interval < command_min_interval_ms → no emission even if Δ large | unit | `uv run pytest tests/test_command_dispatcher.py::test_short_interval_suppressed -x` | ❌ W0 | ⬜ pending |
-| 5-04-03 | 04 | 2 | CTRL-04 | V11 | first call always emits | unit | `uv run pytest tests/test_command_dispatcher.py::test_first_call_always_emits -x` | ❌ W0 | ⬜ pending |
-| 5-04-04 | 04 | 2 | CTRL-04 | V11 | None upstream returns None and does NOT update state | unit | `uv run pytest tests/test_command_dispatcher.py::test_none_does_not_update_state -x` | ❌ W0 | ⬜ pending |
-| 5-04-05 | 04 | 2 | CTRL-04 | V11 | emission count over synthetic ramp ≤ analytic bound | unit | `uv run pytest tests/test_command_dispatcher.py::test_ramp_emission_count_bounded -x` | ❌ W0 | ⬜ pending |
-| 5-W3-01 | W3 | 3 | TEST-03 | V11 | end-to-end smoke: trajectory → analyzer → framer → pan → dispatcher | integration | `uv run pytest tests/test_intent_control_pipeline.py -x` | ❌ W0 | ⬜ pending |
+| 5-02-01 | 02 | 1 | INTENT-01 | V11 | sustained right-bound classifies after motion_hysteresis_sec | unit | `uv run pytest tests/test_motion_analyzer.py::test_sustained_right_flips_intent -x` | ❌ W0 | ⬜ pending |
+| 5-02-02 | 02 | 1 | INTENT-01 | V11 | sustained left-bound classifies after motion_hysteresis_sec | unit | `uv run pytest tests/test_motion_analyzer.py::test_sustained_left_flips_intent -x` | ❌ W0 | ⬜ pending |
+| 5-02-03 | 02 | 1 | INTENT-01 | V11 | sustained dwell classifies after dwell_duration_sec | unit | `uv run pytest tests/test_motion_analyzer.py::test_sustained_dwell_flips_intent -x` | ❌ W0 | ⬜ pending |
+| 5-02-04 | 02 | 1 | INTENT-02 | V11 | borderline chatter never flips intent (hypothesis property) | property | `uv run pytest tests/test_motion_analyzer.py::test_borderline_chatter_no_thrash -x` | ❌ W0 | ⬜ pending |
+| 5-02-05 | 02 | 1 | INTENT-02 | V11 | threshold un-cross resets crossing timer | unit | `uv run pytest tests/test_motion_analyzer.py::test_un_cross_resets_timer -x` | ❌ W0 | ⬜ pending |
+| 5-02-06 | 02 | 1 | INTENT-02 | V11 | None upstream resets all timers + emits indeterminate | unit | `uv run pytest tests/test_motion_analyzer.py::test_none_upstream_emits_indeterminate -x` | ❌ W0 | ⬜ pending |
+| 5-03-01 | 03 | 1 | INTENT-03 | V11 | moving_right → target 0.333 (left third) | unit | `uv run pytest tests/test_framer.py::test_moving_right_yields_left_third -x` | ❌ W0 | ⬜ pending |
+| 5-03-02 | 03 | 1 | INTENT-03 | V11 | moving_left → target 0.667 (right third) | unit | `uv run pytest tests/test_framer.py::test_moving_left_yields_right_third -x` | ❌ W0 | ⬜ pending |
+| 5-03-03 | 03 | 1 | INTENT-03 | V11 | dwelling → target 0.5 (center) | unit | `uv run pytest tests/test_framer.py::test_dwelling_yields_center -x` | ❌ W0 | ⬜ pending |
+| 5-03-04 | 03 | 1 | INTENT-03 | V11 | indeterminate → no target / held | unit | `uv run pytest tests/test_framer.py::test_indeterminate_holds_or_returns_none -x` | ❌ W0 | ⬜ pending |
+| 5-03-05 | 03 | 1 | INTENT-04 | V11 | step-response damped by stage-1 τ; no overshoot, monotonic | unit | `uv run pytest tests/test_framer.py::test_step_response_no_overshoot -x` | ❌ W0 | ⬜ pending |
+| 5-03-06 | 03 | 1 | INTENT-04 | V11 | damper state held during None upstream | unit | `uv run pytest tests/test_framer.py::test_hold_during_none_upstream -x` | ❌ W0 | ⬜ pending |
+| 5-04-01 | 04 | 2 | CTRL-01 | V11 | step-response damped by stage-2 τ; no overshoot | unit | `uv run pytest tests/test_pan_controller.py::test_step_response_no_overshoot -x` | ❌ W0 | ⬜ pending |
+| 5-04-02 | 04 | 2 | CTRL-01 | V11 | FOV conversion: target=0.5 maps to angle=0.0 | unit | `uv run pytest tests/test_pan_controller.py::test_center_target_maps_to_zero_angle -x` | ❌ W0 | ⬜ pending |
+| 5-04-03 | 04 | 2 | CTRL-02 | V11 | small delta returns previous emitted angle | unit | `uv run pytest tests/test_pan_controller.py::test_deadband_suppresses_small_changes -x` | ❌ W0 | ⬜ pending |
+| 5-04-04 | 04 | 2 | CTRL-02 | V11 | damper continues stepping during deadband (catch-up smoothness) | unit | `uv run pytest tests/test_pan_controller.py::test_deadband_does_not_freeze_damper -x` | ❌ W0 | ⬜ pending |
+| 5-04-05 | 04 | 2 | CTRL-03 | V11 | per-step delta ≤ pan_max_velocity_deg_per_sec * dt | unit | `uv run pytest tests/test_pan_controller.py::test_velocity_clamp_caps_step_size -x` | ❌ W0 | ⬜ pending |
+| 5-04-06 | 04 | 2 | CTRL-03 | V11 | after clamp, FollowerState.position == clamped (anti-windup) | unit | `uv run pytest tests/test_pan_controller.py::test_velocity_clamp_overwrites_state -x` | ❌ W0 | ⬜ pending |
+| 5-05-01 | 05 | 2 | CTRL-04 | V11 | Δ ≤ command_min_delta_deg → no emission | unit | `uv run pytest tests/test_command_dispatcher.py::test_small_delta_suppressed -x` | ❌ W0 | ⬜ pending |
+| 5-05-02 | 05 | 2 | CTRL-04 | V11 | interval < command_min_interval_ms → no emission even if Δ large | unit | `uv run pytest tests/test_command_dispatcher.py::test_short_interval_suppressed -x` | ❌ W0 | ⬜ pending |
+| 5-05-03 | 05 | 2 | CTRL-04 | V11 | first call always emits | unit | `uv run pytest tests/test_command_dispatcher.py::test_first_call_always_emits -x` | ❌ W0 | ⬜ pending |
+| 5-05-04 | 05 | 2 | CTRL-04 | V11 | None upstream returns None and does NOT update state | unit | `uv run pytest tests/test_command_dispatcher.py::test_none_does_not_update_state -x` | ❌ W0 | ⬜ pending |
+| 5-05-05 | 05 | 2 | CTRL-04 | V11 | emission count over synthetic ramp ≤ analytic bound | unit | `uv run pytest tests/test_command_dispatcher.py::test_ramp_emission_count_bounded -x` | ❌ W0 | ⬜ pending |
+| 5-06-01 | 06 | 3 | TEST-03 | V11 | end-to-end smoke: trajectory → analyzer → framer → pan → dispatcher | integration | `uv run pytest tests/test_intent_control_pipeline.py -x` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

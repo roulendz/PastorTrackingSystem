@@ -32,6 +32,26 @@ Convert the Kalman trajectory into a rule-of-thirds framing target with hysteres
 <decisions>
 ## Implementation Decisions
 
+### Locked Decisions (D-01..D-13) — Stable IDs for Plan Citation
+
+| ID | Source Area | Decision (1-line reference) |
+|----|-------------|------------------------------|
+| D-01 | Area 1 — Stage Interface | All three async stages expose `async def consume(upstream, now_ns) -> downstream \| None`; CommandDispatcher is sync `def decide(angle_deg \| None, now_ns) -> MotorCommand \| None`. |
+| D-02 | Area 2 — Hysteresis | Time source = `TrackedSubject.timestamp_ns` (frame-derived); analyzer NEVER reads a wall clock. |
+| D-03 | Area 2 — Hysteresis | Sustained-velocity tracking via per-direction `_first_crossing_ts_ns`; flip on continuous duration ≥ `motion_hysteresis_sec`; reset crossing timer on un-cross. Dwell tracked via `_dwell_start_ts_ns` + `dwell_duration_sec`. |
+| D-04 | Area 2 — Hysteresis | None-upstream → reset all timers, emit `MotionState(intent="indeterminate", sustained_velocity_x_norm_per_sec=0.0, timestamp_ns=now_ns)`. |
+| D-05 | Area 3 — Damping | Stage-1 damper held by Framer (normalized-x domain); stage-2 damper held by PanController (degree domain). |
+| D-06 | Area 3 — Damping | First non-None upstream seeds `FollowerState(position=current_target, velocity=0.0)` — no warmup transient. |
+| D-07 | Area 3 — Damping | Hold-on-None / hold-on-indeterminate: damper holds current FollowerState; **no advance, no reset**. |
+| D-08 | Area 3 — Damping | PanController order: `target_x_normalized → angle_deg via normalized_x_to_angle_deg(target_x, fov_deg)` FIRST, then damp in angle domain, then velocity-clamp, then deadband. |
+| D-09 | Area 4 — Pan Limits | Velocity clamp: after `damper.step()`, compute `delta = new_pos - prev_pos`, clamp to `±pan_max_velocity_deg_per_sec * dt`, **overwrite** the damper's `FollowerState.position` with the clamped value (anti-windup; not PID). |
+| D-10 | Area 4 — Pan Limits | Deadband applied inside `PanController.consume()` against `_last_emitted_angle_deg`; if `\|new - last_emitted\| < pan_deadband_deg` → return last_emitted. Damper continues stepping under the hood. |
+| D-11 | Area 4 — Dispatcher | Dispatcher state = `_last_emitted_angle_deg`, `_last_emit_ts_ns`; emit when first call OR (Δ > `command_min_delta_deg` AND interval ≥ `command_min_interval_ms`); on emit, update both fields. None-upstream returns None and does **not** update state. |
+| D-12 | Area 4 — Tests | Test fixtures in `pastor_tracker/tests/fixtures/trajectories.py` — `step` / `ramp` / `dwell_then_walk` / `borderline_chatter` returning `list[TrackedSubject]`. All numeric thresholds flow through `Config` — no hardcoded literals in test bodies. |
+| D-13 | Area 4 — Coverage | Coverage targets: 100% line+branch on hysteresis classifier + deadband+clamp branches + dispatcher gate; ≥ 90% line on `framer.py` and `pan_controller.py`. |
+
+These IDs are the canonical reference downstream PLAN.md files MUST cite when invoking a locked decision.
+
 ### Locked by PROJECT.md / PROMPT.md / CLAUDE.md / REQUIREMENTS.md / Config / cross-phase contracts
 - Forbidden: PID, EMA on detection stream, mocked Kalman / damping math in tests, `print()`, bare `except`, magic numbers (Config is authoritative), nested conditionals > 2 levels
 - Stage-1 damping `framing_time_constant_sec ≈ 0.8 s`, stage-2 damping `pan_time_constant_sec ≈ 0.6 s` (Config)
