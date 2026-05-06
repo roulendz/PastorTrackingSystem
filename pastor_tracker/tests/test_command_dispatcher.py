@@ -288,8 +288,13 @@ def test_no_emission_uses_wall_clock(
     Make ``time.perf_counter_ns`` raise; if dispatcher used it internally the
     test would surface the exception. ``now_ns`` is the only time source.
     """
-    def _explode() -> int:  # pragma: no cover - only called if dispatcher misbehaves
-        raise AssertionError("dispatcher must not read time.perf_counter_ns (D-02)")
+    def _explode() -> int:
+        # WR-05: pytest.fail produces a clean test failure if the dispatcher
+        # ever reads time.perf_counter_ns. Coverage is allowed to report
+        # this branch as un-hit -- that is the SUCCESS state. Hiding the
+        # function behind ``# pragma: no cover`` would defeat the very
+        # enforcement the test exists to provide (D-13 100% target).
+        pytest.fail("dispatcher must not read time.perf_counter_ns (D-02)")
 
     monkeypatch.setattr(time, "perf_counter_ns", _explode)
     dispatcher = _make_dispatcher(valid_config_dict)
