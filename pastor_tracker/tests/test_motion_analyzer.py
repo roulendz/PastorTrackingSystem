@@ -284,6 +284,72 @@ def test_threshold_un_cross_then_resustain(
 
 
 # --------------------------------------------------------------------------
+# Sticky-intent dead band (WR-02)
+# --------------------------------------------------------------------------
+
+
+def test_sustained_move_persists_through_dead_band(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """WR-02: once ``moving_right`` matures, vx in the dwell..move dead band
+    must NOT release back to ``indeterminate``.
+
+    Sequence:
+        1. Drive vx clearly above ``motion_threshold_norm_per_sec`` for >=
+           ``motion_hysteresis_sec`` so ``moving_right`` is sustained.
+        2. Drive vx in the dead band ``[dwell_thr, move_thr]`` (specifically
+           the midpoint, e.g. 0.055 with the default config) for many frames.
+           In this band every timer resets every frame, no condition is
+           sustained, and ``_classify`` returns ``self._current_intent``.
+        3. Assert ``moving_right`` persists.
+
+    This is the documented behaviour (see module docstring "Sticky-intent
+    dead band"); the test pins it so a future change that introduces a
+    release path is forced to update both the docstring and this test.
+    """
+    analyzer = _make_analyzer(valid_config_dict)
+    move_thr = float(valid_config_dict["motion_threshold_norm_per_sec"])
+    dwell_thr = float(valid_config_dict["dwell_threshold_norm_per_sec"])
+    hysteresis_sec = float(valid_config_dict["motion_hysteresis_sec"])
+    dwell_duration_sec = float(valid_config_dict["dwell_duration_sec"])
+    dt_ns = int(_DT_30HZ_SEC * _NS_PER_SEC)
+    above_vx = _ABOVE_THRESHOLD_FACTOR * move_thr
+    # Mid-band: |vx| > dwell_thr (no dwell timer) AND |vx| <= move_thr (no
+    # move timer). Use the arithmetic midpoint to stay clearly in-band.
+    dead_band_vx = (dwell_thr + move_thr) / 2.0
+    assert dwell_thr < dead_band_vx <= move_thr
+    subjects: list[TrackedSubject] = []
+    frame_idx = 0
+    # Phase 1: mature ``moving_right``.
+    move_frames = int(_HYSTERESIS_MULTIPLIER * hysteresis_sec / _DT_30HZ_SEC)
+    for _ in range(move_frames):
+        subjects.append(_build_subject(
+            x=_DWELL_X_PIN, vx=above_vx, ts_ns=_T0_NS + frame_idx * dt_ns,
+        ))
+        frame_idx += 1
+    # Phase 2: dead band for >= dwell_duration_sec to prove dwell does NOT
+    # release the sticky intent (dwell timer resets every frame because
+    # |vx| > dwell_thr).
+    dead_band_frames = int(
+        _DWELL_MULTIPLIER * dwell_duration_sec / _DT_30HZ_SEC
+    )
+    for _ in range(dead_band_frames):
+        subjects.append(_build_subject(
+            x=_DWELL_X_PIN, vx=dead_band_vx, ts_ns=_T0_NS + frame_idx * dt_ns,
+        ))
+        frame_idx += 1
+    emitted = _drive(analyzer, subjects)
+    # Final intent persists as moving_right.
+    assert analyzer.current_intent == "moving_right"
+    # Every dead-band frame emits moving_right (sticky semantics).
+    dead_band_emissions = emitted[move_frames:]
+    assert all(m.intent == "moving_right" for m in dead_band_emissions), (
+        "sticky-intent semantics regressed: dead-band frames flipped to "
+        f"{set(m.intent for m in dead_band_emissions) - {'moving_right'}}"
+    )
+
+
+# --------------------------------------------------------------------------
 # Logging discipline
 # --------------------------------------------------------------------------
 

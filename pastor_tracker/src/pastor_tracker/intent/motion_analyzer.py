@@ -14,6 +14,19 @@ Hysteresis (D-03):
     - Intent flips when continuous duration >= configured hysteresis /
       dwell-duration window.
 
+Sticky-intent dead band (WR-02):
+    The classifier is intentionally STICKY across the dead band
+    ``dwell_threshold <= |vx| <= motion_threshold``. While ``vx`` sits in
+    that band, every timer resets every frame (no condition is sustained),
+    and ``_classify`` returns ``self._current_intent`` -- i.e. the previously
+    sustained intent persists. This is the right behaviour for slow drifts:
+    we do NOT want to flip back to ``indeterminate`` on every frame whose
+    ``vx`` happens to land between the two thresholds. Intent only releases
+    when a NEW condition (opposite-direction cross or dwell) matures past
+    its hysteresis window. Field testing should confirm no lingering ghost
+    moves; if they appear, an explicit opposite-condition release timer
+    (Config-owned) is the next escalation.
+
 None-upstream (D-04): reset all timers, emit MotionState("indeterminate", 0.0,
 now_ns). The analyzer always returns a MotionState (no None emissions); the
 Optional return shape mirrors Phase 4 ``SubjectTracker.consume`` for symmetry.
