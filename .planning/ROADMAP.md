@@ -99,7 +99,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Pan controller suppresses commands when `|angle_delta| < 0.4°` (deadband) and clamps pan rate to ≤ 30°/s
   4. Command dispatcher emits `M:<deg>` only when delta > 0.2° AND ≥ 50 ms since the last command — verified by counting emissions over a synthetic trajectory
   5. Unit tests cover hysteresis + dwell (motion_analyzer), third selection (framer), deadband + velocity clamp (pan_controller) — using real damping math, no mocks
-**Plans**: TBD
+**Plans**: 6 plans
+- [ ] 05-01-PLAN.md - Test fixture trajectories.py + self-tests (Wave 0)
+- [ ] 05-02-PLAN.md - MotionAnalyzer (hysteresis classifier) + tests (Wave 1)
+- [ ] 05-03-PLAN.md - Framer (rule-of-thirds + stage-1 damper) + tests (Wave 1)
+- [ ] 05-04-PLAN.md - PanController (FOV + stage-2 damper + clamp + deadband) + tests (Wave 2)
+- [ ] 05-05-PLAN.md - CommandDispatcher (sync delta+interval gate) + tests (Wave 2)
+- [ ] 05-06-PLAN.md - Composition smoke test across all four stages (Wave 3)
 **UI hint**: no
 
 ### Phase 6: Pipeline Orchestrator
@@ -155,7 +161,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Arduino I/O | 0/3 | Not started | - |
 | 3. Camera I/O | 0/2 | Not started | - |
 | 4. Perception | 0/3 | Not started | - |
-| 5. Intent and Control | 0/TBD | Not started | - |
+| 5. Intent and Control | 0/6 | Planned | - |
 | 6. Pipeline Orchestrator | 0/TBD | Not started | - |
 | 7. UI Dashboard | 0/TBD | Not started | - |
 | 8. End-to-End and Ship Gates | 0/TBD | Not started | - |
