@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-05-06T09:43:33.000Z"
+last_updated: "2026-05-06T09:58:30.206Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 17
-  completed_plans: 15
-  percent: 88
+  completed_plans: 16
+  percent: 94
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Phase: 05 (Intent and Control) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-05-06
 
-Progress: [████████▊░] 88%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [████████▊░] 88%
 | Phase 05 P02 | 5min | 2 tasks | 3 files |
 | Phase 05 P03 | 5min | 2 tasks | 3 files |
 | Phase 05 P04 | 13min | 2 tasks | 5 files |
+| Phase 05 P05 | 7min | 2 tasks tasks | 3 files files |
 
 ## Accumulated Context
 
@@ -107,6 +108,11 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 05-04: Anti-windup via FollowerState.position OVERWRITE using dataclasses.replace (D-09) — NOT PID; no integral/accumulator state. Proven observably: 3 successive over-velocity emitted-deltas equal vmax*dt within machine epsilon (~1e-15)
 - [Phase ?]: Plan 05-04: Hold-on-None preserves FollowerState in place (D-07) — contrast with Plan 03 Framer which clears state on indeterminate; degree damper holds across upstream gaps for smooth resume
 - [Phase ?]: Plan 05-04: Fixed pre-existing structlog test pollution — configure_logging non-idempotent INFO filter leaked into subsequent log-event tests; fixed via autouse structlog.reset_defaults() teardown in test_logging.py
+- [Phase 05]: Plan 05-05: CommandDispatcher synchronous emit gate (D-01) -- only sync stage in Phase 5; orchestrator calls dispatcher.decide(angle, now_ns) directly after await controller.consume(...)
+- [Phase 05]: Plan 05-05: Two-gate emission split into two distinct if-blocks (delta then interval) instead of if A and B -- mandatory for 100% branch coverage AND for distinguishable command_suppressed_delta vs command_suppressed_interval Pattern-9 logs
+- [Phase 05]: Plan 05-05: Pitfall 7 None-upstream non-update verified across multi-tick gap -- 3 None ticks at 1/2/3s after seed produce no state change; subsequent real call's interval is measured from the original seed timestamp, not the latest None tick
+- [Phase 05]: Plan 05-05: Issue 9 ramp upper bound formula floor(T*1000/min_interval_ms) + 2 (NOT + 1) -- +1 first-call seed + +1 boundary-frame slack at gate quantization; Issue 12 defensive assert min_interval_ms > 0 before division
+- [Phase 05]: Plan 05-05: Coverage CLI uses --cov=src/pastor_tracker/control (directory form) not module-dotted -- pytest-cov 6.3 + numpy 2.4 hits cannot-load-module-twice on dotted form; directory form matches Plan 04 working invocation
 
 ### Pending Todos
 
@@ -126,6 +132,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-06T09:43:33.000Z
+Last session: 2026-05-06T09:57:29.804Z
 Stopped at: Completed 05-04-PLAN.md
 Resume file: None

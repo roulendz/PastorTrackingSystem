@@ -104,7 +104,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 05-02-PLAN.md - MotionAnalyzer (hysteresis classifier) + tests (Wave 1)
 - [x] 05-03-PLAN.md - Framer (rule-of-thirds + stage-1 damper) + tests (Wave 1)
 - [x] 05-04-PLAN.md - PanController (FOV + stage-2 damper + clamp + deadband) + tests (Wave 2)
-- [ ] 05-05-PLAN.md - CommandDispatcher (sync delta+interval gate) + tests (Wave 2)
+- [x] 05-05-PLAN.md - CommandDispatcher (sync delta+interval gate) + tests (Wave 2)
 - [ ] 05-06-PLAN.md - Composition smoke test across all four stages (Wave 3)
 **UI hint**: no
 

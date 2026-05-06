@@ -66,7 +66,7 @@
 - [x] **CTRL-01**: Pan controller — second damping stage `pan_time_constant_sec ≈ 0.6 s` on motor angle delta
 - [x] **CTRL-02**: Deadband — suppress motor command if `|angle_delta| < 0.4°`
 - [x] **CTRL-03**: Velocity clamp — max pan rate `30°/s`
-- [ ] **CTRL-04**: Command dispatcher — emit `M:<deg>` only when delta > 0.2° AND ≥ 50 ms since last command
+- [x] **CTRL-04**: Command dispatcher — emit `M:<deg>` only when delta > 0.2° AND ≥ 50 ms since last command
 
 ### Pipeline
 
@@ -170,7 +170,7 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | CTRL-01 | Phase 5 | Complete |
 | CTRL-02 | Phase 5 | Complete |
 | CTRL-03 | Phase 5 | Complete |
-| CTRL-04 | Phase 5 | Pending |
+| CTRL-04 | Phase 5 | Complete |
 | PIPE-01 | Phase 6 | Pending |
 | PIPE-02 | Phase 6 | Pending |
 | PIPE-03 | Phase 6 | Pending |
