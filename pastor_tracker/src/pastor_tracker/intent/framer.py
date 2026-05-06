@@ -79,8 +79,6 @@ class Framer:
             self._reset()
             return None
         target = self._intent_to_target(motion.intent)
-        # _intent_to_target only returns None for "indeterminate" -- filtered above.
-        assert target is not None, "unreachable: indeterminate filtered"
         if self._state is None:
             return self._seed_and_emit(target, motion.timestamp_ns, now_ns)
         return self._step_and_emit(target, motion.timestamp_ns, now_ns)
@@ -132,7 +130,7 @@ class Framer:
         self._last_discrete_target_x_normalized = None
 
     @staticmethod
-    def _intent_to_target(intent: MotionIntent) -> float | None:
+    def _intent_to_target(intent: MotionIntent) -> float:
         match intent:
             case "moving_right":
                 return _TARGET_LEFT_THIRD
@@ -140,9 +138,11 @@ class Framer:
                 return _TARGET_RIGHT_THIRD
             case "dwelling":
                 return _TARGET_CENTER
-            case "indeterminate":
-                return None
             case _:
+                # WR-01: "indeterminate" is filtered upstream in consume();
+                # any other value would indicate a MotionIntent Literal
+                # extension that wasn't propagated here. Tiger-style:
+                # raise rather than silently fall through.
                 raise IntentError(
                     f"unhandled MotionIntent in _intent_to_target: {intent!r}"
                 )
