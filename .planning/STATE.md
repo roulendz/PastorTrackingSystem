@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-05-06T12:30:00.000Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-05-06T09:43:33.000Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 17
-  completed_plans: 14
-  percent: 82
+  completed_plans: 15
+  percent: 88
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Phase: 05 (Intent and Control) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-06
 
-Progress: [████████░░] 82%
+Progress: [████████▊░] 88%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [████████░░] 82%
 | Phase 05 P01 | 4 min | 2 tasks | 2 files |
 | Phase 05 P02 | 5min | 2 tasks | 3 files |
 | Phase 05 P03 | 5min | 2 tasks | 3 files |
+| Phase 05 P04 | 13min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,10 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 05-03: At-target seed (FollowerState(position=current_target, velocity=0.0)) — no warmup transient toward zero (D-06)
 - [Phase ?]: Plan 05-03: Hold-on-None / indeterminate clears full Framer state — clean re-seed at next non-indeterminate motion (D-07 + Pitfall 6)
 - [Phase ?]: Plan 05-03: framing_target_change INFO log gated on _last_discrete_target_x_normalized (NOT continuous damper position) — bounded by Plan 02 hysteresis
+- [Phase ?]: Plan 05-04: PanController stage-2 damper in DEGREE DOMAIN (D-05); FOV bridge first via core.geometry.normalized_x_to_angle_deg before damping (D-08)
+- [Phase ?]: Plan 05-04: Anti-windup via FollowerState.position OVERWRITE using dataclasses.replace (D-09) — NOT PID; no integral/accumulator state. Proven observably: 3 successive over-velocity emitted-deltas equal vmax*dt within machine epsilon (~1e-15)
+- [Phase ?]: Plan 05-04: Hold-on-None preserves FollowerState in place (D-07) — contrast with Plan 03 Framer which clears state on indeterminate; degree damper holds across upstream gaps for smooth resume
+- [Phase ?]: Plan 05-04: Fixed pre-existing structlog test pollution — configure_logging non-idempotent INFO filter leaked into subsequent log-event tests; fixed via autouse structlog.reset_defaults() teardown in test_logging.py
 
 ### Pending Todos
 
@@ -117,10 +122,10 @@ Items acknowledged and carried forward from previous milestone close:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none)* | | | |
+| Test flake | `test_geometry::test_inverse_map_output_in_unit_interval` -- pre-existing full-suite-only failure (unraisable asyncio event-loop warning); details in `.planning/phases/05-intent-and-control/deferred-items.md` | Open | Plan 05-04 |
 
 ## Session Continuity
 
-Last session: 2026-05-06T12:30:00.000Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-05-06T09:43:33.000Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
