@@ -171,8 +171,18 @@ async def _force_state(pipeline: Pipeline, target: _PipelineState) -> None:
         await pipeline.pause()
         return
     if target is _PipelineState.E_STOPPED:
+        # WR-06 fix: directly mutate the lifecycle state instead of calling
+        # the public ``e_stop()`` method. ``e_stop()`` writes a real ``E``
+        # byte into the shared FakeSerialTransport.captured_writes buffer,
+        # which leaks into other-test assertions that look for ``b"E"`` as
+        # a diagnostic. The lifecycle table tests only need the pipeline
+        # to BE in E_STOPPED with dispatch silenced (mirror e_stop()'s
+        # post-state per pipeline.py:469-479) -- the wire-side byte is
+        # incidental and is covered exhaustively by the dedicated
+        # ``test_e_stop_completes_within_heartbeat_budget`` test.
         await pipeline.start()
-        await pipeline.e_stop()
+        pipeline._state = _PipelineState.E_STOPPED
+        pipeline._dispatch_enabled = False
         return
     if target is _PipelineState.HOMING:
         pytest.skip(
