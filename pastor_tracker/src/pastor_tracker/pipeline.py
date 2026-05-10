@@ -449,7 +449,22 @@ class Pipeline:
         self._state = homing_state  # HOMING transient
         self._dispatch_enabled = False  # silence motor while homing
         self._log_transition(old, homing_state, reason="home")
-        await self._motor.send_home()
+        # WR-01 fix: send_home can raise mid-call (e.g. LinkLostError on USB
+        # unplug). If it does, the inline back-edge below never runs and the
+        # pipeline wedges in HOMING -- only e_stop and quit are then valid
+        # transitions out of that state, and _dispatch_enabled stays False
+        # indefinitely. Tiger-style: collapse to STOPPED on failure so the
+        # done-callback recovery contract (D-13/D-14) is the single recovery
+        # path the operator deals with. Re-raise so __main__ sees the fault.
+        try:
+            await self._motor.send_home()
+        except Exception:
+            self._state = _PipelineState.STOPPED
+            self._dispatch_enabled = False
+            self._log_transition(
+                homing_state, _PipelineState.STOPPED, reason="home_failed",
+            )
+            raise
         # Fire-and-forget: HOMING -> PAUSED inline (back-edge not in table).
         self._state = _PipelineState.PAUSED
         self._log_transition(homing_state, _PipelineState.PAUSED, reason="home_sent")
