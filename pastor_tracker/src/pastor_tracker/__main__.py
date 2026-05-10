@@ -84,10 +84,7 @@ if TYPE_CHECKING:
     # Pipeline lands in plan 06-02 (parallel wave). Import-for-type-only
     # keeps this module importable against the 06-01 skeleton (which exports
     # only OrchestratorRejected). The runtime import lives inside _amain().
-    # The attr-defined ignore is bounded to the wave-merge interval: once
-    # 06-02 lands, ``Pipeline`` resolves and the ignore becomes a no-op
-    # (mypy's ``warn-unused-ignores`` is OFF in this repo's Phase-1 config).
-    from pastor_tracker.pipeline import Pipeline  # type: ignore[attr-defined]
+    from pastor_tracker.pipeline import Pipeline
 
 
 # Exit codes -- sysexits.h-flavoured (RESEARCH Section "Pattern 5: __main__
@@ -204,10 +201,7 @@ async def _amain(config: Config) -> int:
         6. ``finally: await pipeline.quit()`` -- guaranteed handle release on
            every exit path (D-09 idempotence makes this safe).
     """
-    # Lazy runtime import: Pipeline lands in 06-02 (parallel wave). See module
-    # docstring for the wave-merge rationale. attr-defined ignore is bounded
-    # to the wave-merge interval (mirrors the TYPE_CHECKING import above).
-    from pastor_tracker.pipeline import Pipeline  # type: ignore[attr-defined]
+    from pastor_tracker.pipeline import Pipeline
 
     log = structlog.get_logger(module="__main__")
 
