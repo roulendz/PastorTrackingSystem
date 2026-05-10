@@ -482,16 +482,23 @@ class Pipeline:
             await self._motor.send_emergency_stop()
             return
         next_state = self._transition_or_raise("e_stop")
-        # Inline send FIRST (silence the wire before any state mutation).
-        await self._motor.send_emergency_stop()
-        self._dispatch_enabled = False
+        # WR-02 fix: latch E_STOPPED + silence dispatch BEFORE the send. The
+        # operator-visible "I pressed e-stop" intent must be reflected in
+        # state and dispatch-gate even when the wire-side write fails (e.g.
+        # LinkLostError mid-call). Otherwise a partial-fail leaves state
+        # RUNNING and dispatch enabled, and the next tick happily issues
+        # another M: line on the same possibly-degraded wire. Order matters:
+        # state mutation first, then send -- a raise from send still leaves
+        # the lifecycle in E_STOPPED and propagates to the caller.
         old = self._state
         self._state = next_state
+        self._dispatch_enabled = False
         self._logger.warning(
             "pipeline_dispatch_disabled",
             reason="e_stop",
         )
         self._log_transition(old, next_state, reason="e_stop")
+        await self._motor.send_emergency_stop()
 
     async def quit(self) -> None:
         """D-09: graceful drain. Idempotent (second call no-ops).
