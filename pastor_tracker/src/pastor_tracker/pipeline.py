@@ -348,14 +348,20 @@ class Pipeline:
         RESEARCH Pitfall 8: idempotence shortcut BEFORE re-calling
         ``motor.start()`` / ``camera.start()`` -- those are single-shot
         and would raise on a second call.
+
+        Plan 06-04 fix (D-15 table consistency): the idempotence shortcut
+        must ONLY swallow ``(RUNNING, "start")`` -- the only valid
+        idempotent self-transition for start in ``_LIFECYCLE_TABLE``.
+        ``(PAUSED, "start")`` and ``(HOMING, "start")`` are NOT in the
+        table and must raise ``OrchestratorRejected`` like every other
+        invalid (state, cmd) pair (D-15). The previous broad short-circuit
+        silently swallowed those cells -- contract violation surfaced by
+        ``test_lifecycle_invalid_transitions_rejected``.
         """
-        # Pitfall 8: idempotence shortcut. Table also returns RUNNING for
-        # (RUNNING, "start"), but we must not re-call hardware start().
-        if self._state in (
-            _PipelineState.RUNNING,
-            _PipelineState.PAUSED,
-            _PipelineState.HOMING,
-        ):
+        # Pitfall 8: idempotence shortcut for the ONE table-listed self-
+        # transition. Avoids re-calling single-shot motor.start() /
+        # camera.start() / detector.start().
+        if self._state is _PipelineState.RUNNING:
             return
         next_state = self._transition_or_raise("start")
         old = self._state
@@ -398,9 +404,15 @@ class Pipeline:
         self._log_transition(old, next_state, reason="pause")
 
     async def resume(self) -> None:
-        """D-06: flip ``_dispatch_enabled=True``; tick loop already running."""
-        if self._state is _PipelineState.RUNNING:
-            return
+        """D-06: flip ``_dispatch_enabled=True``; tick loop already running.
+
+        Plan 06-04 fix (D-15 table consistency): ``(RUNNING, "resume")`` is
+        NOT in ``_LIFECYCLE_TABLE`` (resume is only valid from PAUSED).
+        The previous ``if self._state is RUNNING: return`` silently swallowed
+        it; per D-15 the lookup must raise. Removing the short-circuit hands
+        the call to ``_transition_or_raise`` which surfaces
+        ``OrchestratorRejected`` -- consistent with every other invalid pair.
+        """
         next_state = self._transition_or_raise("resume")
         old = self._state
         self._dispatch_enabled = True
