@@ -298,6 +298,16 @@ class PoseDetector:
         self._inflight: asyncio.Task[None] | None = None
         self._out_queue: asyncio.Queue[list[Detection]] = asyncio.Queue(maxsize=_OUT_QUEUE_MAX)
         self._latched_error: PerceptionError | None = None
+        # WR-03 fix: counter of detection results dropped from the head of
+        # _out_queue under output-queue overflow (see _infer_one). stream()
+        # drains this counter each loop iteration and pops the corresponding
+        # number of head entries from its pending_frames deque so the
+        # frame<->detection pairing invariant survives overflow drops.
+        # Without this, a head-drop in _out_queue would silently shift the
+        # pairing -- detection N would be paired with the frame that
+        # produced N-1, corrupting frame.timestamp_ns (the D-04 tick clock)
+        # by one frame interval (~33ms at 30fps) for every overflow event.
+        self._output_drops_pending: int = 0
 
     # ---------- read-only status surface ----------
     @property
@@ -445,6 +455,10 @@ class PoseDetector:
         if self._out_queue.full():
             try:
                 _ = self._out_queue.get_nowait()
+                # WR-03: bump the drop counter so stream() can keep its
+                # pending_frames deque aligned with _out_queue (one head
+                # drop here == one head pop there).
+                self._output_drops_pending += 1
                 self._logger.warning(
                     "pose_detector_output_drop_oldest",
                     queue_size=self._out_queue.maxsize,
@@ -556,6 +570,14 @@ class PoseDetector:
                     dets = await detections_iter.__anext__()
                 except StopAsyncIteration:
                     return
+                # WR-03: drain any output-queue drops that happened since
+                # the last yield. Each drop in _out_queue corresponds to
+                # the OLDEST queued detection being thrown away -- so the
+                # OLDEST pending_frames entry must also be discarded to
+                # keep the pairing aligned (drop-oldest on both sides).
+                while self._output_drops_pending > 0 and pending_frames:
+                    pending_frames.popleft()
+                    self._output_drops_pending -= 1
                 if not pending_frames:
                     continue
                 pair_frame = pending_frames.popleft()
