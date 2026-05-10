@@ -62,6 +62,7 @@ from pastor_tracker.intent.framer import Framer
 from pastor_tracker.intent.motion_analyzer import MotionAnalyzer
 from pastor_tracker.io.arduino_motor import ArduinoError, ArduinoMotor
 from pastor_tracker.io.arduino_transport import (
+    ArduinoPortNotFoundError,
     PySerialTransport,
     discover_arduino_port,
 )
@@ -168,7 +169,16 @@ def main() -> int:
         # legacy Ctrl-C path is still a clean operator exit.
         log.warning("pipeline_exit", reason="keyboard_interrupt")
         return EXIT_OK
-    except (CameraError, ArduinoError, PerceptionError) as exc:
+    except (CameraError, ArduinoError, ArduinoPortNotFoundError, PerceptionError) as exc:
+        # Plan 06-04 fix: ArduinoPortNotFoundError is a plain Exception (per
+        # arduino_transport.py module docstring -- it pre-dates the ArduinoError
+        # hierarchy and was kept un-rooted to avoid an import cycle). Without
+        # this catch, a missing-port boot fault falls through to the catch-all
+        # below and exits EXIT_CRASHED (70) instead of EXIT_HARDWARE_FAILED
+        # (65). The structured exit code distinguishes "I cannot find your
+        # USB device" (operator-recoverable) from "the pipeline tick task
+        # crashed" (operator triage required) -- the conflation hid the real
+        # signal.
         log.error(
             "pipeline_exit",
             reason="hardware_failed",
