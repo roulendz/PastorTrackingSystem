@@ -332,3 +332,157 @@ async def test_non_perception_error_translates_to_perception_error(
     assert "bare engine fault" in str(err)
     await detector.stop()
     assert detector.state is _DetectorState.FAULTED
+
+
+# --- Phase 6 Wave-0 (Plan 06-01): PoseDetector.stream() helper -------------
+
+
+def _make_test_frame(cfg_w: int, cfg_h: int, timestamp_ns: int) -> Frame:
+    """Build a synthetic Frame for stream() tests."""
+    img = np.zeros((cfg_h, cfg_w, 3), dtype=np.uint8)
+    return Frame(image=img, width=cfg_w, height=cfg_h, timestamp_ns=timestamp_ns)
+
+
+@pytest.mark.asyncio
+async def test_stream_yields_frame_detection_pairs(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """D-03/D-17: stream() yields (Frame, list[Detection]) tuples; identity preserved."""
+    from pastor_tracker.config import Config
+    from pastor_tracker.core.types import Frame as FrameT
+    from pastor_tracker.perception.pose_detector import PoseDetector
+
+    cfg = Config(**valid_config_dict)
+    scripted: list[list[Detection]] = [
+        [make_detection(cx=0.5, cy=0.5, track_id=k + 1, conf=0.9, timestamp_ns=k * 33_333_333)]
+        for k in range(3)
+    ]
+    engine = FakePoseEngine(script=list(scripted))
+    detector = PoseDetector(config=cfg, engine=engine)
+    await detector.start()
+    try:
+        frames = [
+            _make_test_frame(cfg.capture_width, cfg.capture_height, ts)
+            for ts in (0, 33_333_333, 66_666_666)
+        ]
+
+        async def _frame_gen() -> "asyncio.AsyncIterator[FrameT]":
+            for fr in frames:
+                yield fr
+
+        received: list[tuple[FrameT, list[Detection]]] = []
+        async for pair in detector.stream(_frame_gen()):
+            received.append(pair)
+            if len(received) == 3:
+                break
+        assert len(received) == 3
+        for idx, (frame_out, dets_out) in enumerate(received):
+            assert frame_out is frames[idx], "Frame identity must be preserved"
+            assert frame_out.timestamp_ns == frames[idx].timestamp_ns
+            assert dets_out == scripted[idx]
+    finally:
+        await detector.stop()
+
+
+@pytest.mark.asyncio
+async def test_stream_exits_cleanly_when_frames_exhausted(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """stream() returns cleanly via StopAsyncIteration when upstream frames() ends."""
+    from pastor_tracker.config import Config
+    from pastor_tracker.core.types import Frame as FrameT
+    from pastor_tracker.perception.pose_detector import PoseDetector
+
+    cfg = Config(**valid_config_dict)
+    scripted: list[list[Detection]] = [
+        [make_detection(cx=0.5, cy=0.5, track_id=k + 1, conf=0.9, timestamp_ns=k * 33_000_000)]
+        for k in range(2)
+    ]
+    engine = FakePoseEngine(script=list(scripted))
+    detector = PoseDetector(config=cfg, engine=engine)
+    await detector.start()
+    try:
+        frames = [
+            _make_test_frame(cfg.capture_width, cfg.capture_height, k * 33_000_000)
+            for k in range(2)
+        ]
+
+        async def _frame_gen() -> "asyncio.AsyncIterator[FrameT]":
+            for fr in frames:
+                yield fr
+
+        count = 0
+        async for _pair in detector.stream(_frame_gen()):
+            count += 1
+        assert count == 2, f"expected 2 yields, got {count}"
+    finally:
+        await detector.stop()
+
+
+@pytest.mark.asyncio
+async def test_stream_propagates_engine_fault(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """Engine fault inside stream() surfaces the latched PerceptionError."""
+    from pastor_tracker.config import Config
+    from pastor_tracker.core.types import Frame as FrameT
+    from pastor_tracker.perception.pose_detector import PoseDetector
+    from tests.fixtures.pose_traces import FailingPoseEngine
+
+    cfg = Config(**valid_config_dict)
+    detector = PoseDetector(config=cfg, engine=FailingPoseEngine())
+    await detector.start()
+    try:
+        frames = [
+            _make_test_frame(cfg.capture_width, cfg.capture_height, k * 33_000_000)
+            for k in range(3)
+        ]
+
+        async def _frame_gen() -> "asyncio.AsyncIterator[FrameT]":
+            for fr in frames:
+                yield fr
+
+        with pytest.raises(PerceptionError, match="simulated engine fault"):
+            async for _pair in detector.stream(_frame_gen()):
+                pass
+    finally:
+        await detector.stop()
+
+
+@pytest.mark.asyncio
+async def test_stream_drops_stale_internally(
+    valid_config_dict: dict[str, object],
+) -> None:
+    """BL-01 still active when wired through stream(): drop-oldest WARNs emitted."""
+    from pastor_tracker.config import Config
+    from pastor_tracker.core.types import Frame as FrameT
+    from pastor_tracker.perception.pose_detector import PoseDetector
+    from tests.fixtures.pose_traces import SlowFakePoseEngine
+
+    cfg = Config(**valid_config_dict)
+    engine = SlowFakePoseEngine(per_call_delay_sec=0.1, script=[[] for _ in range(5)])
+    detector = PoseDetector(config=cfg, engine=engine)
+    await detector.start()
+    try:
+        frames = [
+            _make_test_frame(cfg.capture_width, cfg.capture_height, k * 33_333_333)
+            for k in range(5)
+        ]
+
+        async def _frame_gen() -> "asyncio.AsyncIterator[FrameT]":
+            for fr in frames:
+                yield fr
+                # 30 fps cadence between yields drives drop-oldest
+                await asyncio.sleep(1 / 30)
+
+        yielded = 0
+        with structlog.testing.capture_logs() as caplog:
+            async for _pair in detector.stream(_frame_gen()):
+                yielded += 1
+        drop_events = [e for e in caplog if e.get("event") == "inference_drop_oldest"]
+        assert len(drop_events) >= 1, (
+            f"expected at least one drop-oldest WARN, got {len(drop_events)}"
+        )
+        assert yielded <= 5, f"yielded={yielded} cannot exceed input frame count"
+    finally:
+        await detector.stop()
