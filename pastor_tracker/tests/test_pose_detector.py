@@ -9,6 +9,7 @@ drain in submission order, and FAULTED preservation across stop().
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from multiprocessing import shared_memory
 
 import numpy as np
@@ -366,7 +367,7 @@ async def test_stream_yields_frame_detection_pairs(
             for ts in (0, 33_333_333, 66_666_666)
         ]
 
-        async def _frame_gen() -> "asyncio.AsyncIterator[FrameT]":
+        async def _frame_gen() -> AsyncIterator[FrameT]:
             for fr in frames:
                 yield fr
 
@@ -407,7 +408,7 @@ async def test_stream_exits_cleanly_when_frames_exhausted(
             for k in range(2)
         ]
 
-        async def _frame_gen() -> "asyncio.AsyncIterator[FrameT]":
+        async def _frame_gen() -> AsyncIterator[FrameT]:
             for fr in frames:
                 yield fr
 
@@ -438,7 +439,7 @@ async def test_stream_propagates_engine_fault(
             for k in range(3)
         ]
 
-        async def _frame_gen() -> "asyncio.AsyncIterator[FrameT]":
+        async def _frame_gen() -> AsyncIterator[FrameT]:
             for fr in frames:
                 yield fr
 
@@ -469,7 +470,7 @@ async def test_stream_drops_stale_internally(
             for k in range(5)
         ]
 
-        async def _frame_gen() -> "asyncio.AsyncIterator[FrameT]":
+        async def _frame_gen() -> AsyncIterator[FrameT]:
             for fr in frames:
                 yield fr
                 # 30 fps cadence between yields drives drop-oldest
