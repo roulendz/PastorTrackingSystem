@@ -70,9 +70,9 @@
 
 ### Pipeline
 
-- [ ] **PIPE-01**: `pipeline.py` asyncio orchestrator wiring stages: `OBS VCam → FrameSource → PoseDetector → SubjectTracker → MotionAnalyzer → Framer → PanController → CommandDispatcher → ArduinoMotor`
-- [ ] **PIPE-02**: Each stage = pure transform on typed DTO; orchestrator owns wiring; no stage knows another stage's internals
-- [ ] **PIPE-03**: Lifecycle — start, pause, home, e-stop, quit (mapped to UI hotkeys)
+- [x] **PIPE-01**: `pipeline.py` asyncio orchestrator wiring stages: `OBS VCam → FrameSource → PoseDetector → SubjectTracker → MotionAnalyzer → Framer → PanController → CommandDispatcher → ArduinoMotor`
+- [x] **PIPE-02**: Each stage = pure transform on typed DTO; orchestrator owns wiring; no stage knows another stage's internals
+- [x] **PIPE-03**: Lifecycle — start, pause, home, e-stop, quit (mapped to UI hotkeys)
 
 ### UI
 
@@ -171,9 +171,9 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | CTRL-02 | Phase 5 | Complete |
 | CTRL-03 | Phase 5 | Complete |
 | CTRL-04 | Phase 5 | Complete |
-| PIPE-01 | Phase 6 | Pending |
-| PIPE-02 | Phase 6 | Pending |
-| PIPE-03 | Phase 6 | Pending |
+| PIPE-01 | Phase 6 | Complete |
+| PIPE-02 | Phase 6 | Complete |
+| PIPE-03 | Phase 6 | Complete |
 | UI-01 | Phase 7 | Pending |
 | UI-02 | Phase 7 | Pending |
 | UI-03 | Phase 7 | Pending |

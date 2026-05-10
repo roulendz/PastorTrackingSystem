@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Perception** - YOLO11-pose detection, BoT-SORT primary-subject ID lock, 4-state Kalman smoothing
 - [x] **Phase 5: Intent and Control** - Motion analyzer with hysteresis, rule-of-thirds framer, two-stage damped pan controller, rate-limited command dispatcher
  (completed 2026-05-06)
-- [ ] **Phase 6: Pipeline Orchestrator** - Asyncio orchestrator wiring all stages, lifecycle (start/pause/home/e-stop/quit)
+- [x] **Phase 6: Pipeline Orchestrator** - Asyncio orchestrator wiring all stages, lifecycle (start/pause/home/e-stop/quit) (completed 2026-05-10)
 - [ ] **Phase 7: UI Dashboard** - DearPyGui live preview, tuning sliders, status panel, hotkeys
 - [ ] **Phase 8: End-to-End and Ship Gates** - On-stage smoke test, README + FOV calibration, final lint/type/commit gates
 
@@ -118,10 +118,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Each stage receives and emits typed frozen DTOs only; the orchestrator owns wiring and no stage imports another stage's module-private state
   3. Lifecycle commands `start`, `pause`, `home`, `e-stop`, `quit` work via the orchestrator API (UI hotkey wiring lands in Phase 7) — `e-stop` halts motor within one heartbeat interval; `home` is rejected when 0° is outside software limits
 **Plans**: 4 plans
-- [ ] 06-01-PLAN.md — Wave 0 contracts: PoseDetector.stream() helper + PipelineSnapshot/PipelineState in core.types + pipeline.py skeleton (OrchestratorRejected)
-- [ ] 06-02-PLAN.md — Wave 1: Pipeline class with 6-state lifecycle table + 8-stage tick loop + snapshot cache + latest_frame slot + e-stop inline send
-- [ ] 06-03-PLAN.md — Wave 1: __main__ refactor with argparse + cross-platform SIGINT handling + structured exit codes + 8-stage hardware wiring
-- [ ] 06-04-PLAN.md — Wave 2: Pipeline integration tests with all 4 fakes + lifecycle table coverage + e-stop budget + __main__ exit-code subprocess tests
+- [x] 06-01-PLAN.md — Wave 0 contracts: PoseDetector.stream() helper + PipelineSnapshot/PipelineState in core.types + pipeline.py skeleton (OrchestratorRejected)
+- [x] 06-02-PLAN.md — Wave 1: Pipeline class with 6-state lifecycle table + 8-stage tick loop + snapshot cache + latest_frame slot + e-stop inline send
+- [x] 06-03-PLAN.md — Wave 1: __main__ refactor with argparse + cross-platform SIGINT handling + structured exit codes + 8-stage hardware wiring
+- [x] 06-04-PLAN.md — Wave 2: Pipeline integration tests with all 4 fakes + lifecycle table coverage + e-stop budget + __main__ exit-code subprocess tests
 **UI hint**: no
 **Cross-phase contract notes** (from Phase 3 deep review, commit aac3da1):
   - `ObsCamera.frames()` now exits cleanly via `StopAsyncIteration` after `stop()` (B-02 fix). Orchestrator can write `async for frame in camera.frames(): ...` without catching `CameraStallError` to discriminate clean shutdown.
@@ -167,7 +167,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Camera I/O | 0/2 | Not started | - |
 | 4. Perception | 0/3 | Not started | - |
 | 5. Intent and Control | 6/6 | Complete   | 2026-05-06 |
-| 6. Pipeline Orchestrator | 0/4 | Not started | - |
+| 6. Pipeline Orchestrator | 4/4 | Complete    | 2026-05-10 |
 | 7. UI Dashboard | 0/TBD | Not started | - |
 | 8. End-to-End and Ship Gates | 0/TBD | Not started | - |
 
