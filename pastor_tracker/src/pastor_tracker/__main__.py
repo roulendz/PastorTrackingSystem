@@ -48,8 +48,9 @@ import argparse
 import asyncio
 import signal
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Protocol
 
 import structlog
 from pydantic import ValidationError
@@ -99,6 +100,81 @@ EXIT_CRASHED: Final[int] = 70
 # Platform discriminator for SIGINT install path. Module-level constant so
 # the win32 / POSIX branch is auditable in one place (CLAUDE.md rule 6).
 _WIN32_PLATFORM: Final[str] = "win32"
+
+
+# WR-04: signal-handler shape. Both install paths use a single callable
+# whose two args are defaulted (``signum: int = 0, frame: object = None``);
+# ``signal.signal`` (Windows) calls it with (signum, frame) and
+# ``loop.add_signal_handler`` (POSIX) calls it with no args. A Protocol
+# captures both surfaces precisely without resorting to
+# ``Callable[..., ...]`` (which would trip mypy --strict's
+# disallow_any_explicit) and without a Callable alias that fits one
+# surface but not the other.
+class _SignalHandler(Protocol):
+    """Defaulted-positional signal handler: works for signal.signal AND add_signal_handler."""
+
+    def __call__(self, signum: int = 0, frame: object = None) -> None: ...
+
+
+_NoOp = Callable[[], None]
+
+
+def _install_shutdown_signals(
+    loop: asyncio.AbstractEventLoop,
+    handler: _SignalHandler,
+) -> _NoOp:
+    """Install SIGINT (+ SIGTERM on POSIX) handler; return an uninstall callable.
+
+    WR-04 fix: returning the uninstall closure lets ``_amain`` wrap install +
+    teardown in a try/finally without leaking platform conditionals into the
+    main lifecycle body. Without uninstall, the closure-captured ``loop``
+    outlives ``asyncio.run`` and a late SIGINT (typically in pytest where
+    one process spawns many ``_amain`` invocations) re-fires the handler
+    against a closed loop, raising ``RuntimeError: Event loop is closed``
+    from ``call_soon_threadsafe``.
+
+    Windows path: ``signal.signal(SIGINT, handler)`` returns the prior
+    handler, which the uninstall closure restores. SIGTERM cannot be
+    installed via ``signal.signal`` on Windows (raises ``ValueError``);
+    the ``KeyboardInterrupt`` fallback in ``main()`` covers the legacy path.
+
+    POSIX path: ``loop.add_signal_handler`` for SIGINT + SIGTERM; the
+    uninstall closure calls ``loop.remove_signal_handler`` for each.
+    """
+    if sys.platform == _WIN32_PLATFORM:
+        prior = signal.signal(signal.SIGINT, handler)
+
+        def _uninstall_win() -> None:
+            # signal.signal accepts the prior handler back; no public type
+            # alias for "the prior handler" exists in the stdlib stubs.
+            signal.signal(signal.SIGINT, prior)
+
+        return _uninstall_win
+
+    loop.add_signal_handler(signal.SIGINT, handler)
+    loop.add_signal_handler(signal.SIGTERM, handler)
+
+    def _uninstall_posix() -> None:
+        loop.remove_signal_handler(signal.SIGINT)
+        loop.remove_signal_handler(signal.SIGTERM)
+
+    return _uninstall_posix
+
+
+def _uninstall_shutdown_signals(
+    uninstall: _NoOp,
+    log: structlog.stdlib.BoundLogger,
+) -> None:
+    """Best-effort uninstall: a raise here would shadow the real exit reason.
+
+    Catches ValueError / OSError only (the documented surface of
+    ``signal.signal`` and ``loop.remove_signal_handler``). Any other raise
+    is a real bug and propagates per tiger-style.
+    """
+    try:
+        uninstall()
+    except (ValueError, OSError) as exc:
+        log.warning("signal_uninstall_failed", reason=str(exc))
 
 
 def _build_video_source(
@@ -258,43 +334,45 @@ async def _amain(config: Config) -> int:
         del signum, frame
         loop.call_soon_threadsafe(shutdown_event.set)
 
-    if sys.platform == _WIN32_PLATFORM:
-        # ProactorEventLoop does not support ``add_signal_handler``
-        # (cpython#137863). ``signal.signal(SIGINT, ...)`` is the portable
-        # pattern. SIGTERM cannot be installed via ``signal.signal`` on
-        # Windows (raises ``ValueError``); the ``KeyboardInterrupt``
-        # fallback in ``main()`` covers the legacy path.
-        signal.signal(signal.SIGINT, _on_signal)
-    else:
-        loop.add_signal_handler(signal.SIGINT, _on_signal)
-        loop.add_signal_handler(signal.SIGTERM, _on_signal)
+    # WR-04 fix: install + uninstall paths are extracted into helpers
+    # (_install_shutdown_signals / _uninstall_shutdown_signals) so the
+    # outer try/finally that guarantees uninstall keeps _amain's statement
+    # count under PLR0915. Without uninstall the closure-captured ``loop``
+    # outlives ``asyncio.run`` and a late SIGINT (especially in pytest where
+    # the same process spawns many ``_amain`` invocations) re-fires the
+    # handler with a now-closed loop, raising ``RuntimeError: Event loop is
+    # closed`` from ``call_soon_threadsafe``.
+    uninstall_signals = _install_shutdown_signals(loop, _on_signal)
 
-    # --- start pipeline; translate hardware errors to EXIT_HARDWARE_FAILED ---
     try:
-        await pipeline.start()
-    except (
-        CameraError,
-        ArduinoError,
-        PerceptionError,
-        OrchestratorRejected,
-    ) as exc:
-        log.error(
-            "pipeline_start_failed",
-            exc_type=type(exc).__name__,
-            exc_msg=str(exc),
-        )
-        # quit() is idempotent (D-09) -- safe even if start() partially succeeded.
-        await pipeline.quit()
-        return EXIT_HARDWARE_FAILED
+        # --- start pipeline; translate hardware errors to EXIT_HARDWARE_FAILED ---
+        try:
+            await pipeline.start()
+        except (
+            CameraError,
+            ArduinoError,
+            PerceptionError,
+            OrchestratorRejected,
+        ) as exc:
+            log.error(
+                "pipeline_start_failed",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
+            # quit() is idempotent (D-09) -- safe even if start() partially succeeded.
+            await pipeline.quit()
+            return EXIT_HARDWARE_FAILED
 
-    # --- main wait + guaranteed drain (T-06-10 mitigation) ---
-    try:
-        await shutdown_event.wait()
+        # --- main wait + guaranteed drain (T-06-10 mitigation) ---
+        try:
+            await shutdown_event.wait()
+        finally:
+            await pipeline.quit()
+
+        log.info("pipeline_exit", reason="clean_shutdown")
+        return EXIT_OK
     finally:
-        await pipeline.quit()
-
-    log.info("pipeline_exit", reason="clean_shutdown")
-    return EXIT_OK
+        _uninstall_shutdown_signals(uninstall_signals, log)
 
 
 if __name__ == "__main__":
