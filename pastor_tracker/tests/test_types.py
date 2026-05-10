@@ -210,6 +210,119 @@ def test_motor_command_rejects_mutation() -> None:
         mc.target_angle_deg = 0.0  # type: ignore[misc]
 
 
+# --- Phase 6 Wave-0 (Plan 06-01): PipelineSnapshot + PipelineState --------
+
+
+def test_pipeline_state_literal_members() -> None:
+    """PipelineState Literal must include exactly the 6 D-16 lifecycle members."""
+    import typing
+
+    from pastor_tracker.core.types import PipelineState
+
+    expected = {"stopped", "running", "paused", "homing", "e_stopped", "quitting"}
+    assert set(typing.get_args(PipelineState)) == expected
+
+
+def test_pipeline_snapshot_construction_minimal() -> None:
+    """Minimal construction: only required fields; optionals default to None."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    snap = PipelineSnapshot(
+        state="stopped",
+        last_intent="indeterminate",
+        motor_state="disconnected",
+    )
+    assert snap.state == "stopped"
+    assert snap.last_intent == "indeterminate"
+    assert snap.motor_state == "disconnected"
+    assert snap.last_frame_ts_ns is None
+    assert snap.last_target_x_normalized is None
+    assert snap.last_pan_angle_deg is None
+    assert snap.last_emitted_angle_deg is None
+
+
+def test_pipeline_snapshot_construction_full() -> None:
+    """All seven D-16 fields populated; round-trip through model_dump preserves values."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    snap = PipelineSnapshot(
+        state="running",
+        last_frame_ts_ns=1_000_000_000,
+        last_intent="moving_right",
+        last_target_x_normalized=0.333,
+        last_pan_angle_deg=12.5,
+        last_emitted_angle_deg=12.3,
+        motor_state="running",
+    )
+    dumped = snap.model_dump()
+    assert dumped == {
+        "state": "running",
+        "last_frame_ts_ns": 1_000_000_000,
+        "last_intent": "moving_right",
+        "last_target_x_normalized": 0.333,
+        "last_pan_angle_deg": 12.5,
+        "last_emitted_angle_deg": 12.3,
+        "motor_state": "running",
+    }
+
+
+def test_pipeline_snapshot_frozen() -> None:
+    """frozen=True must reject post-construction mutation."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    snap = PipelineSnapshot(
+        state="stopped", last_intent="indeterminate", motor_state="disconnected",
+    )
+    with pytest.raises(ValidationError):
+        snap.state = "paused"  # type: ignore[misc]
+
+
+def test_pipeline_snapshot_extra_forbidden() -> None:
+    """extra='forbid' must reject unknown keys."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    with pytest.raises(ValidationError):
+        PipelineSnapshot(
+            state="stopped",
+            last_intent="indeterminate",
+            motor_state="disconnected",
+            extra_field="boom",  # type: ignore[call-arg]
+        )
+
+
+def test_pipeline_snapshot_target_x_range_validated() -> None:
+    """last_target_x_normalized must be in [0.0, 1.0]; reject 1.5 and -0.1."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    with pytest.raises(ValidationError):
+        PipelineSnapshot(
+            state="running",
+            last_intent="moving_right",
+            motor_state="running",
+            last_target_x_normalized=1.5,
+        )
+    with pytest.raises(ValidationError):
+        PipelineSnapshot(
+            state="running",
+            last_intent="moving_right",
+            motor_state="running",
+            last_target_x_normalized=-0.1,
+        )
+
+
+def test_pipeline_snapshot_last_frame_ts_ns_non_negative() -> None:
+    """last_frame_ts_ns must be >= 0 when supplied."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    with pytest.raises(ValidationError):
+        PipelineSnapshot(
+            state="running",
+            last_intent="moving_right",
+            motor_state="running",
+            last_frame_ts_ns=-1,
+        )
+
+
 def test_detection_track_id_optional() -> None:
     """Phase 4 Plan 01: Detection.track_id is optional; None default; ge=0 rejects negatives."""
     det_default = Detection(

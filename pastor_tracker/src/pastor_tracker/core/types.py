@@ -184,3 +184,44 @@ class MotorCommand(_FrozenModel):
 
     target_angle_deg: float
     timestamp_ns: int = Field(ge=0)
+
+
+# Phase 6 -- pipeline orchestrator surface (D-16, D-17).
+# PipelineState mirrors pastor_tracker.pipeline._PipelineState members but is
+# a string Literal so PipelineSnapshot remains importable with no dependency
+# on pipeline.py (avoids the import cycle: pipeline.py -> core.types -> pipeline.py).
+PipelineState = Literal[
+    "stopped", "running", "paused", "homing", "e_stopped", "quitting",
+]
+
+
+class PipelineSnapshot(_FrozenModel):
+    """Read-only snapshot for the Phase 7 dashboard (D-16).
+
+    Built cheaply from Pipeline._PipelineCache on every snapshot() call.
+    Frozen + extra-forbidden per the project DTO discipline (CLAUDE.md
+    rule 9). Field set is fixed at exactly the 7 names D-16 enumerates --
+    do not extend without revising CONTEXT.md.
+
+    Field semantics:
+        * state: Literal -- one of the 6 valid lifecycle states.
+        * last_frame_ts_ns: optional perf_counter_ns; None before first tick.
+        * last_intent: always present; MotionIntent already includes
+          "indeterminate" for the no-decision-yet case.
+        * last_target_x_normalized: range-validated [0, 1]; None when no
+          target yet.
+        * last_pan_angle_deg, last_emitted_angle_deg: unbounded (motor angle
+          limits live in Config; the snapshot just reflects what happened).
+        * motor_state: opaque string -- the value of ArduinoMotor.state.value.
+          Phase 6 keeps _MotorState private to the Arduino subsystem; the
+          snapshot exposes its .value so Phase 7 can render text without
+          importing _MotorState.
+    """
+
+    state: PipelineState
+    last_frame_ts_ns: int | None = Field(default=None, ge=0)
+    last_intent: MotionIntent
+    last_target_x_normalized: float | None = Field(default=None, ge=0.0, le=1.0)
+    last_pan_angle_deg: float | None = None
+    last_emitted_angle_deg: float | None = None
+    motor_state: str

@@ -15,6 +15,8 @@ error hierarchy.
 from __future__ import annotations
 
 import asyncio
+import collections
+import contextlib
 import enum
 from collections.abc import AsyncIterator
 from concurrent.futures import ProcessPoolExecutor
@@ -471,6 +473,102 @@ class PoseDetector:
             except TimeoutError:
                 continue
             yield dets
+
+    # ---------- combined stream (Phase 6 D-03 helper) ----------
+    async def stream(
+        self,
+        frames: AsyncIterator[Frame],
+    ) -> AsyncIterator[tuple[Frame, list[Detection]]]:
+        """D-03: Combine consume(frame) + detections() into a single (Frame, dets) iterator.
+
+        Phase 6 orchestrator (per CONTEXT.md D-01..D-04) drives the tick loop as
+        ``async for frame, dets in detector.stream(camera.frames()):``. This
+        helper is the SINGLE wiring seam between camera frames and detector
+        output -- drop-oldest at consume() ingress (BL-01) and clean
+        StopAsyncIteration on detections() egress are both inherited from the
+        existing surface.
+
+        Yields (Frame, list[Detection]) tuples -- the Frame is the most recent
+        frame submitted to ``consume()`` at the moment the detection result
+        becomes available, so the caller can update its ``latest_frame`` slot
+        (D-17) AND extract ``frame.timestamp_ns`` (D-04) from the same yield,
+        satisfying the single-task discipline (D-02 -- no parallel
+        camera-frames iterator visible to the orchestrator).
+
+        Internal structure (BL-01 preservation):
+            * A small producer coroutine pumps ``frames`` -> ``consume()`` as
+              fast as frames arrive. New frames during in-flight inference
+              cancel the previous task and emit ``inference_drop_oldest`` --
+              the existing ``consume()`` drop-oldest semantics flow through
+              unchanged (verified by ``test_stream_drops_stale_internally``).
+            * The main coroutine drains ``detections()`` and yields each result
+              paired with the most recent submitted frame. ``yielded_pairs <=
+              input_frame_count`` because dropped frames produce no detection.
+
+        Exits cleanly when ``frames`` returns (StopAsyncIteration). Surfaces
+        any latched PerceptionError via the underlying ``detections()`` egress.
+        """
+        # `pending_frames` tracks the frame currently associated with the
+        # in-flight inference task. consume()'s drop-oldest semantics mean
+        # that when a new frame is submitted while the previous _inflight is
+        # still running, the previous inflight is cancelled and produces no
+        # detection. We mirror that here: on each new submission, replace the
+        # tail entry if the previous inflight is being cancelled, otherwise
+        # append. Each successfully completed detection corresponds to the
+        # head entry. Result: detection_i is paired with the frame whose
+        # submission produced it (identity preserved per BL-01 + D-17).
+        pending_frames: collections.deque[Frame] = collections.deque()
+        producer_done = asyncio.Event()
+
+        async def _pump() -> None:
+            try:
+                async for incoming in frames:
+                    # If a previous inflight is still running, consume() will
+                    # drop it -- its frame never produces a detection, so pop
+                    # it from our pending queue before pushing the new one.
+                    if (
+                        self._inflight is not None
+                        and not self._inflight.done()
+                        and pending_frames
+                    ):
+                        pending_frames.pop()
+                    pending_frames.append(incoming)
+                    await self.consume(incoming)
+                    # Yield event-loop control so the inflight inference task
+                    # gets a chance to complete before the next frame arrives.
+                    # Fast engine -> detection completes here, no drop. Slow
+                    # engine -> next frame still arrives mid-flight, drop fires.
+                    await asyncio.sleep(0)
+            finally:
+                producer_done.set()
+
+        producer = asyncio.create_task(_pump())
+        detections_iter = self.detections()
+        try:
+            while True:
+                if (
+                    producer_done.is_set()
+                    and (self._inflight is None or self._inflight.done())
+                    and self._out_queue.empty()
+                ):
+                    return
+                try:
+                    dets = await detections_iter.__anext__()
+                except StopAsyncIteration:
+                    return
+                if not pending_frames:
+                    continue
+                pair_frame = pending_frames.popleft()
+                yield (pair_frame, dets)
+        finally:
+            if not producer.done():
+                producer.cancel()
+            # Always await the producer (cancelled or naturally complete) to
+            # retrieve its exception and avoid the asyncio "Task exception was
+            # never retrieved" warning at GC time (mirrors arduino_motor.py
+            # cleanup discipline; required for pytest filterwarnings=error).
+            with contextlib.suppress(asyncio.CancelledError, PerceptionError):
+                await producer
 
     # ---------- helpers ----------
     def _raise_if_latched(self) -> None:
