@@ -520,11 +520,38 @@ class Pipeline:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await self._tick_task
             self._tick_task = None
-        with contextlib.suppress(Exception):
+        # WR-05 fix: replace contextlib.suppress(Exception) with explicit
+        # try/except + structured log per CLAUDE.md tiger-style §1
+        # (no silent excepts). quit() must STILL be idempotent and reach
+        # every close call -- a failing camera.stop must not abort the
+        # subsequent detector.stop / motor.close. The narrow Exception
+        # catch logs at WARN with exc_info so an operator post-mortem can
+        # tell whether the hardware went down clean or whether a close
+        # raised. Mirrors the documented translator pattern at
+        # pose_detector.py:356-360.
+        try:
             await self._camera.stop()
-        with contextlib.suppress(Exception):
+        except Exception:  # noqa: BLE001 -- documented translator (subsystem close boundary; W5 fix)
+            self._logger.warning(
+                "pipeline_quit_close_failed",
+                subsystem="camera",
+                exc_info=True,
+            )
+        try:
             await self._detector.stop()
-        with contextlib.suppress(Exception):
+        except Exception:  # noqa: BLE001 -- documented translator (subsystem close boundary; W5 fix)
+            self._logger.warning(
+                "pipeline_quit_close_failed",
+                subsystem="detector",
+                exc_info=True,
+            )
+        try:
             await self._motor.close()
+        except Exception:  # noqa: BLE001 -- documented translator (subsystem close boundary; W5 fix)
+            self._logger.warning(
+                "pipeline_quit_close_failed",
+                subsystem="motor",
+                exc_info=True,
+            )
         self._state = next_state
         self._log_transition(old, next_state, reason="quit")
