@@ -25,15 +25,18 @@ Plan 07-03 replaces it).
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from concurrent.futures import Future
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 import dearpygui.dearpygui as dpg
 import numpy as np
 import structlog
+from pydantic import ValidationError
 
-from pastor_tracker.config import Config
+from pastor_tracker.config import CONFIG_JSON_PATH, Config
 from pastor_tracker.core.types import Frame, PipelineSnapshot
 from pastor_tracker.pipeline import OrchestratorRejected, Pipeline
 from pastor_tracker.ui._event_bus import EventBuffer, make_event_bus
@@ -93,6 +96,15 @@ _ANGLE_TEXT_BOTTOM_OFFSET_PX: Final[int] = 24
 # Unsaved-changes badge text (CONTEXT.md "Specific Ideas" line 183 wording).
 # Empty string when buffer is empty; this label otherwise.
 _UNSAVED_BADGE_LABEL: Final[str] = "(unsaved changes)"
+
+# Save Config: budget for the old Pipeline.quit() Future.result(...) wait
+# (RESEARCH §Pitfall 3 + A6 -- UI freezes during this window; 5 s mirrors
+# the D-04 quit-drain budget).
+_SAVE_QUIT_TIMEOUT_SEC: Final[float] = 5.0
+
+# Save Config error-banner prefix. Operator-facing one-liner; the
+# ValidationError per-field details are appended.
+_ERROR_BANNER_PREFIX: Final[str] = "Save failed: "
 
 
 def _default_pipeline_factory(config: Config) -> Pipeline:
@@ -188,6 +200,7 @@ class Dashboard:
         pipeline_factory: Callable[[Config], Pipeline] | None = None,
         host_factory: Callable[[], PipelineThreadHost] | None = None,
         event_bus: EventBuffer | None = None,
+        config_json_path: Path | None = None,
     ) -> None:
         self._config = config
         self._pipeline_factory: Callable[[Config], Pipeline] = (
@@ -211,6 +224,17 @@ class Dashboard:
         # _build_unsaved_badge(); used by _refresh_unsaved_badge() to
         # push the text via dpg.set_value().
         self._tag_unsaved_badge: int = 0
+        # Plan 07-03: red error-banner widget tag + text state. The text
+        # is held on the Dashboard so unit tests can read it without
+        # introspecting DPG widget state.
+        self._tag_error_banner: int = 0
+        self._error_banner_text: str = ""
+        # Save Config target path. Defaults to the module-level
+        # ``CONFIG_JSON_PATH`` (CWD-relative ``config.json``); tests
+        # inject a ``tmp_path`` for isolation.
+        self._config_json_path: Path = (
+            config_json_path if config_json_path is not None else CONFIG_JSON_PATH
+        )
         # Plan 07-04 status panel. Dashboard constructs its own event bus
         # when running standalone (e.g. tests); ``__main__.py`` injects a
         # shared one so structlog taps land in the SAME deque the panel
@@ -314,12 +338,19 @@ class Dashboard:
     def _build_unsaved_badge(self) -> None:
         """Plan 07-03: dedicated text widget for the unsaved-changes badge.
 
-        The widget tag is held on the Dashboard so slider callbacks (and
-        the Save Config success path) can push fresh text via
-        :meth:`_refresh_unsaved_badge`. Initial value is empty -- the
-        buffer is empty on first paint.
+        Also constructs the Save-Config error banner widget (red text,
+        empty until a ValidationError surfaces). Both widgets sit above
+        the slider row so the operator sees them next to the controls
+        they tune.
         """
         self._tag_unsaved_badge = dpg.add_text("")
+        self._tag_error_banner = dpg.add_text("")
+        # Red theme for the error banner -- reuse the E-Stop color tuple
+        # (CLAUDE.md DRY rule 3) but apply it lazily here since the
+        # E-Stop theme is button-scoped (mvThemeCol_Text on mvButton).
+        with dpg.theme() as banner_theme, dpg.theme_component(dpg.mvText):
+            dpg.add_theme_color(dpg.mvThemeCol_Text, _ESTOP_TEXT_COLOR_RGB)
+        dpg.bind_item_theme(self._tag_error_banner, banner_theme)
 
     def _build_sliders(self) -> None:
         """Plan 07-03: 4 sliders with D-09 bounds + closure-factory callbacks.
@@ -489,11 +520,172 @@ class Dashboard:
     def _on_save_config_pressed(
         self, sender: int, app_data: object, user_data: object
     ) -> None:
+        """D-11 Save Config: validate -> persist -> teardown -> rebuild -> resume.
+
+        Restart sequence per RESEARCH §Pitfall 3 (fresh PipelineThreadHost
+        + fresh Pipeline; the old host is ``stop()``-ed and discarded).
+        On ``ValidationError`` the operator-facing banner is set, the
+        ``_pending_config`` buffer is preserved, and no Pipeline restart
+        is attempted (CONTEXT.md "Specific Ideas" line 182).
+        """
+        del sender, app_data, user_data
+        if not self._pending_config:
+            self._logger.info("ui_save_config_noop", reason="no_pending_changes")
+            return
+        keys = list(self._pending_config.keys())
+        self._logger.info("ui_save_config_attempted", keys=keys)
+        # 1. Re-validate. Pydantic v2 ``model_copy(update=...)`` does
+        #    NOT re-run field validators by default -- we feed the
+        #    copy's dump back through ``Config.model_validate(...)`` so
+        #    D-12 (dual-bound enforcement) catches Pitfall 5 (text-entry
+        #    that bypassed the slider visual clamp).
+        try:
+            unvalidated = self._config.model_copy(update=self._pending_config)
+            new_config = Config.model_validate(unvalidated.model_dump())
+        except ValidationError as exc:
+            self._logger.warning(
+                "config_validation_failed", errors=exc.errors()
+            )
+            self._show_error_banner(self._format_validation_error(exc))
+            return  # do NOT clear _pending_config
+        # 2. Persist BEFORE teardown -- a crash during the teardown chain
+        #    still leaves the new config on disk for the next boot.
+        self._write_config_json(new_config)
+        # 3. Quit old Pipeline. The Future.result(...) blocks the UI on
+        #    the main thread (RESEARCH A6 -- documented freeze window).
+        assert self._host is not None
+        assert self._pipeline is not None
+        old_host = self._host
+        old_pipeline = self._pipeline
+        try:
+            old_host.submit(old_pipeline.quit()).result(
+                timeout=_SAVE_QUIT_TIMEOUT_SEC
+            )
+        except (OrchestratorRejected, TimeoutError) as exc:
+            self._logger.warning(
+                "ui_save_quit_failed",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
+        old_host.stop()
+        # 4. Fresh PipelineThreadHost + fresh Pipeline (Pitfall 3 --
+        #    threads + event loops are single-use).
+        self._config = new_config
+        self._pipeline = self._pipeline_factory(new_config)
+        self._host = self._host_factory()
+        self._host.start()
+        self._host.submit(self._pipeline.start())
+        # 5. Clear buffer ONLY on full success.
+        self._pending_config.clear()
+        self._refresh_unsaved_badge()
+        self._clear_error_banner()
+        self._logger.info("ui_pipeline_restart_complete", keys=keys)
+
+    # ----- Save Config helpers ------------------------------------------
+
+    def _write_config_json(self, new_config: Config) -> None:
+        """Write the merged Config to ``self._config_json_path`` as JSON.
+
+        ``model_dump(mode='json')`` coerces ``Path`` -> ``str`` per the
+        pydantic v2 contract (RESEARCH §"Don't Hand-Roll" row 10).
+        """
+        payload = new_config.model_dump(mode="json")
+        self._config_json_path.write_text(
+            json.dumps(payload, indent=2), encoding="utf-8"
+        )
+
+    def _format_validation_error(self, exc: ValidationError) -> str:
+        """One-line operator-facing banner text from a ValidationError."""
+        details = "; ".join(
+            f"{err['loc'][0] if err['loc'] else '?'}: {err['msg']}"
+            for err in exc.errors()
+        )
+        return f"{_ERROR_BANNER_PREFIX}{details}"
+
+    def _show_error_banner(self, text: str) -> None:
+        """Set the red error banner text + widget value."""
+        self._error_banner_text = text
+        if self._tag_error_banner:
+            dpg.set_value(self._tag_error_banner, text)
+
+    def _clear_error_banner(self) -> None:
+        """Reset the error banner to empty (called on Save success)."""
+        self._error_banner_text = ""
+        if self._tag_error_banner:
+            dpg.set_value(self._tag_error_banner, "")
+
+    # ----- Modal-decision logic (Pitfall 7) -----------------------------
+
+    def should_prompt_save(self) -> bool:
+        """Pure helper -- True when quit has unsaved edits in the buffer.
+
+        Modal *rendering* is exempt from automated tests (DearPyGui v2.x
+        has no headless runner); the *decision* is unit-tested by
+        invoking this helper + the three ``_on_modal_*`` callbacks
+        directly.
+        """
+        return bool(self._pending_config)
+
+    def _show_unsaved_modal(self) -> None:
+        """Lazy-construct the 3-button "unsaved changes" modal (Pitfall 7).
+
+        Modal rendering itself is verified manually (Phase 8 QA-04 smoke).
+        Tests stub this method via ``Mock``; the decision logic lives in
+        :meth:`_on_modal_save_and_quit` / ``_on_modal_quit_anyway`` /
+        ``_on_modal_cancel`` which are unit-testable in isolation.
+        """
+        # Modal UI construction is rendered only -- behavior is covered
+        # by the three callbacks below. This method intentionally has no
+        # automated test (CONTEXT.md "Claude's Discretion": render-loop
+        # coverage is exempt).
+        with dpg.window(
+            label="Unsaved changes",
+            modal=True,
+            no_close=True,
+        ):
+            dpg.add_text("You have unsaved changes. What would you like to do?")
+            with dpg.group(horizontal=True):
+                dpg.add_button(
+                    label="Save & Quit", callback=self._on_modal_save_and_quit
+                )
+                dpg.add_button(
+                    label="Quit Anyway", callback=self._on_modal_quit_anyway
+                )
+                dpg.add_button(label="Cancel", callback=self._on_modal_cancel)
+
+    def _on_modal_save_and_quit(
+        self, sender: int, app_data: object, user_data: object
+    ) -> None:
+        """Save & Quit: run Save Config; only stop DPG on full success."""
+        self._on_save_config_pressed(sender, app_data, user_data)
+        if not self._pending_config:
+            # Save cleared the buffer -> success path.
+            dpg.stop_dearpygui()
+        # else: Save failed; banner is up; modal stays open (operator
+        # can pick Quit Anyway or Cancel).
+
+    def _on_modal_quit_anyway(
+        self, sender: int, app_data: object, user_data: object
+    ) -> None:
+        """Quit Anyway: discard the buffer + stop DPG.
+
+        Discarding is required so re-entry of :meth:`_on_exit_callback`
+        (which DPG may fire again during shutdown) does NOT re-prompt
+        the modal in an infinite loop.
+        """
         del sender, app_data, user_data
         self._logger.warning(
-            "ui_save_config_not_implemented",
-            note="Plan 07-03 lands the restart sequence",
+            "ui_quit_with_unsaved_changes", count=len(self._pending_config)
         )
+        self._pending_config.clear()
+        dpg.stop_dearpygui()
+
+    def _on_modal_cancel(
+        self, sender: int, app_data: object, user_data: object
+    ) -> None:
+        """Cancel: dismiss the modal; leave buffer + pipeline untouched."""
+        del sender, app_data, user_data
+        self._logger.debug("ui_modal_cancel")
 
     def _on_quit_pressed(
         self, sender: int, app_data: object, user_data: object
@@ -626,12 +818,15 @@ class Dashboard:
     def _on_exit_callback(self) -> None:
         """Pitfall 7 hook for the viewport close-X.
 
-        Plan 07-02 stub: just call ``stop_dearpygui`` to break out of the
-        render loop; the ``run()`` finally runs ``_initiate_quit`` after.
-        Plan 07-03 swaps in the modal-decision logic for unsaved
-        ``_pending_config`` changes.
+        With unsaved edits in ``_pending_config`` the close intent is
+        routed through the 3-button modal (Save & Quit / Quit Anyway /
+        Cancel). With an empty buffer the close happens immediately via
+        ``dpg.stop_dearpygui()`` -- ``run()``'s ``finally`` then drives
+        the D-04 quit sequence.
         """
-        # Plan 07-03: replace with modal-decision logic on _pending_config.
+        if self.should_prompt_save():
+            self._show_unsaved_modal()
+            return
         dpg.stop_dearpygui()
 
 
