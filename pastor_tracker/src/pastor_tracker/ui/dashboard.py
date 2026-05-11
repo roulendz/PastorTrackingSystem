@@ -26,6 +26,7 @@ Plan 07-03 replaces it).
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable
 from concurrent.futures import Future
 from pathlib import Path
@@ -109,6 +110,15 @@ _SAVE_QUIT_TIMEOUT_SEC: Final[float] = 5.0
 # Save Config error-banner prefix. Operator-facing one-liner; the
 # ValidationError per-field details are appended.
 _ERROR_BANNER_PREFIX: Final[str] = "Save failed: "
+
+# WR-05: E-stop autorepeat debounce window. DearPyGui's
+# ``add_key_press_handler`` fires repeatedly while a key is held;
+# at the OS autorepeat rate that floods the event bus deque (maxlen=64,
+# RESEARCH §5) and evicts real warnings within a single held-key burst.
+# S/P/H/Q use ``add_key_release_handler`` (fires once per release) so
+# they need no debounce; E stays on press so the first key-down has zero
+# latency, but subsequent repeats inside the window are dropped.
+_HOTKEY_DEBOUNCE_NS: Final[int] = 250_000_000  # 250 ms
 
 
 def _default_pipeline_factory(config: Config) -> Pipeline:
@@ -246,6 +256,10 @@ class Dashboard:
         # cleared by every modal callback so the widget tree does not
         # accumulate a stale modal per Cancel/X cycle.
         self._tag_modal: int = 0
+        # WR-05: monotonic-ns timestamp of the last E-stop press, used
+        # to debounce DearPyGui's repeating ``add_key_press_handler``
+        # while the operator holds the E key. ``0`` means "never fired".
+        self._estop_last_fired_ns: int = 0
         # Save Config target path. Defaults to the module-level
         # ``CONFIG_JSON_PATH`` (CWD-relative ``config.json``); tests
         # inject a ``tmp_path`` for isolation.
@@ -486,20 +500,31 @@ class Dashboard:
         )
 
     def _build_hotkeys(self) -> None:
+        """WR-05: hotkey registration with autorepeat-safe semantics.
+
+        S/P/H/Q use ``add_key_release_handler`` which fires exactly once
+        per release, so a held key does not spam state-transition
+        rejects + log entries (the ``add_key_press_handler`` DPG default
+        fires every OS autorepeat tick). E uses
+        ``add_key_press_handler`` for zero-latency first-press (operator
+        wants instant on-stage stop), and the ``_on_estop_pressed``
+        handler debounces subsequent autorepeats internally against
+        ``_HOTKEY_DEBOUNCE_NS``.
+        """
         with dpg.handler_registry():
-            dpg.add_key_press_handler(
+            dpg.add_key_release_handler(
                 key=dpg.mvKey_S, callback=self._on_start_pressed
             )
-            dpg.add_key_press_handler(
+            dpg.add_key_release_handler(
                 key=dpg.mvKey_P, callback=self._on_pause_pressed
             )
-            dpg.add_key_press_handler(
+            dpg.add_key_release_handler(
                 key=dpg.mvKey_H, callback=self._on_home_pressed
             )
             dpg.add_key_press_handler(
                 key=dpg.mvKey_E, callback=self._on_estop_pressed
             )
-            dpg.add_key_press_handler(
+            dpg.add_key_release_handler(
                 key=dpg.mvKey_Q, callback=self._on_quit_pressed
             )
 
@@ -570,7 +595,23 @@ class Dashboard:
     def _on_estop_pressed(
         self, sender: int, app_data: object, user_data: object
     ) -> None:
+        """E-stop. WR-05: debounced against DPG key-press autorepeat.
+
+        First key-down has zero latency (operator wants instant on-stage
+        stop). Subsequent repeats inside ``_HOTKEY_DEBOUNCE_NS`` are
+        silently dropped so a held-E does not flood the structlog event
+        bus (deque maxlen=64) and evict real warnings. The button-click
+        path also routes through here; buttons cannot autorepeat so the
+        debounce is a no-op for that surface (gap >> 250 ms).
+        """
         del sender, app_data, user_data
+        now_ns = time.monotonic_ns()
+        if (
+            self._estop_last_fired_ns
+            and now_ns - self._estop_last_fired_ns < _HOTKEY_DEBOUNCE_NS
+        ):
+            return
+        self._estop_last_fired_ns = now_ns
         pipeline, host = self._require_initialized()
         fut = host.submit(pipeline.e_stop())
         fut.add_done_callback(self._log_command_completion)

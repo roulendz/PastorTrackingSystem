@@ -854,6 +854,77 @@ def test_default_pipeline_factory_constructs_pipeline_or_raises_hardware() -> No
 # ---- CR-02 rollback regression -----------------------------------------
 
 
+# ---- WR-05 hotkey autorepeat debounce ----------------------------------
+
+
+def test_estop_first_press_dispatches_immediately() -> None:
+    """WR-05: zero-latency first press is preserved (no debounce gate)."""
+    dashboard, pipeline, host = _make_dashboard()
+    assert dashboard._estop_last_fired_ns == 0
+    dashboard._on_estop_pressed(0, None, None)
+    pipeline.e_stop.assert_called_once()
+    host.submit.assert_called_once()
+    assert dashboard._estop_last_fired_ns != 0
+
+
+def test_estop_held_key_is_debounced() -> None:
+    """WR-05: 10 rapid consecutive presses inside the window collapse to 1."""
+    from unittest.mock import patch
+
+    dashboard, pipeline, host = _make_dashboard()
+    # Pin time.monotonic_ns to a sequence that simulates 10 ms apart
+    # autorepeats well within the 250 ms debounce window.
+    base_ns = 1_000_000_000
+    seq = [base_ns + i * 10_000_000 for i in range(10)]  # 10 ms apart
+    with patch(
+        "pastor_tracker.ui.dashboard.time.monotonic_ns", side_effect=seq
+    ):
+        for _ in range(10):
+            dashboard._on_estop_pressed(0, None, None)
+    # Only the first call dispatched; the other 9 were debounced out.
+    assert pipeline.e_stop.call_count == 1
+    assert host.submit.call_count == 1
+
+
+def test_estop_press_after_debounce_window_dispatches_again() -> None:
+    """WR-05: presses outside the 250 ms window fire normally."""
+    from unittest.mock import patch
+
+    dashboard, pipeline, host = _make_dashboard()
+    base_ns = 1_000_000_000
+    # First press, then a gap of 300 ms (> 250 ms window), then another.
+    seq = [base_ns, base_ns + 300_000_000]
+    with patch(
+        "pastor_tracker.ui.dashboard.time.monotonic_ns", side_effect=seq
+    ):
+        dashboard._on_estop_pressed(0, None, None)
+        dashboard._on_estop_pressed(0, None, None)
+    assert pipeline.e_stop.call_count == 2
+    assert host.submit.call_count == 2
+
+
+def test_build_hotkeys_uses_release_for_spqh_and_press_for_e() -> None:
+    """WR-05: S / P / H / Q registered on release; E on press (instant)."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_dashboard()
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._build_hotkeys()
+    # S/P/H/Q: release handlers; E: press handler.
+    release_calls = mock_dpg.add_key_release_handler.call_args_list
+    press_calls = mock_dpg.add_key_press_handler.call_args_list
+    release_keys = {c.kwargs.get("key") for c in release_calls}
+    press_keys = {c.kwargs.get("key") for c in press_calls}
+    # We can't compare the dpg.mvKey_* sentinels directly without DPG,
+    # but we can assert the call shapes: 4 release-handler regs + 1
+    # press-handler reg.
+    assert len(release_calls) == 4
+    assert len(press_calls) == 1
+    # And exactly one of each handler was registered.
+    assert len(release_keys) == 4
+    assert len(press_keys) == 1
+
+
 # ---- WR-04 cancellation-safe done-callbacks ----------------------------
 
 
