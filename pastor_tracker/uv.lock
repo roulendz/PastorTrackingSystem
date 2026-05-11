@@ -227,6 +227,17 @@ wheels = [
 ]
 
 [[package]]
+name = "dearpygui"
+version = "2.3.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/f1/6f30c7eafa25755105d0c26049a95c89cc5c82b68971e1cc8ffea36b748a/dearpygui-2.3.1-cp312-cp312-macosx_13_0_arm64.whl", hash = "sha256:6b1efd675a358176b3b76c039587a543d407d8fbb2cc3643a527e0ab7c0f5577", size = 2002717, upload-time = "2026-05-01T22:46:00.242Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/03/fa76c31087b6ebbc13948de6d9d3bc9ed9946824b13d9d1089356b54249c/dearpygui-2.3.1-cp312-cp312-manylinux1_x86_64.whl", hash = "sha256:364b5b6a0953999fec764d529d9bb0b2cc6ab6ed06188e0ded28237c1475ca98", size = 2678552, upload-time = "2026-05-01T22:46:07.502Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/ef/657ec68a79664cd28d98d590eed85103c6ffc1e23e7d3c4e5aedb7ee887d/dearpygui-2.3.1-cp312-cp312-manylinux2014_aarch64.whl", hash = "sha256:199dffebda245c9f59aa7c10c3b7f62963237c5f744150ad9be409b27a2661d3", size = 2501224, upload-time = "2026-05-01T22:46:18.8Z" },
+    { url = "https://files.pythonhosted.org/packages/77/be/e67e5a04439f15e60cf596092a31b2a907272288954e47f5ced43c0b1678/dearpygui-2.3.1-cp312-cp312-win_amd64.whl", hash = "sha256:26ed9197cdb30099c665bd1b23724e0dba60ad06b71344ecca7e52748c21874b", size = 1882080, upload-time = "2026-05-01T22:45:49.366Z" },
+]
+
+[[package]]
 name = "decli"
 version = "0.6.3"
 source = { registry = "https://pypi.org/simple" }
@@ -704,6 +715,7 @@ name = "pastor-tracker"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "dearpygui" },
     { name = "filterpy" },
     { name = "numpy" },
     { name = "opencv-python" },
@@ -729,6 +741,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dearpygui", specifier = ">=2.1,<3.0" },
     { name = "filterpy", specifier = ">=1.4,<2.0" },
     { name = "numpy", specifier = ">=2.4,<3.0" },
     { name = "opencv-python", specifier = ">=4.10,<5.0" },

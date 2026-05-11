@@ -155,3 +155,55 @@ def test_botsort_yaml_path_optional(valid_config_dict: dict[str, Any]) -> None:
         **valid_config_dict, botsort_yaml_path=Path("custom.yaml")
     )
     assert cfg_explicit.botsort_yaml_path == Path("custom.yaml")
+
+
+# ---------- Phase 7 / Plan 01: UI preview drawlist dimensions (D-05, D-13) ----------
+
+
+def test_preview_dimensions_defaults(valid_config_dict: dict[str, Any]) -> None:
+    """Default preview_width_px=960, preview_height_px=540 (RESEARCH §Claude's Discretion)."""
+    cfg = Config(**valid_config_dict)
+    assert cfg.preview_width_px == 960
+    assert cfg.preview_height_px == 540
+
+
+def test_preview_width_px_rejects_below_minimum(
+    valid_config_dict: dict[str, Any],
+) -> None:
+    """preview_width_px < 320 (capture floor) raises ValidationError."""
+    with pytest.raises(ValidationError, match="preview_width_px"):
+        Config(**valid_config_dict, preview_width_px=319)
+
+
+def test_preview_width_px_rejects_above_maximum(
+    valid_config_dict: dict[str, Any],
+) -> None:
+    """preview_width_px > 3840 (4K cap) raises ValidationError."""
+    with pytest.raises(ValidationError, match="preview_width_px"):
+        Config(**valid_config_dict, preview_width_px=3_841)
+
+
+def test_preview_height_px_rejects_below_minimum(
+    valid_config_dict: dict[str, Any],
+) -> None:
+    """preview_height_px < 240 (capture floor) raises ValidationError."""
+    with pytest.raises(ValidationError, match="preview_height_px"):
+        Config(**valid_config_dict, preview_height_px=239)
+
+
+def test_preview_height_px_rejects_above_maximum(
+    valid_config_dict: dict[str, Any],
+) -> None:
+    """preview_height_px > 2160 (4K cap) raises ValidationError."""
+    with pytest.raises(ValidationError, match="preview_height_px"):
+        Config(**valid_config_dict, preview_height_px=2_161)
+
+
+def test_preview_dimensions_json_roundtrip(valid_config_dict: dict[str, Any]) -> None:
+    """JSON dump/load roundtrip preserves preview dimensions (D-11 SaveConfig path)."""
+    cfg = Config(**valid_config_dict)
+    dumped = cfg.model_dump_json()
+    roundtripped = Config.model_validate_json(dumped)
+    assert roundtripped.preview_width_px == cfg.preview_width_px
+    assert roundtripped.preview_height_px == cfg.preview_height_px
+    assert roundtripped == cfg

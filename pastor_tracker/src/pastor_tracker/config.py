@@ -11,9 +11,11 @@ This module exists so every downstream stage consumes a single, validated,
 frozen object. Tiger-style: invalid config crashes at startup. No silent
 fallbacks. No defaults that hide errors.
 
-Field count: 25 — every field in PROMPT.md ``## Config`` block. See
-``arduino_ready_timeout_sec`` description for traceability to PROMPT.md
-``## Failure Modes`` (boot ``READY:v2`` 2 s timeout).
+Field count: 27 — every field in PROMPT.md ``## Config`` block plus the
+Phase 7 UI preview drawlist dimensions (``preview_width_px``,
+``preview_height_px``). See ``arduino_ready_timeout_sec`` description for
+traceability to PROMPT.md ``## Failure Modes`` (boot ``READY:v2`` 2 s
+timeout).
 """
 from __future__ import annotations
 
@@ -74,9 +76,18 @@ _CAPTURE_HEIGHT_MAX: int = 4_320
 _CAPTURE_FPS_MIN: int = 5
 _CAPTURE_FPS_MAX: int = 240
 
+# Preview drawlist dimensions (Phase 7 D-13 / D-05 / Claude's Discretion).
+# Defaults 960x540 per RESEARCH §"Claude's Discretion". Lower bound matches
+# capture floor (320x240); upper bound = 4K (3840x2160) so 4K displays can
+# render native preview without cv2.resize downsample if operator chooses.
+_PREVIEW_WIDTH_PX_MIN: int = 320
+_PREVIEW_WIDTH_PX_MAX: int = 3_840
+_PREVIEW_HEIGHT_PX_MIN: int = 240
+_PREVIEW_HEIGHT_PX_MAX: int = 2_160
+
 
 class Config(BaseSettings):
-    """Frozen application configuration. 25 fields. All ranges validated."""
+    """Frozen application configuration. 27 fields. All ranges validated."""
 
     model_config = SettingsConfigDict(
         env_prefix="PTS_",
@@ -122,6 +133,27 @@ class Config(BaseSettings):
     capture_fps: int = Field(default=30, ge=_CAPTURE_FPS_MIN, le=_CAPTURE_FPS_MAX)
     camera_horizontal_fov_deg: float = Field(
         default=70.0, gt=_FOV_MIN_DEG, lt=_FOV_MAX_DEG
+    )
+
+    # --- UI preview drawlist (Phase 7 D-05, D-13) ---
+    preview_width_px: int = Field(
+        default=960,
+        ge=_PREVIEW_WIDTH_PX_MIN,
+        le=_PREVIEW_WIDTH_PX_MAX,
+        description=(
+            "Width of the DearPyGui preview drawlist in pixels (D-05). "
+            "Default 960 per RESEARCH §'Claude's Discretion'. cv2.resize "
+            "downsamples larger capture sizes to this width per D-06."
+        ),
+    )
+    preview_height_px: int = Field(
+        default=540,
+        ge=_PREVIEW_HEIGHT_PX_MIN,
+        le=_PREVIEW_HEIGHT_PX_MAX,
+        description=(
+            "Height of the DearPyGui preview drawlist in pixels (D-05). "
+            "Default 540 per RESEARCH §'Claude's Discretion'."
+        ),
     )
 
     # --- Perception (YOLO11-pose + BoT-SORT) ---
