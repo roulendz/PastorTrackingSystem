@@ -483,26 +483,42 @@ class Dashboard:
 
     # ----- button + hotkey callbacks ------------------------------------
 
+    def _require_initialized(self) -> tuple[Pipeline, PipelineThreadHost]:
+        """WR-02 tiger-style guard: explicit raise over ``assert`` for ``python -O``.
+
+        Returns the non-None ``(pipeline, host)`` pair after asserting the
+        run-time invariant set by :meth:`run` (``self._pipeline`` and
+        ``self._host`` populated before any button / render callback can
+        fire). The ``assert`` form was stripped under ``python -O`` and a
+        future None-deref would surface as ``AttributeError`` from a deep
+        DPG callback frame -- this helper mirrors
+        :class:`PipelineThreadHost.submit`'s explicit-raise contract (see
+        ``_pipeline_thread.py:111-116``).
+        """
+        if self._pipeline is None or self._host is None:
+            raise RuntimeError(
+                "Dashboard callback fired before run() initialized pipeline/host"
+            )
+        return self._pipeline, self._host
+
     def _on_start_pressed(
         self, sender: int, app_data: object, user_data: object
     ) -> None:
         del sender, app_data, user_data
-        assert self._pipeline is not None
-        assert self._host is not None
-        fut = self._host.submit(self._pipeline.start())
+        pipeline, host = self._require_initialized()
+        fut = host.submit(pipeline.start())
         fut.add_done_callback(self._log_command_completion)
 
     def _on_pause_pressed(
         self, sender: int, app_data: object, user_data: object
     ) -> None:
         del sender, app_data, user_data
-        assert self._pipeline is not None
-        assert self._host is not None
-        snap = self._pipeline.snapshot()
+        pipeline, host = self._require_initialized()
+        snap = pipeline.snapshot()
         if snap.state == "running":
-            fut = self._host.submit(self._pipeline.pause())
+            fut = host.submit(pipeline.pause())
         elif snap.state == "paused":
-            fut = self._host.submit(self._pipeline.resume())
+            fut = host.submit(pipeline.resume())
         else:
             self._logger.debug("ui_pause_skipped", reason=f"state={snap.state}")
             return
@@ -512,18 +528,16 @@ class Dashboard:
         self, sender: int, app_data: object, user_data: object
     ) -> None:
         del sender, app_data, user_data
-        assert self._pipeline is not None
-        assert self._host is not None
-        fut = self._host.submit(self._pipeline.home())
+        pipeline, host = self._require_initialized()
+        fut = host.submit(pipeline.home())
         fut.add_done_callback(self._handle_home_done)
 
     def _on_estop_pressed(
         self, sender: int, app_data: object, user_data: object
     ) -> None:
         del sender, app_data, user_data
-        assert self._pipeline is not None
-        assert self._host is not None
-        fut = self._host.submit(self._pipeline.e_stop())
+        pipeline, host = self._require_initialized()
+        fut = host.submit(pipeline.e_stop())
         fut.add_done_callback(self._log_command_completion)
 
     def _on_save_config_pressed(
@@ -566,10 +580,9 @@ class Dashboard:
             )
             self._show_error_banner(self._format_validation_error(exc))
             return  # do NOT clear _pending_config
-        if self._host is None or self._pipeline is None:
-            raise RuntimeError(
-                "Save Config fired before run() initialized pipeline/host"
-            )
+        # WR-02 tiger-style guard (shared helper) -- explicit raise, not
+        # ``assert``, so the invariant holds under ``python -O``.
+        self._require_initialized()
         # 2. Persist BEFORE any teardown -- a crash during the teardown
         #    chain still leaves the new config on disk for the next boot.
         self._write_config_json(new_config)
@@ -837,7 +850,13 @@ class Dashboard:
         reflects the actual render rate, not the refresh rate), while
         ``refresh`` fires once per ``_STATUS_REFRESH_DIVISOR`` frames.
         """
-        assert self._pipeline is not None
+        # WR-02 tiger-style guard inlined (render-tick hot path -- avoids
+        # the tuple alloc the shared :meth:`_require_initialized` helper
+        # would do; only the pipeline ref is read in this method).
+        if self._pipeline is None:
+            raise RuntimeError(
+                "Dashboard render tick fired before run() initialized pipeline"
+            )
         frame = self._pipeline.latest_frame  # atomic CPython attr read (D-03)
         if frame is not None and frame.timestamp_ns != self._last_rendered_ts_ns:
             self._upload_texture(frame)

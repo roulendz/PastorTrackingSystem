@@ -794,6 +794,59 @@ def test_default_pipeline_factory_constructs_pipeline_or_raises_hardware() -> No
 # ---- CR-02 rollback regression -----------------------------------------
 
 
+# ---- WR-02 explicit-raise guard regression -----------------------------
+
+
+@pytest.mark.parametrize(
+    "callback_attr",
+    [
+        "_on_start_pressed",
+        "_on_pause_pressed",
+        "_on_home_pressed",
+        "_on_estop_pressed",
+    ],
+)
+def test_button_callback_raises_runtime_error_when_pipeline_missing(
+    callback_attr: str,
+) -> None:
+    """WR-02: explicit RuntimeError (not assert) when run() never initialized."""
+    config = Config()
+    dashboard = Dashboard(
+        config,
+        pipeline_factory=lambda _cfg: _make_mock_pipeline(),
+        host_factory=_make_mock_host,
+    )
+    # Pre-run state: _pipeline / _host are None.
+    assert dashboard._pipeline is None
+    assert dashboard._host is None
+    with pytest.raises(RuntimeError, match="before run\\(\\) initialized"):
+        getattr(dashboard, callback_attr)(0, None, None)
+
+
+def test_render_tick_raises_runtime_error_when_pipeline_missing() -> None:
+    """WR-02: render tick uses explicit raise, not assert."""
+    dashboard = Dashboard(
+        Config(),
+        pipeline_factory=lambda _cfg: _make_mock_pipeline(),
+        host_factory=_make_mock_host,
+    )
+    assert dashboard._pipeline is None
+    with pytest.raises(RuntimeError, match="before run\\(\\) initialized"):
+        dashboard._render_tick()
+
+
+def test_save_config_raises_runtime_error_when_pipeline_missing() -> None:
+    """WR-02: Save Config also uses explicit raise for the same invariant."""
+    dashboard = Dashboard(
+        Config(),
+        pipeline_factory=lambda _cfg: _make_mock_pipeline(),
+        host_factory=_make_mock_host,
+    )
+    dashboard._pending_config["pan_deadband_deg"] = 0.6
+    with pytest.raises(RuntimeError, match="before run\\(\\) initialized"):
+        dashboard._on_save_config_pressed(0, None, None)
+
+
 # ---- WR-01 modal cleanup regression ------------------------------------
 
 
