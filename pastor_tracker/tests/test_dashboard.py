@@ -397,10 +397,14 @@ def test_command_completion_callback_silent_on_success() -> None:
 
 
 def test_redraw_overlays_draws_third_and_bbox_when_present() -> None:
-    """When snapshot carries target + bbox, draw_line + draw_rectangle fire."""
+    """WR-03: snapshot with target + bbox -> configure_item + show_item fire."""
     dashboard, _, _ = _make_dashboard()
     dashboard._tag_texture = 1001
     dashboard._tag_drawlist = 1002
+    dashboard._tag_overlay_third_line = 1003
+    dashboard._tag_overlay_bbox = 1004
+    dashboard._tag_overlay_id_text = 1005
+    dashboard._tag_overlay_angle_text = 1006
     snap = PipelineSnapshot(  # type: ignore[arg-type]
         state="running",
         last_intent="dwelling",
@@ -412,14 +416,34 @@ def test_redraw_overlays_draws_third_and_bbox_when_present() -> None:
 
     with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
         dashboard._redraw_overlays(snap)
-    mock_dpg.draw_line.assert_called_once()
-    mock_dpg.draw_rectangle.assert_called_once()
+    # WR-03: no per-tick widget churn; everything is configure_item +
+    # show_item. draw_line / draw_rectangle / delete_item must NOT fire.
+    mock_dpg.draw_line.assert_not_called()
+    mock_dpg.draw_rectangle.assert_not_called()
+    mock_dpg.delete_item.assert_not_called()
+    # Stable widget tags get reconfigured.
+    mock_dpg.show_item.assert_any_call(1003)  # third line shown
+    mock_dpg.show_item.assert_any_call(1004)  # bbox shown
+    # ID + angle text always configured (no show/hide -- always visible).
+    id_text_calls = [
+        c for c in mock_dpg.configure_item.call_args_list if c.args[0] == 1005
+    ]
+    angle_text_calls = [
+        c for c in mock_dpg.configure_item.call_args_list if c.args[0] == 1006
+    ]
+    assert len(id_text_calls) == 1
+    assert len(angle_text_calls) == 1
 
 
 def test_redraw_overlays_skips_third_and_bbox_when_absent() -> None:
+    """WR-03: snapshot without target / bbox -> hide_item, no widget churn."""
     dashboard, _, _ = _make_dashboard()
     dashboard._tag_texture = 1001
     dashboard._tag_drawlist = 1002
+    dashboard._tag_overlay_third_line = 1003
+    dashboard._tag_overlay_bbox = 1004
+    dashboard._tag_overlay_id_text = 1005
+    dashboard._tag_overlay_angle_text = 1006
     snap = PipelineSnapshot(  # type: ignore[arg-type]
         state="running",
         last_intent="indeterminate",
@@ -433,6 +457,42 @@ def test_redraw_overlays_skips_third_and_bbox_when_absent() -> None:
         dashboard._redraw_overlays(snap)
     mock_dpg.draw_line.assert_not_called()
     mock_dpg.draw_rectangle.assert_not_called()
+    mock_dpg.delete_item.assert_not_called()
+    mock_dpg.hide_item.assert_any_call(1003)
+    mock_dpg.hide_item.assert_any_call(1004)
+
+
+def test_redraw_overlays_does_not_create_widgets_per_tick() -> None:
+    """WR-03: invariant -- 30 Hz redraw must allocate 0 new widgets.
+
+    Smoke-tests the actual frame-by-frame discipline: 100 consecutive
+    _redraw_overlays calls must not invoke any DPG widget-creation API.
+    """
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_dashboard()
+    dashboard._tag_texture = 1001
+    dashboard._tag_drawlist = 1002
+    dashboard._tag_overlay_third_line = 1003
+    dashboard._tag_overlay_bbox = 1004
+    dashboard._tag_overlay_id_text = 1005
+    dashboard._tag_overlay_angle_text = 1006
+    snap = PipelineSnapshot(  # type: ignore[arg-type]
+        state="running",
+        last_intent="dwelling",
+        motor_state="running",
+        last_target_x_normalized=0.5,
+        last_subject_bbox_normalized=(0.1, 0.2, 0.3, 0.4),
+    )
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        for _ in range(100):
+            dashboard._redraw_overlays(snap)
+    # 100 frames @ "30 Hz" -> zero widget creations.
+    mock_dpg.draw_line.assert_not_called()
+    mock_dpg.draw_rectangle.assert_not_called()
+    mock_dpg.draw_text.assert_not_called()
+    mock_dpg.draw_image.assert_not_called()
+    mock_dpg.delete_item.assert_not_called()
 
 
 def test_initiate_quit_logs_warn_on_timeout() -> None:

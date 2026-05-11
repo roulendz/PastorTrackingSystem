@@ -224,6 +224,14 @@ class Dashboard:
         # Widget tags assigned in _build_ui (after dpg.create_context).
         self._tag_texture: int = 0
         self._tag_drawlist: int = 0
+        # WR-03: stable overlay-item tags allocated ONCE in _build_ui;
+        # _redraw_overlays updates them via configure_item + show/hide
+        # instead of delete_item(children_only=True) + re-add per frame.
+        # Avoids ~150 widget allocs/sec at 30 Hz over multi-hour shoots.
+        self._tag_overlay_third_line: int = 0
+        self._tag_overlay_bbox: int = 0
+        self._tag_overlay_id_text: int = 0
+        self._tag_overlay_angle_text: int = 0
         # Plan 07-03: unsaved-changes badge widget tag. Set in
         # _build_unsaved_badge(); used by _refresh_unsaved_badge() to
         # push the text via dpg.set_value().
@@ -334,6 +342,33 @@ class Dashboard:
                     self._tag_texture,
                     (0, 0),
                     (preview_w, preview_h),
+                    parent=self._tag_drawlist,
+                )
+                # WR-03: pre-allocate stable overlay items. The
+                # third-line + bbox start hidden (no snapshot data
+                # yet); the two text items start with placeholder
+                # strings. _redraw_overlays mutates them via
+                # configure_item / show_item / hide_item per tick.
+                self._tag_overlay_third_line = dpg.draw_line(
+                    (0, 0),
+                    (0, preview_h),
+                    parent=self._tag_drawlist,
+                    show=False,
+                )
+                self._tag_overlay_bbox = dpg.draw_rectangle(
+                    (0, 0),
+                    (0, 0),
+                    parent=self._tag_drawlist,
+                    show=False,
+                )
+                self._tag_overlay_id_text = dpg.draw_text(
+                    _ID_LOCK_TEXT_POS,
+                    "",
+                    parent=self._tag_drawlist,
+                )
+                self._tag_overlay_angle_text = dpg.draw_text(
+                    (10, preview_h - _ANGLE_TEXT_BOTTOM_OFFSET_PX),
+                    "",
                     parent=self._tag_drawlist,
                 )
             # --- RIGHT: sliders + buttons + status ---
@@ -878,31 +913,35 @@ class Dashboard:
         dpg.set_value(self._tag_texture, buf)
 
     def _redraw_overlays(self, snap: PipelineSnapshot) -> None:
+        """WR-03: mutate the pre-allocated overlay items, no per-tick churn.
+
+        Uses ``dpg.configure_item`` for endpoint updates and
+        ``dpg.show_item`` / ``dpg.hide_item`` for the third-line + bbox
+        when the snapshot has no target / no bbox. The drawlist itself
+        retains a stable set of 5 children for the life of the
+        dashboard, so the DPG widget hash-map grows by 0 per render tick
+        instead of ~150/sec.
+        """
         preview_w = self._config.preview_width_px
         preview_h = self._config.preview_height_px
-        dpg.delete_item(self._tag_drawlist, children_only=True)
-        dpg.draw_image(
-            self._tag_texture,
-            (0, 0),
-            (preview_w, preview_h),
-            parent=self._tag_drawlist,
-        )
         third = third_line_pixels(snap, preview_w, preview_h)
         if third is not None:
-            dpg.draw_line(third[0], third[1], parent=self._tag_drawlist)
+            dpg.configure_item(
+                self._tag_overlay_third_line, p1=third[0], p2=third[1]
+            )
+            dpg.show_item(self._tag_overlay_third_line)
+        else:
+            dpg.hide_item(self._tag_overlay_third_line)
         bbox = bbox_rect_pixels(snap, preview_w, preview_h)
         if bbox is not None:
-            dpg.draw_rectangle(bbox[0], bbox[1], parent=self._tag_drawlist)
-        dpg.draw_text(
-            _ID_LOCK_TEXT_POS,
-            id_lock_text(snap),
-            parent=self._tag_drawlist,
-        )
-        dpg.draw_text(
-            (10, preview_h - _ANGLE_TEXT_BOTTOM_OFFSET_PX),
-            angle_text(snap),
-            parent=self._tag_drawlist,
-        )
+            dpg.configure_item(
+                self._tag_overlay_bbox, pmin=bbox[0], pmax=bbox[1]
+            )
+            dpg.show_item(self._tag_overlay_bbox)
+        else:
+            dpg.hide_item(self._tag_overlay_bbox)
+        dpg.configure_item(self._tag_overlay_id_text, text=id_lock_text(snap))
+        dpg.configure_item(self._tag_overlay_angle_text, text=angle_text(snap))
 
     # ----- D-04 quit sequence -------------------------------------------
 
