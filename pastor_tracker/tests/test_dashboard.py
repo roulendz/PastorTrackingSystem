@@ -363,10 +363,19 @@ def test_render_tick_skips_when_timestamp_unchanged() -> None:
         assert mock_dpg.set_value.call_count == 2
 
 
-def test_unsaved_badge_returns_empty_string_until_plan_07_03() -> None:
-    """Plan 07-02 stub: status panel forward-compat hook."""
+def test_unsaved_badge_empty_when_no_pending() -> None:
+    """Plan 07-03: empty buffer => empty badge text."""
     dashboard, _, _ = _make_dashboard()
+    assert dashboard._pending_config == {}
     assert dashboard._unsaved_badge_text() == ""
+
+
+def test_unsaved_badge_with_pending_contains_unsaved_changes() -> None:
+    """Plan 07-03: non-empty buffer => '(unsaved changes)' text."""
+    dashboard, _, _ = _make_dashboard()
+    dashboard._pending_config["pan_deadband_deg"] = 0.6
+    dashboard._pending_config["pan_time_constant_sec"] = 1.2
+    assert "unsaved changes" in dashboard._unsaved_badge_text()
 
 
 def test_command_completion_callback_logs_warn_on_exception() -> None:
@@ -477,11 +486,61 @@ def test_on_exit_callback_invokes_stop_dearpygui() -> None:
     mock_dpg.stop_dearpygui.assert_called_once()
 
 
-def test_slider_stub_callback_is_silent_debug() -> None:
-    """Stub callback should not raise; tests only the contract surface."""
+def test_slider_callback_writes_to_pending_config() -> None:
+    """Plan 07-03 Task 1: closure-bound slider callback stores into _pending_config."""
     dashboard, _, _ = _make_dashboard()
-    # Should not raise even though args are bogus -- it just logs DEBUG.
-    dashboard._on_slider_change_stub(0, 0.5, None)
+    cb = dashboard._make_slider_cb("pan_time_constant_sec")
+    cb(0, 1.2, None)
+    assert dashboard._pending_config == {"pan_time_constant_sec": 1.2}
+
+
+def test_slider_callback_factory_no_late_binding() -> None:
+    """RESEARCH 'Code Examples' lines 821-826: closure binds key at definition."""
+    dashboard, _, _ = _make_dashboard()
+    keys = [
+        "pan_time_constant_sec",
+        "pan_deadband_deg",
+        "pan_max_velocity_deg_per_sec",
+        "camera_horizontal_fov_deg",
+    ]
+    values = [0.5, 0.3, 25.0, 80.0]
+    cbs = [dashboard._make_slider_cb(k) for k in keys]
+    for cb, value in zip(cbs, values, strict=True):
+        cb(0, value, None)
+    assert dashboard._pending_config == dict(zip(keys, values, strict=True))
+
+
+def test_sliders_have_correct_d09_bounds() -> None:
+    """Introspect _build_sliders dpg.add_slider_float calls (D-09 bounds)."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_dashboard()
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._build_sliders()
+    expected = [
+        {"label": "pan_time_constant_sec", "min_value": 0.2, "max_value": 2.0},
+        {"label": "pan_deadband_deg", "min_value": 0.05, "max_value": 2.0},
+        {"label": "pan_max_velocity_deg_per_sec", "min_value": 5.0, "max_value": 120.0},
+        {"label": "camera_horizontal_fov_deg", "min_value": 40.0, "max_value": 120.0},
+    ]
+    calls = mock_dpg.add_slider_float.call_args_list
+    assert len(calls) == 4
+    for call, exp in zip(calls, expected, strict=True):
+        assert call.kwargs["label"] == exp["label"]
+        assert call.kwargs["min_value"] == exp["min_value"]
+        assert call.kwargs["max_value"] == exp["max_value"]
+
+
+def test_slider_callback_refreshes_unsaved_badge_widget() -> None:
+    """Plan 07-03: callback must call dpg.set_value on the badge widget tag."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_dashboard()
+    dashboard._tag_unsaved_badge = 4242
+    cb = dashboard._make_slider_cb("pan_deadband_deg")
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        cb(0, 0.9, None)
+    mock_dpg.set_value.assert_called_once_with(4242, "(unsaved changes)")
 
 
 def test_default_pipeline_factory_constructs_pipeline_or_raises_hardware() -> None:
