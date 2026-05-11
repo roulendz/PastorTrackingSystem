@@ -13,9 +13,15 @@ Plan 07-02 ships the shell:
     sequence + render-skip (D-08).
 Sliders are STUBS (``add_slider_float`` is added but the callback only
     logs a placeholder); Plan 07-03 wires them into ``_pending_config``
-    and the Save Config restart sequence. Status panel + EventBus
-    processor land in Plan 07-04 (the 6 reserved status ``add_text``
-    widget slots and the ``_unsaved_badge_text`` hook are pre-wired).
+    and the Save Config restart sequence.
+
+Plan 07-04 adds the 10 Hz :class:`StatusPanel` (UI-04, D-15) into the
+render tick + wires the real 8-stage :func:`_default_pipeline_factory`
+(replaces the Plan 07-02 ``NotImplementedError`` stub). The 6 reserved
+status widget slots from ``_build_status_slots`` are now bound to the
+panel via ``attach_widgets``. Slider Save-Config wiring still lands in
+Plan 07-03 (``_unsaved_badge_text`` is a stub that returns ``""`` until
+Plan 07-03 replaces it).
 """
 from __future__ import annotations
 
@@ -30,6 +36,7 @@ import structlog
 from pastor_tracker.config import Config
 from pastor_tracker.core.types import Frame, PipelineSnapshot
 from pastor_tracker.pipeline import OrchestratorRejected, Pipeline
+from pastor_tracker.ui._event_bus import EventBuffer, make_event_bus
 from pastor_tracker.ui._overlays import (
     angle_text,
     bbox_rect_pixels,
@@ -38,6 +45,7 @@ from pastor_tracker.ui._overlays import (
     third_line_pixels,
 )
 from pastor_tracker.ui._pipeline_thread import PipelineThreadHost
+from pastor_tracker.ui._status_panel import StatusPanel
 
 if TYPE_CHECKING:
     pass
@@ -84,20 +92,76 @@ _ANGLE_TEXT_BOTTOM_OFFSET_PX: Final[int] = 24
 
 
 def _default_pipeline_factory(config: Config) -> Pipeline:
-    """Default lazy Pipeline construction.
+    """Default 8-stage Pipeline construction -- mirrors ``__main__._amain``.
 
-    Plan 07-04 will replace this with the same factory ``__main__._amain``
-    uses today (8-stage construction + discover_arduino_port). Plan 07-02
-    only needs the surface; tests inject a Mock(spec=Pipeline) via the
-    ``pipeline_factory`` parameter so this function is never called from
-    a non-rendering test.
+    Plan 07-04 wires the dashboard into the real boot path. The
+    construction order (D-05) and the factory shape are identical to the
+    Phase 6 ``_amain`` body; the lazy import keeps DearPyGui's import
+    cost off the ``--headless`` path (this function is only called from
+    the ``--ui`` branch).
+
+    Hardware failures during construction (``ArduinoPortNotFoundError``)
+    propagate to ``__main__.main``'s exit-translator ladder, where they
+    are classified as ``EXIT_HARDWARE_FAILED``.
     """
-    # The full construction lives in __main__._amain (Phase 6). Plan 07-04
-    # wires the dashboard into the real boot path; until then this factory
-    # exists only so the ``run()`` signature is complete.
-    raise NotImplementedError(
-        "_default_pipeline_factory is wired in Plan 07-04; tests must inject "
-        "a Mock(spec=Pipeline) via pipeline_factory."
+    # Lazy imports: hardware-stack modules are heavy (pyserial, opencv,
+    # ultralytics) and only the --ui path needs them; --headless reaches
+    # the same stages through __main__._amain.
+    from pygrabber.dshow_graph import FilterGraph
+
+    from pastor_tracker.control.command_dispatcher import CommandDispatcher
+    from pastor_tracker.control.pan_controller import PanController
+    from pastor_tracker.intent.framer import Framer
+    from pastor_tracker.intent.motion_analyzer import MotionAnalyzer
+    from pastor_tracker.io.arduino_motor import ArduinoMotor
+    from pastor_tracker.io.arduino_transport import (
+        PySerialTransport,
+        discover_arduino_port,
+    )
+    from pastor_tracker.io.obs_camera import (
+        ObsCamera,
+        OpenCvVideoSource,
+        VideoSource,
+    )
+    from pastor_tracker.perception.pose_detector import (
+        PoseDetector,
+        UltralyticsPoseEngine,
+    )
+    from pastor_tracker.perception.subject_tracker import SubjectTracker
+
+    def _build_video_source(
+        index: int, width: int, height: int, fps: int
+    ) -> VideoSource:
+        return OpenCvVideoSource(index, width, height, fps)
+
+    def _build_filter_graph() -> FilterGraph:
+        return FilterGraph()  # type: ignore[no-untyped-call]
+
+    arduino_port = discover_arduino_port(config.arduino_port)
+    transport = PySerialTransport(port=arduino_port, baud=config.arduino_baud)
+    motor = ArduinoMotor(transport, config)
+    camera = ObsCamera(
+        config,
+        video_source_factory=_build_video_source,
+        filter_graph_factory=_build_filter_graph,
+    )
+    pose_engine = UltralyticsPoseEngine(config)
+    detector = PoseDetector(config=config, engine=pose_engine)
+    tracker = SubjectTracker(config)
+    analyzer = MotionAnalyzer(config)
+    framer = Framer(config)
+    controller = PanController(config)
+    dispatcher = CommandDispatcher(config)
+    return Pipeline(
+        config,
+        camera=camera,
+        motor=motor,
+        detector=detector,
+        tracker=tracker,
+        analyzer=analyzer,
+        framer=framer,
+        controller=controller,
+        dispatcher=dispatcher,
     )
 
 
@@ -119,6 +183,7 @@ class Dashboard:
         *,
         pipeline_factory: Callable[[Config], Pipeline] | None = None,
         host_factory: Callable[[], PipelineThreadHost] | None = None,
+        event_bus: EventBuffer | None = None,
     ) -> None:
         self._config = config
         self._pipeline_factory: Callable[[Config], Pipeline] = (
@@ -138,6 +203,14 @@ class Dashboard:
         # Widget tags assigned in _build_ui (after dpg.create_context).
         self._tag_texture: int = 0
         self._tag_drawlist: int = 0
+        # Plan 07-04 status panel. Dashboard constructs its own event bus
+        # when running standalone (e.g. tests); ``__main__.py`` injects a
+        # shared one so structlog taps land in the SAME deque the panel
+        # reads.
+        self._event_bus: EventBuffer = (
+            event_bus if event_bus is not None else make_event_bus()
+        )
+        self._status_panel: StatusPanel = StatusPanel(self._event_bus)
 
     # ----- public surface ------------------------------------------------
 
@@ -278,13 +351,22 @@ class Dashboard:
             dpg.add_button(label="Save Config", callback=self._on_save_config_pressed)
 
     def _build_status_slots(self) -> None:
-        """Plan 07-04 wires the 10 Hz refresh into these 6 reserved slots."""
-        dpg.add_text("Pipeline:    —")
-        dpg.add_text("Motor link:  —")
-        dpg.add_text("Camera FPS:  —")
-        dpg.add_text("Confidence:  —")
-        dpg.add_text("ID lock:     —")
-        dpg.add_text("Last error:  —")
+        """6 reserved text widgets bound to the Plan 07-04 ``StatusPanel``.
+
+        Tags are captured here and forwarded via ``attach_widgets`` so the
+        panel can ``dpg.set_value`` them at 10 Hz from ``_render_tick``.
+        Initial values match the Plan 07-02 placeholder text so the layout
+        size is stable on first paint.
+        """
+        tag_state = dpg.add_text("Pipeline:    —")
+        tag_motor = dpg.add_text("Motor link:  —")
+        tag_fps = dpg.add_text("Camera FPS:  —")
+        tag_conf = dpg.add_text("Confidence:  —")
+        tag_lock = dpg.add_text("ID lock:     —")
+        tag_err = dpg.add_text("Last error:  —")
+        self._status_panel.attach_widgets(
+            tag_state, tag_motor, tag_fps, tag_conf, tag_lock, tag_err
+        )
 
     def _build_hotkeys(self) -> None:
         with dpg.handler_registry():
@@ -416,16 +498,23 @@ class Dashboard:
         Render-loop visual rendering itself is verified manually (DPG has
         no headless runner per CONTEXT.md). The skip branch (D-08) is
         unit-tested via the dpg.set_value mock.
+
+        Plan 07-04 wires the 10 Hz status refresh (D-15): the FPS rolling
+        window samples EVERY rendered frame via ``record_frame`` (so FPS
+        reflects the actual render rate, not the refresh rate), while
+        ``refresh`` fires once per ``_STATUS_REFRESH_DIVISOR`` frames.
         """
         assert self._pipeline is not None
         frame = self._pipeline.latest_frame  # atomic CPython attr read (D-03)
         if frame is not None and frame.timestamp_ns != self._last_rendered_ts_ns:
             self._upload_texture(frame)
             self._redraw_overlays(self._pipeline.snapshot())
+            self._status_panel.record_frame(frame.timestamp_ns)
             self._last_rendered_ts_ns = frame.timestamp_ns
-        # Plan 07-04 inserts the 10 Hz status refresh here:
-        #   if self._frame_count % _STATUS_REFRESH_DIVISOR == 0:
-        #       self._status_panel.refresh(self._pipeline.snapshot())
+        if self._frame_count % _STATUS_REFRESH_DIVISOR == 0:
+            self._status_panel.refresh(
+                self._pipeline.snapshot(), self._unsaved_badge_text()
+            )
         self._frame_count += 1
 
     def _upload_texture(self, frame: Frame) -> None:

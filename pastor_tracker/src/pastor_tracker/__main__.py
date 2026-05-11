@@ -199,8 +199,14 @@ def _build_filter_graph() -> FilterGraph:
     return FilterGraph()  # type: ignore[no-untyped-call]
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Process entry point. Returns int exit code consumed by ``SystemExit``.
+
+    Plan 07-04 adds the mutually-exclusive ``--ui`` / ``--headless`` flag
+    pair. ``--ui`` (default per CONTEXT.md "Specific Ideas") lazy-imports
+    the DearPyGui dashboard and runs it on the main thread; ``--headless``
+    preserves the byte-identical Phase 6 path (``asyncio.run(_amain(...))``)
+    so the existing subprocess tests + on-stage script paths keep working.
 
     Three exit-translator branches (typed at the boundary):
         * ``ValidationError`` -> ``EXIT_INVALID_CONFIG`` (T-06-08 mitigation).
@@ -210,6 +216,11 @@ def main() -> int:
     The two ``# noqa: BLE001`` translators are the documented exception
     boundary; they are the only broad ``except`` clauses in the module and
     each re-classifies into a structured exit code (no swallowing).
+
+    Args:
+        argv: optional argv override. Defaults to ``None`` (argparse falls
+            back to ``sys.argv``). Tests pass an explicit list to drive
+            the flag matrix without subprocess overhead.
     """
     parser = argparse.ArgumentParser(prog="pastor_tracker")
     parser.add_argument(
@@ -218,9 +229,28 @@ def main() -> int:
         default=None,
         help="Override config.json path (default: ./config.json from CWD).",
     )
-    args = parser.parse_args()
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--ui",
+        action="store_true",
+        default=False,
+        help="Run with DearPyGui dashboard (default).",
+    )
+    mode_group.add_argument(
+        "--headless",
+        action="store_true",
+        default=False,
+        help="Phase 6 path: no UI, SIGINT-driven lifecycle.",
+    )
+    args = parser.parse_args(argv)
 
-    configure_logging()
+    # Default behaviour: when neither flag set, UI mode wins per
+    # CONTEXT.md "Specific Ideas" line 191. The mutually-exclusive group
+    # already rejects both-set at the argparse layer.
+    headless_mode = bool(args.headless)
+
+    # Logging is configured AFTER mode dispatch so the --ui branch can
+    # inject the event-bus buffer into the structlog chain (RESEARCH §5).
     log = structlog.get_logger(module="__main__")
 
     # pydantic-settings 2.x: init kwarg with leading underscore (``_json_file``)
@@ -234,11 +264,26 @@ def main() -> int:
             else Config()
         )
     except ValidationError as exc:
+        # Logging not yet configured here; basicConfig kicks in on
+        # configure_logging anyway. Configure with no buffer (cheap) so
+        # the structured error event reaches stdout.
+        configure_logging()
         log.error("config_invalid", reason=str(exc))
         return EXIT_INVALID_CONFIG
 
     try:
-        return asyncio.run(_amain(config))
+        if headless_mode:
+            configure_logging()
+            return asyncio.run(_amain(config))
+        # Default: UI mode. Lazy-import keeps DearPyGui off the --headless
+        # path; the event bus deque is shared between the structlog
+        # processor and the StatusPanel's "Last error" field (D-15).
+        from pastor_tracker.ui._event_bus import make_event_bus
+        event_bus = make_event_bus()
+        configure_logging(event_bus_buffer=event_bus)
+        from pastor_tracker.ui.dashboard import Dashboard
+        dashboard = Dashboard(config, event_bus=event_bus)
+        return dashboard.run()
     except KeyboardInterrupt:
         # Defense-in-depth: signal handler should have caught SIGINT and set
         # the shutdown event before this ever fires. If it does fire, the

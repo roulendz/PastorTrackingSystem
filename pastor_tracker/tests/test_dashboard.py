@@ -322,6 +322,15 @@ def test_quit_sequence_idempotent() -> None:
 
 
 def test_render_tick_skips_when_timestamp_unchanged() -> None:
+    """D-08 render-tick skip: texture upload + overlays only fire on new ts.
+
+    Plan 07-04 added a 10 Hz StatusPanel refresh into ``_render_tick`` --
+    the panel's ``dpg.set_value`` calls live in ``_status_panel.dpg``,
+    so both modules' ``dpg`` symbol must be patched to keep the test
+    isolated from a real DPG context. The texture-upload count is read
+    off the ``dashboard.dpg`` mock alone; the status-panel mock's calls
+    are ignored here.
+    """
     pipeline = _make_mock_pipeline()
     image = np.zeros((540, 960, 3), dtype=np.uint8)
     frame = Frame(image=image, width=960, height=540, timestamp_ns=1_000_000_000)
@@ -334,7 +343,9 @@ def test_render_tick_skips_when_timestamp_unchanged() -> None:
 
     from unittest.mock import patch
 
-    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg, patch(
+        "pastor_tracker.ui._status_panel.dpg"
+    ):
         # First tick: timestamp differs from sentinel -> upload happens.
         dashboard._render_tick()
         assert mock_dpg.set_value.call_count == 1
@@ -473,9 +484,27 @@ def test_slider_stub_callback_is_silent_debug() -> None:
     dashboard._on_slider_change_stub(0, 0.5, None)
 
 
-def test_default_pipeline_factory_raises_not_implemented() -> None:
-    """Plan 07-02 stub: real construction lives in Plan 07-04."""
+def test_default_pipeline_factory_constructs_pipeline_or_raises_hardware() -> None:
+    """Plan 07-04: real 8-stage construction.
+
+    With no Arduino on the bus, ``discover_arduino_port`` raises
+    ``ArduinoPortNotFoundError`` and the factory surfaces it (translated
+    to ``EXIT_HARDWARE_FAILED`` by ``__main__.main``). When real hardware
+    is attached the factory returns a Pipeline; we only need to assert
+    that the Plan 07-02 ``NotImplementedError`` stub is gone.
+    """
+    from pastor_tracker.io.arduino_transport import ArduinoPortNotFoundError
     from pastor_tracker.ui.dashboard import _default_pipeline_factory
 
-    with pytest.raises(NotImplementedError, match="Plan 07-04"):
-        _default_pipeline_factory(Config())
+    try:
+        result = _default_pipeline_factory(Config())
+    except ArduinoPortNotFoundError:
+        # No Uno on CI / test bench -- the factory fast-failed at port
+        # discovery, which is the documented hardware-failure path.
+        return
+    except NotImplementedError:
+        pytest.fail("Plan 07-04 must replace the Plan 07-02 stub")
+    # Real hardware path: result must be a Pipeline.
+    from pastor_tracker.pipeline import Pipeline
+
+    assert isinstance(result, Pipeline)
