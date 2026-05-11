@@ -38,8 +38,6 @@ Get-FileHash yolo11n-pose.pt -Algorithm SHA256
 sha256sum yolo11n-pose.pt
 ```
 
-<!-- TODO(v2-supply-chain): pin yolo11n-pose.pt SHA256 once weights file is in repo -->
-
 The pinned authoritative hash will be added to this README in v2 supply-chain hardening, once the weights file is committed to the repository. For v1, operators should record the hash produced by the command above on first install and re-check it before every stage rehearsal to detect tampering.
 
 ## OBS Virtual Camera setup
