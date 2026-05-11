@@ -794,6 +794,105 @@ def test_default_pipeline_factory_constructs_pipeline_or_raises_hardware() -> No
 # ---- CR-02 rollback regression -----------------------------------------
 
 
+# ---- WR-01 modal cleanup regression ------------------------------------
+
+
+def test_modal_cancel_deletes_modal_widget(tmp_path: object) -> None:
+    """WR-01: Cancel callback must dpg.delete_item the modal window tag."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    # Simulate _show_unsaved_modal having opened a modal (captured tag).
+    dashboard._tag_modal = 7777
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._on_modal_cancel(0, None, None)
+    mock_dpg.delete_item.assert_called_once_with(7777)
+    assert dashboard._tag_modal == 0
+
+
+def test_modal_save_and_quit_deletes_modal_on_success(tmp_path: object) -> None:
+    """WR-01: Save & Quit success branch must delete the modal widget."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    dashboard._tag_modal = 7777
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._on_modal_save_and_quit(0, None, None)
+    # Save succeeded -> buffer cleared, modal deleted, dpg stopped.
+    assert dashboard._pending_config == {}
+    mock_dpg.delete_item.assert_any_call(7777)
+    assert dashboard._tag_modal == 0
+    mock_dpg.stop_dearpygui.assert_called_once()
+
+
+def test_modal_save_and_quit_keeps_modal_on_validation_failure(
+    tmp_path: object,
+) -> None:
+    """WR-01: Save & Quit failure branch must NOT delete the modal."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 999.0},  # out-of-bounds
+    )
+    dashboard._tag_modal = 7777
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._on_modal_save_and_quit(0, None, None)
+    # Save failed: modal stays so operator can pick another action.
+    mock_dpg.delete_item.assert_not_called()
+    assert dashboard._tag_modal == 7777
+    mock_dpg.stop_dearpygui.assert_not_called()
+
+
+def test_modal_quit_anyway_deletes_modal(tmp_path: object) -> None:
+    """WR-01: Quit Anyway must delete the modal widget on its way out."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    dashboard._tag_modal = 7777
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._on_modal_quit_anyway(0, None, None)
+    mock_dpg.delete_item.assert_called_once_with(7777)
+    assert dashboard._tag_modal == 0
+
+
+def test_show_unsaved_modal_is_no_op_when_already_open(tmp_path: object) -> None:
+    """WR-01: re-entry while a modal is open must not layer a fresh widget."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    dashboard._tag_modal = 7777  # pretend a modal is already up
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._show_unsaved_modal()
+    # No new window constructed, no new buttons added.
+    mock_dpg.window.assert_not_called()
+    mock_dpg.add_button.assert_not_called()
+    assert dashboard._tag_modal == 7777  # tag unchanged
+
+
+def test_delete_modal_if_open_is_idempotent(tmp_path: object) -> None:
+    """WR-01: cleanup helper must be safe to call when no modal is open."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(tmp_config_path=tmp_path)
+    assert dashboard._tag_modal == 0
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._delete_modal_if_open()
+    mock_dpg.delete_item.assert_not_called()
+
+
 def test_save_config_rollback_on_pipeline_factory_failure(tmp_path: object) -> None:
     """CR-02: pipeline_factory raise leaves old self._* intact, preserves buffer."""
     from pathlib import Path as _Path

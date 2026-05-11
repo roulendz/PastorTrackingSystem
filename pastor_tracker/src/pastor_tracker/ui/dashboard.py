@@ -233,6 +233,11 @@ class Dashboard:
         # introspecting DPG widget state.
         self._tag_error_banner: int = 0
         self._error_banner_text: str = ""
+        # WR-01: unsaved-changes modal window tag. ``0`` means "no modal
+        # currently open". Captured by ``_show_unsaved_modal`` and
+        # cleared by every modal callback so the widget tree does not
+        # accumulate a stale modal per Cancel/X cycle.
+        self._tag_modal: int = 0
         # Save Config target path. Defaults to the module-level
         # ``CONFIG_JSON_PATH`` (CWD-relative ``config.json``); tests
         # inject a ``tmp_path`` for isolation.
@@ -697,16 +702,25 @@ class Dashboard:
         Tests stub this method via ``Mock``; the decision logic lives in
         :meth:`_on_modal_save_and_quit` / ``_on_modal_quit_anyway`` /
         ``_on_modal_cancel`` which are unit-testable in isolation.
+
+        WR-01: the modal window tag is captured into ``self._tag_modal``
+        so every callback exit can delete the widget. Re-entry while a
+        modal is already open is a no-op (prevents a second X-press from
+        layering a fresh modal over the live one).
         """
         # Modal UI construction is rendered only -- behavior is covered
         # by the three callbacks below. This method intentionally has no
         # automated test (CONTEXT.md "Claude's Discretion": render-loop
         # coverage is exempt).
+        if self._tag_modal:
+            # WR-01: modal already up; no-op so we do not stack widgets.
+            return
         with dpg.window(
             label="Unsaved changes",
             modal=True,
             no_close=True,
-        ):
+        ) as modal_tag:
+            self._tag_modal = modal_tag
             dpg.add_text("You have unsaved changes. What would you like to do?")
             with dpg.group(horizontal=True):
                 dpg.add_button(
@@ -717,13 +731,29 @@ class Dashboard:
                 )
                 dpg.add_button(label="Cancel", callback=self._on_modal_cancel)
 
+    def _delete_modal_if_open(self) -> None:
+        """WR-01: idempotent modal-widget cleanup.
+
+        Called from every ``_on_modal_*`` exit branch so the DPG widget
+        tree does not accumulate a stale modal per Cancel/X cycle. Safe
+        to call when ``self._tag_modal == 0`` (no-op).
+        """
+        if not self._tag_modal:
+            return
+        dpg.delete_item(self._tag_modal)
+        self._tag_modal = 0
+
     def _on_modal_save_and_quit(
         self, sender: int, app_data: object, user_data: object
     ) -> None:
         """Save & Quit: run Save Config; only stop DPG on full success."""
         self._on_save_config_pressed(sender, app_data, user_data)
         if not self._pending_config:
-            # Save cleared the buffer -> success path.
+            # Save cleared the buffer -> success path. WR-01: tear down
+            # the modal before stop_dearpygui (otherwise the widget
+            # registry leaks on the path where DPG re-fires the exit
+            # callback during shutdown).
+            self._delete_modal_if_open()
             dpg.stop_dearpygui()
         # else: Save failed; banner is up; modal stays open (operator
         # can pick Quit Anyway or Cancel).
@@ -742,6 +772,10 @@ class Dashboard:
             "ui_quit_with_unsaved_changes", count=len(self._pending_config)
         )
         self._pending_config.clear()
+        # WR-01: process is exiting anyway, but consistency keeps the
+        # widget tree clean if a future change inserts a teardown step
+        # between here and dpg.destroy_context().
+        self._delete_modal_if_open()
         dpg.stop_dearpygui()
 
     def _on_modal_cancel(
@@ -750,6 +784,11 @@ class Dashboard:
         """Cancel: dismiss the modal; leave buffer + pipeline untouched."""
         del sender, app_data, user_data
         self._logger.debug("ui_modal_cancel")
+        # WR-01: dismissing the modal must actually delete the widget;
+        # the ``modal=True`` flag visually hides on Cancel-button click
+        # only when DPG renders a close-X (we set ``no_close=True``), so
+        # without explicit deletion the window persists in the tree.
+        self._delete_modal_if_open()
 
     def _on_quit_pressed(
         self, sender: int, app_data: object, user_data: object
