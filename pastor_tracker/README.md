@@ -77,7 +77,7 @@ The pipeline maps normalized-frame x ∈ [0, 1] to motor angle via the lens hori
    - `d = 1.0 m` → 1 m fills full frame → `h_fov ≈ 53.13°`
    - `d = 0.7 m` → 1 m fills full frame → `h_fov ≈ 71.08°` (typical webcam wide setting)
 
-6. If the bar fills only a fraction `f ∈ (0, 1]` of the frame, scale: `h_fov_deg = 2 * atan(0.5 / (d * f)) * (180 / π)`.
+6. If the bar fills only a fraction `f ∈ (0, 1]` of the frame, scale: `h_fov_deg = 2 * atan(0.5 / (d * f)) * (180 / π)`. If you cannot see the bar at all (f → 0), re-aim the camera before recording a measurement; the formula is undefined at f = 0.
 7. Write the result into `pastor_tracker/config.json` (default 70.0):
 
    ```json
