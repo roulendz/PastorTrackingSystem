@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: milestone_complete
+status: completed
 stopped_at: Completed 07-03-PLAN.md (Phase 7 complete)
-last_updated: "2026-05-11T19:17:19.641Z"
-last_activity: 2026-05-11 -- Phase 8 Plan 01 (README + ship-gate re-verify + VERIFICATION) complete; Phase 8 closed-pending-smoke; v1.0 milestone shipped (QA-02 + QA-01 format hotfixes deferred)
+last_updated: "2026-05-11T20:42:08.331Z"
+last_activity: 2026-05-11
 progress:
   total_phases: 8
   completed_phases: 8
   total_plans: 26
-  completed_plans: 25
+  completed_plans: 26
   percent: 100
 ---
 
@@ -155,6 +155,18 @@ Items acknowledged and carried forward from previous milestone close:
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
 | Test flake | `test_geometry::test_inverse_map_output_in_unit_interval` -- pre-existing full-suite-only failure (unraisable asyncio event-loop warning); details in `.planning/phases/05-intent-and-control/deferred-items.md` | Open | Plan 05-04 |
+| uat_gap | `03-HUMAN-UAT.md` (partial; 0 open scenarios -- on-stage smoke deferred to Phase 8 QA-04) | partial | v1.0 close 2026-05-11 |
+| uat_gap | `04-HUMAN-UAT.md` (partial; 0 open scenarios -- on-stage smoke deferred to Phase 8 QA-04) | partial | v1.0 close 2026-05-11 |
+| uat_gap | `08-HUMAN-UAT.md` (partial; 6 open scenarios -- on-stage smoke pending next stage rehearsal) | partial | v1.0 close 2026-05-11 |
+| verification_gap | `02-VERIFICATION.md` (human_needed -- on-stage smoke deferred to Phase 8 QA-04) | human_needed | v1.0 close 2026-05-11 |
+| verification_gap | `03-VERIFICATION.md` (human_needed -- on-stage smoke deferred to Phase 8 QA-04) | human_needed | v1.0 close 2026-05-11 |
+| verification_gap | `04-VERIFICATION.md` (human_needed -- on-stage smoke deferred to Phase 8 QA-04) | human_needed | v1.0 close 2026-05-11 |
+| verification_gap | `06-VERIFICATION.md` (human_needed -- E2E hardware deferred to Phase 8 QA-04) | human_needed | v1.0 close 2026-05-11 |
+| verification_gap | `07-VERIFICATION.md` (human_needed -- manual smoke deferred to Phase 8 QA-04) | human_needed | v1.0 close 2026-05-11 |
+| ship_gate | QA-02 `mypy --strict src tests` -- mypy 1.20.2 wheel + pydantic.mypy plugin env regression; 925 [arg-type] errors on test fixtures; pin mypy version to fix | Open | v1.0 close 2026-05-11 |
+| ship_gate | QA-01 `ruff format --check` -- 73 files of format drift across Phases 1-7; `.pre-commit-config.yaml` never gated this | Open | v1.0 close 2026-05-11 |
+| supply_chain | YOLO `yolo11n-pose.pt` SHA256 -- `TODO(v2-supply-chain)`; README documents Get-FileHash / sha256sum verification procedure | Open | v1.0 close 2026-05-11 |
+| test | `test_pipeline.py:439` skip -- (e_stopped, start) -> running re-arm requires motor.start() second-call support | Skipped | Phase 6 |
 
 ## Session Continuity
 

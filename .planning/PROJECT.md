@@ -1,5 +1,16 @@
 # Pastor Tracking System
 
+## Current State
+
+**Shipped:** v1.0 — Pastor Tracker MVP (2026-05-11). 8 phases, 26 plans, 561 tests passing, 55/57 requirements satisfied. See [MILESTONES.md](MILESTONES.md) and [milestones/v1.0-MILESTONE-AUDIT.md](milestones/v1.0-MILESTONE-AUDIT.md).
+
+**Outstanding (real-world acceptance + env hotfixes, no code blockers):**
+- QA-04 on-stage smoke — 6 unchecked pass criteria pending next stage rehearsal (real Uno + OBS VCam + speaker)
+- QA-02 mypy 1.20.2 wheel + pydantic.mypy plugin regression on tests/ — pin mypy version
+- QA-01 ruff format drift on 73 files — single-pass cleanup
+
+**Next milestone goals (v1.1, not yet started):** Close v1.0 follow-ups; consider TILT-01 (vertical tilt axis), CAL-01 (auto FOV calibration), and YOLO weights SHA256 supply-chain hardening. Run `/gsd-new-milestone` to define.
+
 ## What This Is
 
 Python 3.12 desktop app that tracks a speaker on stage and drives an Arduino stepper motor over USB serial to pan a camera mount in real time. Input is the OBS Virtual Camera; output is smooth, cinematic pan with rule-of-thirds lead-room framing. Built for live church/conference video — replaces a human camera operator for single-speaker stage coverage.
@@ -20,24 +31,31 @@ Cinematic, jitter-free auto-tracking of a single primary subject (the pastor/spe
 
 ### Active
 
-<!-- v1 scope for the Python pastor_tracker/ app. -->
+<!-- v1.0 shipped — all items below moved to Validated. v1.1 active scope TBD via /gsd-new-milestone. -->
 
-- [ ] **CORE-01**: Pure-functional core types, geometry math, and critically-damped 2nd-order follower (no PID)
-- [ ] **IO-01**: Async OBS Virtual Camera frame source with DirectShow backend, frame-staleness drop, perf-counter timestamps
-- [ ] **IO-02**: Async Arduino serial driver — VID:PID auto-detect, boot handshake `READY:v2`, 200 ms heartbeat, FB parser, watchdog-reset recovery
-- [ ] **PERC-01**: YOLO11-pose detector (ultralytics, GPU/CPU) with confidence gate ≥ 0.55 and weighted-keypoint subject centroid
-- [ ] **PERC-02**: BoT-SORT ID lock on primary subject (highest-conf person in central 60% at start), re-acquire after >2 s loss
-- [ ] **PERC-03**: 4-state Kalman filter (x, y, vx, vy) on normalized frame coords for prediction during gaps
-- [ ] **INTENT-01**: Motion analyzer — sustained-velocity + dwell hysteresis from Kalman vx
-- [ ] **INTENT-02**: Rule-of-thirds framer — left/center/right third selection based on motion intent
-- [ ] **CTRL-01**: Pan controller with deadband (0.4°), velocity clamp (30°/s), critically-damped follower
-- [ ] **CTRL-02**: Command dispatcher — rate-limit `M:` emission (Δ > 0.2°, ≥ 50 ms gap)
-- [ ] **PIPE-01**: Asyncio orchestrator wiring camera → detector → tracker → analyzer → framer → controller → motor
-- [ ] **UI-01**: DearPyGui dashboard — live preview with skeleton/badge/third overlay, tuning sliders, status, hotkeys (S/P/H/E/Q)
-- [ ] **CFG-01**: Pydantic v2 frozen `Config` with env+JSON loading, range validation, fail-fast on invalid
-- [ ] **TEST-01**: Property tests for geometry + damping (hypothesis), unit tests for analyzer/framer/controller, protocol parser test against canned FB lines + heartbeat
-- [ ] **DOC-01**: README — `uv sync` install, OBS VCam setup, FOV calibration procedure, run command, hotkey table
-- [ ] **QA-01**: `ruff check` + `mypy --strict` clean, one Conventional Commit per module
+(None — set after `/gsd-new-milestone` defines v1.1 scope. Likely seed candidates from v1.0 follow-ups: QA-04 on-stage smoke, QA-02 mypy pin, QA-01 ruff format pass, YOLO SHA256 pin.)
+
+### Validated (shipped in v1.0 — 2026-05-11)
+
+- ✓ **CORE-01**: Pure-functional `core/types.py` DTOs + `core/geometry.py` FOV math + `core/damping.py` critically-damped 2nd-order follower — v1.0 (property-tested, no PID)
+- ✓ **CFG-01**: Pydantic v2 frozen `Config` (25 fields) with env+JSON loading, range validation, fail-fast on invalid — v1.0
+- ✓ **IO-01 (IO-CAM-01..04)**: Async OBS Virtual Camera frame source with DirectShow, OBSCameraNotFoundError, 1080p→720p fallback, `perf_counter_ns()` timestamps, > 100 ms stale-drop — v1.0
+- ✓ **IO-02 (IO-ARD-01..07)**: Async Arduino serial driver with VID:PID auto-detect, `READY:v2` boot handshake, 200 ms heartbeat, FB parser, watchdog-reset recovery, latched-error gate — v1.0
+- ✓ **PERC-01 (PERC-01..02)**: YOLO11-pose detector with confidence gate ≥ 0.55 and weighted-keypoint centroid (nose 0.4 / shoulders 0.4 / hips 0.2) — v1.0
+- ✓ **PERC-02 (PERC-03..05)**: BoT-SORT ID lock on primary subject (central 60%), 2 s lock-loss re-acquire — v1.0
+- ✓ **PERC-03 (PERC-06..07)**: 4-state Kalman filter on normalized frame coords with hold-during-gap — v1.0
+- ✓ **INTENT-01**: Motion analyzer — sustained-velocity + dwell hysteresis on Kalman vx — v1.0
+- ✓ **INTENT-02**: Rule-of-thirds framer with stage-1 damping (~0.8 s τ) — v1.0
+- ✓ **CTRL-01**: PanController with deadband (0.4°), velocity clamp (30°/s), critically-damped stage-2 follower (~0.6 s τ) — v1.0
+- ✓ **CTRL-02**: CommandDispatcher rate-limit `M:` emission (Δ > 0.2°, ≥ 50 ms gap) — v1.0
+- ✓ **PIPE-01**: Asyncio orchestrator wiring camera → detector → tracker → analyzer → framer → controller → motor with 6-state lifecycle — v1.0
+- ✓ **UI-01**: DearPyGui dashboard — live preview with skeleton/badge/framing overlay, 4 tuning sliders, Save Config restart, status panel, 5 hotkeys (E debounced, S/P/H/Q on release) — v1.0
+- ✓ **TEST-01**: Property tests for geometry + damping, unit tests for analyzer/framer/controller, fake-serial protocol parser tests — v1.0 (561 passed, 1 skipped)
+- ✓ **DOC-01**: README full operator manual (install, OBS setup, FOV calibration, run, hotkeys, troubleshooting) — v1.0
+- ✓ **QA-01**: `ruff check` clean — v1.0 (`ruff format --check` drift on 73 files deferred to v1.1)
+- ✓ **QA-03**: Conventional Commits per Order of Work — v1.0 (30-commit sample verified)
+- ⚠ **QA-02**: `mypy --strict src` clean (78 files); `mypy --strict src tests` blocked by mypy 1.20.2 wheel env regression — v1.0 (env hotfix deferred to v1.1)
+- ⚠ **QA-04**: On-stage smoke ≥ 5 min — v1.0 (6 pass criteria deferred to next stage rehearsal; tracked in 08-HUMAN-UAT.md)
 
 ### Out of Scope
 
@@ -77,17 +95,19 @@ Cinematic, jitter-free auto-tracking of a single primary subject (the pastor/spe
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| YOLO11-pose over MediaPipe | Faster + more accurate in 2026; native BoT-SORT integration via ultralytics | — Pending |
-| Critically-damped 2nd-order follower over PID | PID overshoots/oscillates; bad for cinematography | — Pending |
-| Kalman over EMA smoothing | EMA adds lag; Kalman predicts during detection gaps without lag | — Pending |
-| BoT-SORT ID persistence | Locks primary subject across occlusions; ignores audience/interpreter | — Pending |
-| Two-stage damping (framing + motor) | Eliminates jerk and overshoot at both intent and actuation layers | — Pending |
-| VID:PID auto-detect over fixed COM port | USB-jack-dependent enumeration on dev machine — fixed port unreliable | — Pending |
-| Pure core / dirty edges architecture | Side effects only at rim (serial, camera, GUI); core stays unit-testable | — Pending |
-| `dearpygui` over Qt/Tk | Immediate-mode rendering = low-latency live preview; minimal boilerplate | — Pending |
-| Boot handshake required (`READY:v<N>`) | Version mismatch detected at startup, not mid-run | — Pending |
-| AVR WDT + PC heartbeat dual watchdog | Hardware lockup recovery + PC-process-death detection | — Pending |
-| `mypy --strict` no `Any` | Sharpen contracts via `Literal`/`NewType`/`TypeAlias`; catch errors at type-check time | — Pending |
+| YOLO11-pose over MediaPipe | Faster + more accurate in 2026; native BoT-SORT integration via ultralytics | ✓ Good — v1.0 shipped, runtime verified in pipeline tests |
+| Critically-damped 2nd-order follower over PID | PID overshoots/oscillates; bad for cinematography | ✓ Good — v1.0 step-response asserts no overshoot |
+| Kalman over EMA smoothing | EMA adds lag; Kalman predicts during detection gaps without lag | ✓ Good — v1.0 4-state filter holds through 3-frame gaps |
+| BoT-SORT ID persistence | Locks primary subject across occlusions; ignores audience/interpreter | ✓ Good — v1.0; on-stage smoke pending QA-04 |
+| Two-stage damping (framing + motor) | Eliminates jerk and overshoot at both intent and actuation layers | ✓ Good — v1.0; on-stage feel verification pending QA-04 |
+| VID:PID auto-detect over fixed COM port | USB-jack-dependent enumeration on dev machine — fixed port unreliable | ✓ Good — v1.0 covers Uno R3/R4 + CH340 + FTDI |
+| Pure core / dirty edges architecture | Side effects only at rim (serial, camera, GUI); core stays unit-testable | ✓ Good — v1.0; core/ remains import-clean |
+| `dearpygui` over Qt/Tk | Immediate-mode rendering = low-latency live preview; minimal boilerplate | ✓ Good — v1.0 dashboard ships with 960×540 preview + sliders |
+| Boot handshake required (`READY:v<N>`) | Version mismatch detected at startup, not mid-run | ✓ Good — v1.0 |
+| AVR WDT + PC heartbeat dual watchdog | Hardware lockup recovery + PC-process-death detection | ✓ Good — v1.0; mid-session `READY:v2` triggers `_recover()` |
+| `mypy --strict` no `Any` | Sharpen contracts via `Literal`/`NewType`/`TypeAlias`; catch errors at type-check time | ⚠ Revisit — v1.0 `src` clean; `tests` blocked by mypy 1.20.2 wheel env regression; pin mypy in v1.1 |
+| Pure-process-pool YOLO inference | Avoids GIL block on capture; YOLO model state isolated to worker | ✓ Good — v1.0 PoseDetector + _pose_worker |
+| Two-commit phase-close pattern | Mirrors Phase 7: docs (artifact) + docs (verification) — clean revert/review boundary | ✓ Good — v1.0 Phase 8 followed this |
 
 ## Evolution
 
@@ -107,4 +127,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-03 after initialization from PROMPT.md*
+*Last updated: 2026-05-11 after v1.0 milestone close*
