@@ -88,7 +88,7 @@ The pipeline maps normalized-frame x ∈ [0, 1] to motor angle via the lens hori
 
    Or set the live slider in the UI and click **Save Config** — the app restarts the pipeline with the new value.
 
-**Verification:** With FOV set correctly, a 10° camera-mount pan should move the subject roughly `10 / h_fov` of the frame width (about 1/7 of the frame at 70° FOV). Eyeball this on the preview.
+**Verification:** With FOV set correctly, a 10° camera-mount pan should move the subject roughly `10 / h_fov` of the frame width (about 14% at 70° FOV, 19% at 53° FOV). Eyeball this on the preview.
 
 **Pitfall:** OBS Virtual Camera does not change the FOV from the source camera. The FOV you measure is the **physical lens FOV** of the USB camera, unaffected by OBS scaling.
 
