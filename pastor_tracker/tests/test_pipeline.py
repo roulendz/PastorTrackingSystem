@@ -312,6 +312,98 @@ async def test_snapshot_dto_complete() -> None:
 
 
 # =============================================================================
+# Phase 7 Plan 01: cache surfaces the highest-confidence detection per tick.
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_cache_carries_detection_fields() -> None:
+    """A tick with a single Detection populates the three Phase 7 cache fields.
+
+    Uses the default detection script (centered subject, conf=0.9, track_id=1,
+    bbox half-extents (0.05, 0.10) so x1/x2=0.45/0.55, y1/y2=0.40/0.60).
+    Mirrors the ``test_snapshot_dto_complete`` settling pattern.
+    """
+    pipeline, _fake_serial, _fake_video, _fake_pose = await _pipeline_with_fakes()
+    try:
+        await pipeline.start()
+        await asyncio.sleep(_TICK_SETTLE_SEC)
+        snapshot = pipeline.snapshot()
+        # Phase 7 cache writes fire whenever ``detections`` is non-empty, and
+        # the default script feeds at least one detection per frame.
+        assert snapshot.last_detection_confidence == pytest.approx(0.9)
+        assert snapshot.last_locked_track_id == 1
+        assert snapshot.last_subject_bbox_normalized is not None
+        x1, y1, x2, y2 = snapshot.last_subject_bbox_normalized
+        # Bbox half-widths from tests.fixtures.pose_traces.make_detection
+        # defaults: 0.05 horizontal, 0.10 vertical around (0.5, 0.5).
+        assert x1 == pytest.approx(0.45)
+        assert y1 == pytest.approx(0.40)
+        assert x2 == pytest.approx(0.55)
+        assert y2 == pytest.approx(0.60)
+    finally:
+        await pipeline.quit()
+
+
+def _multi_detection_script(
+    count: int, *, timestamp_step_ns: int
+) -> list[list[Detection]]:
+    """Three detections per frame; the middle one has the max confidence.
+
+    Local helper -- not a shared fixture. Confidences [0.40, 0.85, 0.60];
+    distinct track_ids 11/22/33 so we can assert the cache picked the
+    max-confidence entry (22) and not the first (11) or last (33).
+    Centers are clamped inside [0.1, 0.9] so the Detection cross-field
+    validator (bbox_x2 > bbox_x1 with default bbox_half_w=0.05) holds.
+    """
+    from tests.fixtures.pose_traces import make_detection as _make
+
+    detections: list[list[Detection]] = []
+    for k in range(count):
+        ts = k * timestamp_step_ns
+        detections.append(
+            [
+                _make(cx=0.30, cy=0.50, track_id=11, conf=0.40, timestamp_ns=ts),
+                _make(cx=0.50, cy=0.50, track_id=22, conf=0.85, timestamp_ns=ts),
+                _make(cx=0.70, cy=0.50, track_id=33, conf=0.60, timestamp_ns=ts),
+            ]
+        )
+    return detections
+
+
+@pytest.mark.asyncio
+async def test_cache_uses_max_confidence_detection() -> None:
+    """With multiple detections per frame, the cache reflects the max-conf one.
+
+    Three detections per tick at confs [0.40, 0.85, 0.60] with track_ids
+    [11, 22, 33]. The cache must surface track_id=22 (the 0.85 entry), not
+    the first (11) or the last (33) -- proves the reduction is ``max(...,
+    key=mean_keypoint_confidence)`` and not ``detections[0]`` or
+    ``detections[-1]``.
+    """
+    # 1/30 s frame cadence so the SubjectTracker / MotionAnalyzer see
+    # monotonically advancing timestamps.
+    ns_per_frame = int((1.0 / 30.0) * 1_000_000_000)
+    script = _multi_detection_script(_DEFAULT_FRAME_COUNT, timestamp_step_ns=ns_per_frame)
+    pipeline, _fake_serial, _fake_video, _fake_pose = await _pipeline_with_fakes(
+        detection_script=script
+    )
+    try:
+        await pipeline.start()
+        await asyncio.sleep(_TICK_SETTLE_SEC)
+        snapshot = pipeline.snapshot()
+        assert snapshot.last_detection_confidence == pytest.approx(0.85)
+        assert snapshot.last_locked_track_id == 22
+        assert snapshot.last_subject_bbox_normalized is not None
+        x1, _y1, x2, _y2 = snapshot.last_subject_bbox_normalized
+        # The max-conf detection is at cx=0.50, bbox_half_w=0.05 -> [0.45, 0.55].
+        assert x1 == pytest.approx(0.45)
+        assert x2 == pytest.approx(0.55)
+    finally:
+        await pipeline.quit()
+
+
+# =============================================================================
 # Test 4: lifecycle table -- valid transitions (PIPE-03).
 # =============================================================================
 

@@ -151,6 +151,14 @@ class _PipelineCache:
     last_target_x_normalized: float | None = None
     last_pan_angle_deg: float | None = None
     last_emitted_angle_deg: float | None = None
+    # --- Plan 07-01 additions (Phase 7 D-15 status panel + UI-01 overlays).
+    # Populated by the tick loop from the max-confidence Detection of the
+    # current frame; held across empty-detections ticks so the status panel
+    # can render a stale-OK value instead of clearing to NONE on a single
+    # gap (RESEARCH 07 §6 "Cache + tick-loop hook").
+    last_detection_confidence: float | None = None
+    last_locked_track_id: int | None = None
+    last_subject_bbox_normalized: tuple[float, float, float, float] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +242,9 @@ class Pipeline:
             last_pan_angle_deg=self._cache.last_pan_angle_deg,
             last_emitted_angle_deg=self._cache.last_emitted_angle_deg,
             motor_state=self._motor.state.value,
+            last_detection_confidence=self._cache.last_detection_confidence,
+            last_locked_track_id=self._cache.last_locked_track_id,
+            last_subject_bbox_normalized=self._cache.last_subject_bbox_normalized,
         )
 
     # ---------- lifecycle helpers ----------
@@ -279,6 +290,21 @@ class Pipeline:
             now_ns = frame.timestamp_ns
             # D-17: single-attribute write; CPython STORE_ATTR is atomic.
             self._latest_frame = frame
+            # Plan 07-01: surface highest-confidence detection to the snapshot
+            # so the Phase 7 status panel can render conf/track_id/bbox without
+            # reaching past the Pipeline public surface (pure-core / dirty-
+            # edges, CLAUDE.md). Empty-detections tick: hold last values
+            # (mirrors the None-as-stale convention of last_target_x_normalized).
+            if detections:
+                _primary = max(detections, key=lambda d: d.mean_keypoint_confidence)
+                self._cache.last_detection_confidence = _primary.mean_keypoint_confidence
+                self._cache.last_locked_track_id = _primary.track_id
+                self._cache.last_subject_bbox_normalized = (
+                    _primary.bbox_x1_normalized,
+                    _primary.bbox_y1_normalized,
+                    _primary.bbox_x2_normalized,
+                    _primary.bbox_y2_normalized,
+                )
             # D-02: sequential pure-transform chain.
             subject = await self._tracker.consume(detections, now_ns)
             motion = await self._analyzer.consume(subject, now_ns)

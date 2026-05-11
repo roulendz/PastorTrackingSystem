@@ -242,7 +242,13 @@ def test_pipeline_snapshot_construction_minimal() -> None:
 
 
 def test_pipeline_snapshot_construction_full() -> None:
-    """All seven D-16 fields populated; round-trip through model_dump preserves values."""
+    """All seven D-16 fields populated; round-trip through model_dump preserves values.
+
+    Phase 7 Plan 01 additively extends the snapshot with three optional UI
+    fields (``last_detection_confidence``, ``last_locked_track_id``,
+    ``last_subject_bbox_normalized``); when unspecified they default to None
+    and surface in the dump alongside the seven D-16 fields.
+    """
     from pastor_tracker.core.types import PipelineSnapshot
 
     snap = PipelineSnapshot(
@@ -263,6 +269,10 @@ def test_pipeline_snapshot_construction_full() -> None:
         "last_pan_angle_deg": 12.5,
         "last_emitted_angle_deg": 12.3,
         "motor_state": "running",
+        # Phase 7 Plan 01 additions default to None when not supplied.
+        "last_detection_confidence": None,
+        "last_locked_track_id": None,
+        "last_subject_bbox_normalized": None,
     }
 
 
@@ -359,4 +369,68 @@ def test_detection_track_id_optional() -> None:
             bbox_y2_normalized=0.6,
             timestamp_ns=1,
             track_id=-1,
+        )
+
+
+# --- Phase 7 / Plan 01: PipelineSnapshot extensions (D-15 status + UI-01) ----
+
+
+def test_pipeline_snapshot_phase7_fields_default_none() -> None:
+    """The three Phase 7 additions default to None when unspecified."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    snap = PipelineSnapshot(
+        state="stopped",
+        last_intent="indeterminate",
+        motor_state="closed",
+    )
+    assert snap.last_detection_confidence is None
+    assert snap.last_locked_track_id is None
+    assert snap.last_subject_bbox_normalized is None
+
+
+def test_pipeline_snapshot_phase7_fields_roundtrip() -> None:
+    """All three additions round-trip through model_dump/model_validate."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    bbox = (0.1, 0.2, 0.3, 0.4)
+    snap = PipelineSnapshot(
+        state="running",
+        last_intent="moving_right",
+        motor_state="running",
+        last_detection_confidence=0.85,
+        last_locked_track_id=3,
+        last_subject_bbox_normalized=bbox,
+    )
+    dumped = snap.model_dump()
+    roundtripped = PipelineSnapshot.model_validate(dumped)
+    assert roundtripped == snap
+    assert roundtripped.last_detection_confidence == pytest.approx(0.85)
+    assert roundtripped.last_locked_track_id == 3
+    assert roundtripped.last_subject_bbox_normalized == bbox
+
+
+def test_pipeline_snapshot_phase7_confidence_upper_bound() -> None:
+    """last_detection_confidence > 1.0 raises ValidationError (le=1.0)."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    with pytest.raises(ValidationError, match="last_detection_confidence"):
+        PipelineSnapshot(
+            state="running",
+            last_intent="moving_right",
+            motor_state="running",
+            last_detection_confidence=1.5,
+        )
+
+
+def test_pipeline_snapshot_phase7_track_id_non_negative() -> None:
+    """last_locked_track_id < 0 raises ValidationError (ge=0)."""
+    from pastor_tracker.core.types import PipelineSnapshot
+
+    with pytest.raises(ValidationError, match="last_locked_track_id"):
+        PipelineSnapshot(
+            state="running",
+            last_intent="moving_right",
+            motor_state="running",
+            last_locked_track_id=-1,
         )

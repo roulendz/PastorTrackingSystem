@@ -200,8 +200,8 @@ class PipelineSnapshot(_FrozenModel):
 
     Built cheaply from Pipeline._PipelineCache on every snapshot() call.
     Frozen + extra-forbidden per the project DTO discipline (CLAUDE.md
-    rule 9). Field set is fixed at exactly the 7 names D-16 enumerates --
-    do not extend without revising CONTEXT.md.
+    rule 9). Field set is the 7 D-16 names + 3 Phase 7 additions
+    (CONTEXT.md "Specific Ideas" authorizes; D-XX unchanged).
 
     Field semantics:
         * state: Literal -- one of the 6 valid lifecycle states.
@@ -216,6 +216,17 @@ class PipelineSnapshot(_FrozenModel):
           Phase 6 keeps _MotorState private to the Arduino subsystem; the
           snapshot exposes its .value so Phase 7 can render text without
           importing _MotorState.
+        * last_detection_confidence: highest mean_keypoint_confidence of the
+          most recent non-empty detection batch; range [0, 1]. None until the
+          first non-empty tick. Held across empty-detections ticks (mirror of
+          the last_target_x_normalized None-as-stale convention).
+        * last_locked_track_id: BoT-SORT track id of the same max-confidence
+          Detection; None until first non-empty tick or when that detection
+          carries no track id.
+        * last_subject_bbox_normalized: (x1, y1, x2, y2) bbox of the same
+          max-confidence Detection in normalized [0, 1] coords; None until
+          first non-empty tick. Phase 7 UI-01 draws this as the "I locked
+          someone" affordance.
     """
 
     state: PipelineState
@@ -225,3 +236,11 @@ class PipelineSnapshot(_FrozenModel):
     last_pan_angle_deg: float | None = None
     last_emitted_angle_deg: float | None = None
     motor_state: str
+    # --- Plan 07-01 additions (Phase 7 D-15 status panel + UI-01 overlays).
+    # Authorized by CONTEXT.md "Specific Ideas": "Detection / TrackedSubject
+    # ... open to plan; no D-XX touch". RESEARCH §6 documents the rationale:
+    # UI cannot compute these from latest_frame alone (Pipeline does not
+    # surface Detection / TrackedSubject otherwise).
+    last_detection_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    last_locked_track_id: int | None = Field(default=None, ge=0)
+    last_subject_bbox_normalized: tuple[float, float, float, float] | None = None
