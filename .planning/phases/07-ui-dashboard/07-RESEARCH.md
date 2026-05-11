@@ -872,7 +872,7 @@ def refresh(self, snap: PipelineSnapshot) -> None:
 | A7 | `_pending_config[key] = value` from DPG slider callback is thread-safe (same thread as render tick — DPG main thread) | §Pattern slider | HIGH-confidence — DPG callbacks fire on the main thread per docs; no cross-thread mutation. |
 | A8 | DearPyGui v2.1.1 supports `dpg.set_exit_callback(...)` for the unsaved-changes modal hook | §Pitfall 7 | LOW — present since DPG 1.x; verified in API docs. If the API name has shifted, alternate: poll `dpg.is_dearpygui_running()` and check `_pending_config` before allowing the loop to exit. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `_pipeline_thread.py` test the full asyncio-Pipeline-construction path, or use a `Mock(spec=Pipeline)`?**
    - What we know: CONTEXT.md "Specific Ideas" recommends `Mock(spec=Pipeline)` for `test_dashboard.py`.
