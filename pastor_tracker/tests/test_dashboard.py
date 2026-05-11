@@ -161,13 +161,13 @@ def test_button_estop_dispatches_pipeline_e_stop() -> None:
     host.submit.assert_called_once()
 
 
-def test_button_save_config_logs_not_implemented() -> None:
+def test_button_save_config_noop_when_buffer_empty() -> None:
+    """Plan 07-03: pressing Save with no pending changes is a logged no-op."""
     dashboard, _, host = _make_dashboard()
     with capture_logs() as logs:
         dashboard._on_save_config_pressed(0, None, None)
-    # Save Config is a stub in Plan 07-02; no submit fires.
     host.submit.assert_not_called()
-    assert any(entry.get("event") == "ui_save_config_not_implemented" for entry in logs)
+    assert any(entry.get("event") == "ui_save_config_noop" for entry in logs)
 
 
 # ---- hotkey dispatch ---------------------------------------------------
@@ -548,6 +548,221 @@ def test_slider_callback_refreshes_unsaved_badge_widget() -> None:
     with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
         cb(0, 0.9, None)
     mock_dpg.set_value.assert_called_once_with(4242, "(unsaved changes)")
+
+
+# ---- Task 2: Save Config + ValidationError + exit-callback modal ------
+
+
+def _make_save_config_dashboard(
+    *,
+    tmp_config_path: object,
+    initial_pending: dict[str, float] | None = None,
+) -> tuple[Dashboard, list[Mock], list[Mock]]:
+    """Build a Dashboard with sequence-returning host_factory + pipeline_factory.
+
+    Each invocation returns a fresh Mock so Save Config can rebuild a
+    second host + pipeline without re-using the first instance (RESEARCH
+    Pitfall 3).
+    """
+    from pathlib import Path as _Path
+
+    pipelines: list[Mock] = []
+    hosts: list[Mock] = []
+
+    def _pipeline_factory(_cfg: Config) -> Mock:
+        p = _make_mock_pipeline()
+        pipelines.append(p)
+        return p
+
+    def _host_factory() -> Mock:
+        h = _make_mock_host()
+        hosts.append(h)
+        return h
+
+    dashboard = Dashboard(
+        Config(),
+        pipeline_factory=_pipeline_factory,
+        host_factory=_host_factory,
+        config_json_path=_Path(str(tmp_config_path)) / "config.json",
+    )
+    # Inject the first pair (mirrors what run() would do).
+    dashboard._pipeline = _pipeline_factory(dashboard._config)
+    dashboard._host = _host_factory()
+    if initial_pending:
+        dashboard._pending_config.update(initial_pending)
+    return dashboard, pipelines, hosts
+
+
+def test_save_config_success_writes_json(tmp_path: object) -> None:
+    """D-11 success path: writes new config.json with merged values."""
+    import json
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    with patch("pastor_tracker.ui.dashboard.dpg"):
+        dashboard._on_save_config_pressed(0, None, None)
+    data = json.loads(dashboard._config_json_path.read_text())
+    assert data["pan_deadband_deg"] == 0.6
+
+
+def test_save_config_success_clears_pending_buffer(tmp_path: object) -> None:
+    """D-11: _pending_config cleared ONLY on full success."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    with patch("pastor_tracker.ui.dashboard.dpg"):
+        dashboard._on_save_config_pressed(0, None, None)
+    assert dashboard._pending_config == {}
+
+
+def test_save_config_success_swaps_host_and_pipeline(tmp_path: object) -> None:
+    """Pitfall 3: fresh PipelineThreadHost + fresh Pipeline post-Save."""
+    from unittest.mock import patch
+
+    dashboard, pipelines, hosts = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    old_host = dashboard._host
+    assert old_host is not None
+    with patch("pastor_tracker.ui.dashboard.dpg"):
+        dashboard._on_save_config_pressed(0, None, None)
+    # The old host was quit + stopped; a fresh host + pipeline are
+    # constructed; the new host has start + submit called.
+    old_host.stop.assert_called_once()
+    assert len(hosts) >= 2  # old + new
+    assert len(pipelines) >= 2  # old + new (factory called for new_config)
+    new_host = dashboard._host
+    assert new_host is not None
+    assert new_host is not old_host
+    new_host.start.assert_called_once()
+    # new_host.submit was invoked at least once (with the new pipeline.start()).
+    new_host.submit.assert_called()
+
+
+def test_save_config_validation_error_shows_banner_keeps_buffer(
+    tmp_path: object,
+) -> None:
+    """D-11 ValidationError branch: banner up, buffer unchanged, no restart."""
+    from unittest.mock import patch
+
+    # pan_deadband_deg has Pydantic le=10.0; 999.0 violates -> ValidationError.
+    dashboard, _, hosts = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 999.0},
+    )
+    with patch("pastor_tracker.ui.dashboard.dpg"):
+        dashboard._on_save_config_pressed(0, None, None)
+    # Buffer unchanged.
+    assert dashboard._pending_config == {"pan_deadband_deg": 999.0}
+    # Banner text non-empty.
+    assert dashboard._error_banner_text != ""
+    # No fresh host constructed (only the initial host_factory call).
+    assert len(hosts) == 1
+
+
+def test_save_config_validation_error_logs_config_validation_failed(
+    tmp_path: object,
+) -> None:
+    """D-11 ValidationError emits WARNING with 'errors' field."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 999.0},
+    )
+    with capture_logs() as logs, patch("pastor_tracker.ui.dashboard.dpg"):
+        dashboard._on_save_config_pressed(0, None, None)
+    matches = [e for e in logs if e.get("event") == "config_validation_failed"]
+    assert len(matches) >= 1
+    assert "errors" in matches[0]
+
+
+def test_should_prompt_save_returns_true_with_pending(tmp_path: object) -> None:
+    """Pure helper -- unit-testable in isolation; empty buffer => False."""
+    dashboard, _, _ = _make_save_config_dashboard(tmp_config_path=tmp_path)
+    assert dashboard.should_prompt_save() is False
+    dashboard._pending_config["pan_deadband_deg"] = 0.6
+    assert dashboard.should_prompt_save() is True
+
+
+def test_exit_callback_with_pending_blocks_close(tmp_path: object) -> None:
+    """Pitfall 7: non-empty buffer routes through _show_unsaved_modal."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    dashboard._show_unsaved_modal = Mock()  # type: ignore[method-assign]
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._on_exit_callback()
+    dashboard._show_unsaved_modal.assert_called_once()
+    mock_dpg.stop_dearpygui.assert_not_called()
+
+
+def test_exit_callback_empty_pending_calls_stop_dearpygui(tmp_path: object) -> None:
+    """Empty buffer => _on_exit_callback exits directly via dpg.stop_dearpygui."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(tmp_config_path=tmp_path)
+    dashboard._show_unsaved_modal = Mock()  # type: ignore[method-assign]
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._on_exit_callback()
+    dashboard._show_unsaved_modal.assert_not_called()
+    mock_dpg.stop_dearpygui.assert_called_once()
+
+
+def test_modal_quit_anyway_discards_buffer_and_stops_dpg(tmp_path: object) -> None:
+    """Modal-decision logic: Quit Anyway clears buffer + stop_dearpygui."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._on_modal_quit_anyway(0, None, None)
+    assert dashboard._pending_config == {}
+    mock_dpg.stop_dearpygui.assert_called_once()
+
+
+def test_modal_save_and_quit_stops_dpg_on_success(tmp_path: object) -> None:
+    """Modal-decision: Save & Quit => Save success path then stop_dearpygui."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 0.6},
+    )
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._on_modal_save_and_quit(0, None, None)
+    # Save succeeded => buffer cleared, stop_dearpygui called.
+    assert dashboard._pending_config == {}
+    mock_dpg.stop_dearpygui.assert_called_once()
+
+
+def test_modal_save_and_quit_keeps_running_on_validation_error(
+    tmp_path: object,
+) -> None:
+    """Save & Quit must NOT stop_dearpygui if Save fails (banner stays up)."""
+    from unittest.mock import patch
+
+    dashboard, _, _ = _make_save_config_dashboard(
+        tmp_config_path=tmp_path,
+        initial_pending={"pan_deadband_deg": 999.0},  # out-of-bounds
+    )
+    with patch("pastor_tracker.ui.dashboard.dpg") as mock_dpg:
+        dashboard._on_modal_save_and_quit(0, None, None)
+    # Save failed: buffer unchanged, stop_dearpygui NOT called.
+    assert dashboard._pending_config == {"pan_deadband_deg": 999.0}
+    mock_dpg.stop_dearpygui.assert_not_called()
 
 
 def test_default_pipeline_factory_constructs_pipeline_or_raises_hardware() -> None:
