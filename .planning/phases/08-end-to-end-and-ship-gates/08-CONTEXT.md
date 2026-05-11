@@ -26,8 +26,8 @@ No new feature code. No new modules. README writing + verification commands + a 
   2. **Requirements** — Windows 10/11, Python 3.12, `uv`, OBS Studio with Virtual Camera plugin, Arduino Uno R3/R4 (or CH340/FTDI clone) flashed with the firmware in `arduino/stepper_controller/`.
   3. **Install** — `git clone`, `cd pastor_tracker`, `uv sync`.
   4. **OBS Virtual Camera setup** — start OBS, add stage camera as scene, click "Start Virtual Camera". One screenshot allowed but optional (skip if cost > value).
-  5. **FOV calibration** — measure horizontal field of view at the lens distance, set `camera_h_fov_deg` in `config.json`; reference the existing Config field.
-  6. **Run** — `uv run pastor-tracker` (default UI), `--headless` flag, `--config path.json` flag.
+  5. **FOV calibration** — measure horizontal field of view at the lens distance, set `camera_horizontal_fov_deg` in `config.json`; reference the existing Config field.
+  6. **Run** — `uv run pastor-tracker` (default UI), `--headless` flag, `--config-json path.json` flag.
   7. **Hotkey table** — `S` start, `P` pause, `H` home, `E` e-stop (debounced), `Q` quit (matches UI-05).
   8. **Tuning sliders** — list the 4 live sliders (pan time-constant, deadband, max velocity, FOV) and the Save Config restart behavior.
   9. **Troubleshooting** — "OBS VCam not found", "Arduino not detected" (VID:PID list), "Heartbeat lost (ERROR:11)", "Lock-loss > 2 s".
