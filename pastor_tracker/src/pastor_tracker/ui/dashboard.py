@@ -657,8 +657,12 @@ class Dashboard:
             self._show_error_banner(self._format_validation_error(exc))
             return  # do NOT clear _pending_config
         # WR-02 tiger-style guard (shared helper) -- explicit raise, not
-        # ``assert``, so the invariant holds under ``python -O``.
-        self._require_initialized()
+        # ``assert``, so the invariant holds under ``python -O``. The
+        # returned pair narrows the Optional[...] attrs to non-None for
+        # mypy; ``self._host`` / ``self._pipeline`` are still re-read
+        # below because the type-narrowing does not carry through method
+        # boundaries in mypy --strict.
+        old_pipeline_pre, old_host_pre = self._require_initialized()
         # 2. Persist BEFORE any teardown -- a crash during the teardown
         #    chain still leaves the new config on disk for the next boot.
         self._write_config_json(new_config)
@@ -714,9 +718,11 @@ class Dashboard:
                     )
             return
         # 4. New pipeline is up + running. Tear down the old host
-        #    (Pitfall 3 -- threads + event loops are single-use).
-        old_host = self._host
-        old_pipeline = self._pipeline
+        #    (Pitfall 3 -- threads + event loops are single-use). We use
+        #    the locals captured by ``_require_initialized`` above so
+        #    mypy --strict sees the non-None narrowing.
+        old_host = old_host_pre
+        old_pipeline = old_pipeline_pre
         try:
             old_host.submit(old_pipeline.quit()).result(
                 timeout=_SAVE_QUIT_TIMEOUT_SEC
