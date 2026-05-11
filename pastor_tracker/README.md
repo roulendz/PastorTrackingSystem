@@ -103,7 +103,7 @@ uv run pastor-tracker --headless                               # Phase 6 path, S
 uv run pastor-tracker --config-json C:\path\to\config.json     # explicit config path
 ```
 
-The default mode is `--ui` (DearPyGui dashboard with live preview, sliders, status panel, and hotkeys). `--headless` is the SIGINT-driven Phase 6 path used by automation, regression scripts, and CI smoke runs. `--ui` and `--headless` are mutually exclusive; passing both is rejected at the argparse layer.
+If neither flag is passed, UI mode is selected (DearPyGui dashboard with live preview, sliders, status panel, and hotkeys); this matches passing `--ui` explicitly. `--headless` is the SIGINT-driven Phase 6 path used by automation, regression scripts, and CI smoke runs. `--ui` and `--headless` are mutually exclusive; passing both is rejected at the argparse layer.
 
 Exit codes (sysexits.h-flavoured):
 
