@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Pipeline Orchestrator** - Asyncio orchestrator wiring all stages, lifecycle (start/pause/home/e-stop/quit)
  (completed 2026-05-10)
 - [ ] **Phase 7: UI Dashboard** - DearPyGui live preview, tuning sliders, status panel, hotkeys
-- [ ] **Phase 8: End-to-End and Ship Gates** - On-stage smoke test, README + FOV calibration, final lint/type/commit gates
+- [x] **Phase 8: End-to-End and Ship Gates** - On-stage smoke test, README + FOV calibration, final lint/type/commit gates (completed 2026-05-11)
 
 ## Phase Details
 
@@ -159,7 +159,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Git history is one Conventional Commit per module, matching the Order of Work in PROMPT.md (scaffold → core → arduino → camera → perception → intent → control → pipeline → ui → e2e/docs)
 **Plans**: 1 plan
 Plans:
-- [ ] 08-01-PLAN.md — Expand README into operator manual + re-run ship gates (ruff/mypy/pytest/Conventional Commits) + record VERIFICATION.md with QA-04 deferred to human (Wave 1, no deps)
+- [x] 08-01-PLAN.md — Expand README into operator manual + re-run ship gates (ruff/mypy/pytest/Conventional Commits) + record VERIFICATION.md with QA-04 deferred to human (Wave 1, no deps)
 **UI hint**: no
 
 ## Progress
@@ -176,7 +176,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Intent and Control | 6/6 | Complete   | 2026-05-06 |
 | 6. Pipeline Orchestrator | 4/4 | Complete    | 2026-05-10 |
 | 7. UI Dashboard | 4/4 | Complete   | 2026-05-08 |
-| 8. End-to-End and Ship Gates | 0/1 | Not started | - |
+| 8. End-to-End and Ship Gates | 1/1 | Complete    | 2026-05-11 |
 
 ---
 *Roadmap created: 2026-05-03*

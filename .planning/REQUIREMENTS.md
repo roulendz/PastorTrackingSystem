@@ -92,11 +92,11 @@
 
 ### Docs + Quality
 
-- [ ] **DOC-01**: `README.md` — install (`uv sync`), OBS VCam setup, FOV calibration procedure, run command, hotkey table
-- [ ] **QA-01**: `ruff check` clean
-- [ ] **QA-02**: `mypy --strict` clean — every function annotated, no `Any`
-- [ ] **QA-03**: One Conventional Commit per module (per Order of Work in PROMPT.md)
-- [ ] **QA-04**: End-to-end smoke test on stage — real Uno (auto-detected port), real OBS VCam, real speaker
+- [x] **DOC-01**: `README.md` — install (`uv sync`), OBS VCam setup, FOV calibration procedure, run command, hotkey table
+- [x] **QA-01**: `ruff check` clean
+- [x] **QA-02**: `mypy --strict` clean — every function annotated, no `Any`
+- [x] **QA-03**: One Conventional Commit per module (per Order of Work in PROMPT.md)
+- [x] **QA-04**: End-to-end smoke test on stage — real Uno (auto-detected port), real OBS VCam, real speaker
 
 ## v2 Requirements
 
@@ -184,11 +184,11 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | TEST-03 | Phase 5 | Complete |
 | TEST-04 | Phase 2 | Complete |
 | TEST-05 | Phase 1 | Complete |
-| DOC-01 | Phase 8 | Pending |
-| QA-01 | Phase 8 | Pending |
-| QA-02 | Phase 8 | Pending |
-| QA-03 | Phase 8 | Pending |
-| QA-04 | Phase 8 | Pending |
+| DOC-01 | Phase 8 | Complete |
+| QA-01 | Phase 8 | Complete |
+| QA-02 | Phase 8 | Complete |
+| QA-03 | Phase 8 | Complete |
+| QA-04 | Phase 8 | Complete |
 
 **Coverage:**
 - v1 requirements: 57 total (initial doc miscount of 47 corrected during roadmap traceability)
