@@ -20,7 +20,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Perception** - YOLO11-pose detection, BoT-SORT primary-subject ID lock, 4-state Kalman smoothing
 - [x] **Phase 5: Intent and Control** - Motion analyzer with hysteresis, rule-of-thirds framer, two-stage damped pan controller, rate-limited command dispatcher
  (completed 2026-05-06)
-- [x] **Phase 6: Pipeline Orchestrator** - Asyncio orchestrator wiring all stages, lifecycle (start/pause/home/e-stop/quit) (completed 2026-05-10)
+- [x] **Phase 6: Pipeline Orchestrator** - Asyncio orchestrator wiring all stages, lifecycle (start/pause/home/e-stop/quit)
+ (completed 2026-05-10)
 - [ ] **Phase 7: UI Dashboard** - DearPyGui live preview, tuning sliders, status panel, hotkeys
 - [ ] **Phase 8: End-to-End and Ship Gates** - On-stage smoke test, README + FOV calibration, final lint/type/commit gates
 
@@ -138,7 +139,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Buttons `Start`, `Pause`, `Home`, `E-Stop`, `Save Config` work and reflect their action in the status panel
   4. Status panel shows motor link state, camera FPS, detection confidence, ID lock state, and last error with timestamp
   5. Hotkeys `S` (start), `P` (pause), `H` (home), `E` (e-stop), `Q` (quit) work in any focus state of the window
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 07-01-PLAN.md — dearpygui dep + Config preview fields + PipelineSnapshot/Cache extension + tick-loop hook (Wave 0)
+- [ ] 07-02-PLAN.md — ui shell: _overlays.py (pure coord) + _pipeline_thread.py (host) + dashboard.py (render loop + 5 buttons + 5 hotkeys + D-04 quit) (Wave 1, depends 07-01)
+- [ ] 07-04-PLAN.md — _event_bus.py + logging_config extension (BEFORE JSONRenderer per RESEARCH §5) + _status_panel.py + dashboard StatusPanel wiring + __main__ --ui/--headless flag (Wave 2, depends 07-02)
+- [ ] 07-03-PLAN.md — sliders + _pending_config + Save Config restart sequence + unsaved-changes modal-decision (Wave 3, depends 07-04)
 **UI hint**: yes
 **Cross-phase contract notes** (from Phase 3 deep review, commit aac3da1):
   - New structured log keys available for dashboard widgets: `feedback_seq_regression.after_recovery: bool` (W-04 — distinguishes expected post-recovery regressions from unexpected ones); `camera_thread_join_timeout` / `rx_thread_join_timeout` WARN events (W-06 — surfaces handle-race risk on shutdown for status panel).
@@ -168,7 +173,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Perception | 0/3 | Not started | - |
 | 5. Intent and Control | 6/6 | Complete   | 2026-05-06 |
 | 6. Pipeline Orchestrator | 4/4 | Complete    | 2026-05-10 |
-| 7. UI Dashboard | 0/TBD | Not started | - |
+| 7. UI Dashboard | 0/4 | Not started | - |
 | 8. End-to-End and Ship Gates | 0/TBD | Not started | - |
 
 ---
