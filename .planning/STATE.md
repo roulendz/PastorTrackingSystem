@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-05-11T14:30:00Z"
-last_activity: 2026-05-11 -- Phase 7 Plan 04 (status panel + event bus + --ui/--headless) complete
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-05-08T00:00:00Z"
+last_activity: 2026-05-08 -- Phase 7 Plan 03 (sliders + Save Config + modal-decision) complete; Phase 7 closed
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 25
-  completed_plans: 24
-  percent: 96
+  completed_plans: 25
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-03)
 ## Current Position
 
 Phase: 7
-Plan: 03 (next; Wave 2 — sliders + Save Config restart sequence; only remaining plan in Phase 7 — 07-04 just completed in parallel)
-Status: Ready to execute
-Last activity: 2026-05-11 -- Phase 7 Plan 04 (status panel + event bus + --ui/--headless) complete
+Plan: complete — Phase 7 closed; next phase is Phase 8 (End-to-End and Ship Gates)
+Status: Phase 7 complete
+Last activity: 2026-05-08 -- Phase 7 Plan 03 (sliders + Save Config + modal-decision) complete
 
-Progress: [██████████] 96%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: [██████████] 96%
 | Phase 07 P01 | 8min | 2 tasks | 8 files |
 | Phase 07 P02 | 11min | 2 tasks | 7 files |
 | Phase 07 P04 | 25min | 2 tasks | 10 files |
+| Phase 07 P03 | 30min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,11 @@ Recent decisions affecting current work:
 - [Phase 07]: Plan 07-02: Pitfall 9 handled -- _handle_home_done catches OrchestratorRejected and logs ui_home_skipped DEBUG only; other exceptions surface as ui_command_failed WARN. Pause-toggle (_on_pause_pressed) reads snapshot state to avoid the rejection path entirely
 - [Phase 07]: Plan 07-02: EXIT_OK mirrored locally as _EXIT_OK_LOCAL in dashboard.py (not imported from __main__) to avoid the Plan 07-04 circular-import edge case; value identical to __main__.EXIT_OK
 - [Phase 07]: Plan 07-02: Save Config + Slider callbacks are stubs (log-only); Plan 07-03 swaps in real callbacks at well-defined methods (_on_save_config_pressed, _on_slider_change_stub, _unsaved_badge_text, _on_exit_callback) without touching Plan 07-02 code
+- [Phase 07]: Plan 07-03: Pydantic v2 model_copy(update=...) does NOT re-run validators — Save Config implements re-validation as model_copy(update=...).model_dump() -> Config.model_validate(...) round-trip. The model_copy line remains on disk as grep-anchor; model_validate is what enforces D-12 + Pitfall 5 catch.
+- [Phase 07]: Plan 07-03: Save Config restart sequence uses FRESH PipelineThreadHost per RESEARCH §Pitfall 3 — threads + event loops are single-use; old host is stop()-ed + discarded. Pipeline + host factories invoked twice (once at boot, once at Save success) — tests assert second-call returns a distinct instance.
+- [Phase 07]: Plan 07-03: Modal RENDERING (_show_unsaved_modal body) deferred to Phase 8 QA-04 manual smoke per CONTEXT.md 'Claude's Discretion' (DearPyGui v2.x has no headless test runner); modal DECISION LOGIC (3 button callbacks + should_prompt_save pure helper) tested via direct method invocation.
+- [Phase 07]: Plan 07-03: Save & Quit success criterion is `not self._pending_config` AFTER _on_save_config_pressed returns — buffer-empty signal is the unambiguous post-call success indicator; banner-stays-up on Save failure keeps the modal visible so operator can re-choose Quit Anyway/Cancel.
+- [Phase 07]: Plan 07-03: Quit Anyway modal callback explicitly clears _pending_config before calling stop_dearpygui — prevents _on_exit_callback re-prompt loop during DPG shutdown teardown.
 
 ### Pending Todos
 
@@ -152,6 +158,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T10:58:52Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-05-08T00:00:00Z
+Stopped at: Completed 07-03-PLAN.md (Phase 7 complete)
 Resume file: None
