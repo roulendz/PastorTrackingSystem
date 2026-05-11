@@ -853,6 +853,86 @@ def test_save_config_rollback_on_pipeline_factory_failure(tmp_path: object) -> N
     )
 
 
+def test_save_config_rollback_on_pipeline_start_hardware_failure(
+    tmp_path: object,
+) -> None:
+    """CR-01: new_pipeline.start() hardware failure surfaces + rolls back state.
+
+    The new pipeline's ``start()`` is mirrored against ``run()``'s blocking
+    contract: ``submit(pipeline.start()).result(timeout=...)``. A
+    ``CameraError`` raised inside the new pipeline's start (e.g. the new
+    Config moved camera resolution to a value the device rejects) must be
+    classified, banner-surfaced, and rolled back to the old host.
+    """
+    from pathlib import Path as _Path
+    from unittest.mock import patch
+
+    from pastor_tracker.io.obs_camera import CameraError
+
+    pipelines: list[Mock] = []
+    factory_calls: list[int] = [0]
+
+    def _pipeline_factory(_cfg: Config) -> Mock:
+        factory_calls[0] += 1
+        p = _make_mock_pipeline()
+        pipelines.append(p)
+        return p
+
+    host_calls: list[int] = [0]
+    hosts: list[Mock] = []
+
+    def _host_factory() -> Mock:
+        host_calls[0] += 1
+        h = _make_mock_host()
+        if host_calls[0] == 2:
+            # Second host: submit(new_pipeline.start()) returns a Future
+            # that raises CameraError when .result() is awaited.
+            failed = _make_exception_future(
+                CameraError("new resolution rejected by VCam")
+            )
+
+            def _submit(coro: object) -> Future[object]:
+                close = getattr(coro, "close", None)
+                if callable(close):
+                    close()
+                return failed
+
+            h.submit.side_effect = _submit
+        hosts.append(h)
+        return h
+
+    dashboard = Dashboard(
+        Config(),
+        pipeline_factory=_pipeline_factory,
+        host_factory=_host_factory,
+        config_json_path=_Path(str(tmp_path)) / "config.json",
+    )
+    dashboard._pipeline = _pipeline_factory(dashboard._config)
+    dashboard._host = _host_factory()
+    dashboard._pending_config["pan_deadband_deg"] = 0.6
+    old_host = dashboard._host
+    old_pipeline = dashboard._pipeline
+
+    with capture_logs() as logs, patch("pastor_tracker.ui.dashboard.dpg"):
+        dashboard._on_save_config_pressed(0, None, None)
+
+    # Old state intact; rollback succeeded.
+    assert dashboard._host is old_host
+    assert dashboard._pipeline is old_pipeline
+    old_host.stop.assert_not_called()
+    assert dashboard._pending_config == {"pan_deadband_deg": 0.6}
+    assert "restart failed" in dashboard._error_banner_text
+    matches = [
+        e for e in logs if e.get("event") == "ui_save_config_restart_failed"
+    ]
+    assert len(matches) == 1
+    assert matches[0].get("exc_type") == "CameraError"
+    # Best-effort orphan-host cleanup: the new host that DID start gets
+    # stop()-ed so we don't leak a background thread.
+    new_host = hosts[1]
+    new_host.stop.assert_called_once()
+
+
 def test_save_config_rollback_on_host_start_failure(tmp_path: object) -> None:
     """CR-02: new host.start() raise leaves old self._* intact, preserves buffer."""
     from pathlib import Path as _Path

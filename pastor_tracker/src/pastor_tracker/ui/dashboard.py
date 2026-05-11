@@ -38,6 +38,10 @@ from pydantic import ValidationError
 
 from pastor_tracker.config import CONFIG_JSON_PATH, Config
 from pastor_tracker.core.types import Frame, PipelineSnapshot
+from pastor_tracker.io.arduino_motor import ArduinoError
+from pastor_tracker.io.arduino_transport import ArduinoPortNotFoundError
+from pastor_tracker.io.obs_camera import CameraError
+from pastor_tracker.perception.pose_detector import PerceptionError
 from pastor_tracker.pipeline import OrchestratorRejected, Pipeline
 from pastor_tracker.ui._event_bus import EventBuffer, make_event_bus
 from pastor_tracker.ui._overlays import (
@@ -564,18 +568,35 @@ class Dashboard:
         # 2. Persist BEFORE any teardown -- a crash during the teardown
         #    chain still leaves the new config on disk for the next boot.
         self._write_config_json(new_config)
-        # 3. CR-02: Build the new pipeline + host EAGERLY in locals so a
-        #    construction or start() failure leaves ``self._*`` pointing
-        #    at the still-alive old objects. The old host is not torn
-        #    down until the new host has been confirmed up.
+        # 3. CR-02 + CR-01: Build the new pipeline + host EAGERLY in
+        #    locals AND block on the new pipeline's ``start()`` result
+        #    BEFORE tearing down the old host. Failures here (factory
+        #    raise, host.start() barrier timeout, OR hardware-rejection
+        #    of the new config inside ``pipeline.start()``) leave
+        #    ``self._*`` pointing at the still-alive old pair and
+        #    ``_pending_config`` preserved so the operator can retry or
+        #    revert sliders. Mirrors ``run()``'s blocking-start contract
+        #    (line 263-265) which is the documented hardware-failure
+        #    surface for ``__main__.main``'s ``EXIT_HARDWARE_FAILED``
+        #    translator ladder.
         try:
             new_pipeline = self._pipeline_factory(new_config)
             new_host = self._host_factory()
             new_host.start()
-        except Exception as exc:  # noqa: BLE001 -- documented rollback boundary; classifier branches on exc type
+            new_host.submit(new_pipeline.start()).result(
+                timeout=_PIPELINE_START_TIMEOUT_SEC
+            )
+        except (
+            CameraError,
+            ArduinoError,
+            ArduinoPortNotFoundError,
+            PerceptionError,
+            OrchestratorRejected,
+            TimeoutError,
+            RuntimeError,
+        ) as exc:
             self._logger.error(
                 "ui_save_config_restart_failed",
-                stage="construct_new_host",
                 exc_type=type(exc).__name__,
                 exc_msg=str(exc),
             )
@@ -584,10 +605,22 @@ class Dashboard:
             )
             # CR-02 rollback: do NOT swap. Old host + pipeline are still
             # the canonical pair; _pending_config is preserved so the
-            # operator can retry or revert sliders.
+            # operator can retry or revert sliders. Best-effort cleanup
+            # of the partially-built new_host if it managed to start
+            # (so the orphan thread does not survive the failed restart).
+            new_host_local = locals().get("new_host")
+            if new_host_local is not None:
+                try:
+                    new_host_local.stop()
+                except Exception as cleanup_exc:  # noqa: BLE001 -- best-effort orphan cleanup
+                    self._logger.warning(
+                        "ui_save_config_orphan_host_stop_failed",
+                        exc_type=type(cleanup_exc).__name__,
+                        exc_msg=str(cleanup_exc),
+                    )
             return
-        # 4. New host is up. Tear down the old host (Pitfall 3 -- threads
-        #    + event loops are single-use; we must construct a fresh pair).
+        # 4. New pipeline is up + running. Tear down the old host
+        #    (Pitfall 3 -- threads + event loops are single-use).
         old_host = self._host
         old_pipeline = self._pipeline
         try:
@@ -601,13 +634,11 @@ class Dashboard:
                 exc_msg=str(exc),
             )
         old_host.stop()
-        # 5. Commit the swap. From here on ``self._*`` references the new
-        #    pair. ``new_pipeline.start()`` is still fire-and-forget at
-        #    this commit; CR-01 layers the blocking-result + classifier.
+        # 5. Commit the swap. ``self._*`` now references the new pair;
+        #    the new pipeline is already running.
         self._config = new_config
         self._pipeline = new_pipeline
         self._host = new_host
-        self._host.submit(self._pipeline.start())
         # 6. Clear buffer ONLY on full success.
         self._pending_config.clear()
         self._refresh_unsaved_badge()
