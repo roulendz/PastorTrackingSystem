@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-05-11T10:44:51.542Z"
-last_activity: 2026-05-11 -- Phase 7 Plan 01 (Wave 0 foundation) complete
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-05-11T10:58:52Z"
+last_activity: 2026-05-11 -- Phase 7 Plan 02 (UI shell) complete
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 25
-  completed_plans: 22
-  percent: 88
+  completed_plans: 23
+  percent: 92
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** Cinematic, jitter-free auto-tracking of a single primary speaker — no overshoot, no oscillation, no lock-loss, no audible motor jerk.
-**Current focus:** Phase 7 — UI Dashboard (Wave 0 complete; Wave 1 next)
+**Current focus:** Phase 7 — UI Dashboard (Wave 1 complete; Wave 2 next — sliders + Save Config)
 
 ## Current Position
 
 Phase: 7
-Plan: 02 (next; Wave 1 — UI shell)
+Plan: 03 (next; Wave 2 — sliders + Save Config restart sequence)
 Status: Ready to execute
-Last activity: 2026-05-11 -- Phase 7 Plan 01 (Wave 0 foundation) complete
+Last activity: 2026-05-11 -- Phase 7 Plan 02 (UI shell) complete
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [█████████░] 88%
 | Phase 05 P05 | 7min | 2 tasks tasks | 3 files files |
 | Phase 05 P06 | 12min | 1 tasks | 1 files |
 | Phase 07 P01 | 8min | 2 tasks | 8 files |
+| Phase 07 P02 | 11min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,13 @@ Recent decisions affecting current work:
 - [Phase 07]: Plan 07-01: PipelineSnapshot extension lives BELOW motor_state with explicit CONTEXT.md authorization citation; the 7 D-16 fields keep their original ordering -- additive extension only
 - [Phase 07]: Plan 07-01: _tick_loop cache-write inserted directly after self._latest_frame = frame (D-17) and BEFORE await self._tracker.consume(...) so the snapshot reflects the same tick's detection; sequential await chain untouched
 - [Phase 07]: Plan 07-01: Empty-detections branch deliberately omitted (hold-on-None) to mirror last_target_x_normalized; status panel formats None as '-' / 'NONE' per CONTEXT.md Specific Ideas
+- [Phase 07]: Plan 07-02: Pure-core boundary enforced: ui/_overlays.py has ZERO `import dearpygui`; grep gate test (test_overlays_module_has_no_dearpygui_dependency) fails the suite on any future regression
+- [Phase 07]: Plan 07-02: PipelineThreadHost uses explicit RuntimeError (not bare assert) for submit-before-start so the contract holds under `python -O` per CLAUDE.md tiger-style §1; double-start also raises
+- [Phase 07]: Plan 07-02: Dashboard DI factories (pipeline_factory + host_factory) gate the test seam -- _default_pipeline_factory raises NotImplementedError until Plan 07-04 wires real 8-stage construction
+- [Phase 07]: Plan 07-02: AsyncMock coroutine close-on-submit test pattern -- Mock(spec=Pipeline) produces unawaited coros; host.submit side_effect closes them before returning pre-resolved Future to silence pytest unraisable-exception hook
+- [Phase 07]: Plan 07-02: Pitfall 9 handled -- _handle_home_done catches OrchestratorRejected and logs ui_home_skipped DEBUG only; other exceptions surface as ui_command_failed WARN. Pause-toggle (_on_pause_pressed) reads snapshot state to avoid the rejection path entirely
+- [Phase 07]: Plan 07-02: EXIT_OK mirrored locally as _EXIT_OK_LOCAL in dashboard.py (not imported from __main__) to avoid the Plan 07-04 circular-import edge case; value identical to __main__.EXIT_OK
+- [Phase 07]: Plan 07-02: Save Config + Slider callbacks are stubs (log-only); Plan 07-03 swaps in real callbacks at well-defined methods (_on_save_config_pressed, _on_slider_change_stub, _unsaved_badge_text, _on_exit_callback) without touching Plan 07-02 code
 
 ### Pending Todos
 
@@ -143,6 +151,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-11T10:43:21Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-05-11T10:58:52Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None

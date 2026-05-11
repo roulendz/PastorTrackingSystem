@@ -141,7 +141,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Hotkeys `S` (start), `P` (pause), `H` (home), `E` (e-stop), `Q` (quit) work in any focus state of the window
 **Plans**: 4 plans
 - [x] 07-01-PLAN.md — dearpygui dep + Config preview fields + PipelineSnapshot/Cache extension + tick-loop hook (Wave 0) (completed 2026-05-11)
-- [ ] 07-02-PLAN.md — ui shell: _overlays.py (pure coord) + _pipeline_thread.py (host) + dashboard.py (render loop + 5 buttons + 5 hotkeys + D-04 quit) (Wave 1, depends 07-01)
+- [x] 07-02-PLAN.md — ui shell: _overlays.py (pure coord) + _pipeline_thread.py (host) + dashboard.py (render loop + 5 buttons + 5 hotkeys + D-04 quit) (Wave 1, depends 07-01) (completed 2026-05-11)
 - [ ] 07-04-PLAN.md — _event_bus.py + logging_config extension (BEFORE JSONRenderer per RESEARCH §5) + _status_panel.py + dashboard StatusPanel wiring + __main__ --ui/--headless flag (Wave 2, depends 07-02)
 - [ ] 07-03-PLAN.md — sliders + _pending_config + Save Config restart sequence + unsaved-changes modal-decision (Wave 3, depends 07-04)
 **UI hint**: yes
