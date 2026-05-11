@@ -50,7 +50,7 @@ The pinned authoritative hash will be added to this README in v2 supply-chain ha
 4. **Click Start Virtual Camera** in the Controls panel (bottom-right). The button label changes to "Stop Virtual Camera" when active.
 5. **Leave OBS running.** `pastor-tracker` enumerates DirectShow devices, finds the device named `OBS Virtual Camera`, and opens it.
 
-**Verification:** Run `uv run pastor-tracker --headless` from `pastor_tracker/`. If the camera is found, the structured log line **obs_camera_opened** appears on stdout. If not, see [Troubleshooting](#troubleshooting).
+**Verification:** Run `uv run pastor-tracker --headless` from `pastor_tracker/`. If the camera is found, the structured log line **camera_started** appears on stdout. If not, see [Troubleshooting](#troubleshooting).
 
 **Common gotchas:**
 - OBS must be started **before** `pastor-tracker`. DirectShow enumeration runs once at boot.
@@ -177,7 +177,7 @@ Any unchecked box means re-run with the appropriate config tweak: raise `pan_dea
 
 ### OBS Virtual Camera not found
 
-**Symptom:** App exits with EXIT_HARDWARE_FAILED (65); structured log line **obs_camera_not_found** lists the available DirectShow devices.
+**Symptom:** App exits with EXIT_HARDWARE_FAILED (65); the `OBSCameraNotFoundError` message lists the available DirectShow devices (the `camera_discovered` / `camera_multiple_matches` success events do not fire on this path).
 
 **Fixes:**
 - Start OBS and click **Start Virtual Camera** in the Controls panel.
@@ -186,7 +186,7 @@ Any unchecked box means re-run with the appropriate config tweak: raise `pan_dea
 
 ### Arduino not detected
 
-**Symptom:** App exits with EXIT_HARDWARE_FAILED (65); structured log line **arduino_port_not_found**.
+**Symptom:** App exits with EXIT_HARDWARE_FAILED (65); `ArduinoPortNotFoundError` is raised before any port log event fires (the `port_discovered` / `port_multiple_matches` / `port_manual_override` success events do not fire on this path).
 
 **Fixes:**
 - Confirm the Uno is plugged in via USB. Check Device Manager → Ports (COM & LPT) for a `COMn` entry.
@@ -204,7 +204,7 @@ Any unchecked box means re-run with the appropriate config tweak: raise `pan_dea
 
 ### Heartbeat lost — ERROR:11
 
-**Symptom:** Structured log line **firmware_error code=11**. Motor stops. App requires restart.
+**Symptom:** Structured log line **error_received code=11 code_name=HEARTBEAT_TIMEOUT**. Motor stops. App requires restart.
 
 **Fixes:**
 - Re-seat the USB cable firmly. Cheap micro-USB cables under high load can drop packets.
@@ -213,7 +213,7 @@ Any unchecked box means re-run with the appropriate config tweak: raise `pan_dea
 
 ### Lock-loss to subject > 2 s
 
-**Symptom:** Motor stops following the speaker; log lines **subject_lock_lost** then **subject_lock_acquired** (re-acquire on a new ID).
+**Symptom:** Motor stops following the speaker; log lines **lock_loss** then **lock_acquired** (or **lock_reacquired** if re-acquire happens on a different track_id).
 
 **Fixes:**
 - Lighting: BoT-SORT relies on subject appearance; very dim or strongly backlit subjects lose ID. Raise stage lights or reduce backlight.
