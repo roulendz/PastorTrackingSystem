@@ -157,7 +157,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. `README.md` covers `uv sync` install, OBS Virtual Camera setup, FOV calibration procedure, run command, and the hotkey table — a fresh operator can bring the system up from the README alone
   3. `ruff check` and `mypy --strict` exit zero across the full `src/pastor_tracker/` and `tests/` trees
   4. Git history is one Conventional Commit per module, matching the Order of Work in PROMPT.md (scaffold → core → arduino → camera → perception → intent → control → pipeline → ui → e2e/docs)
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 08-01-PLAN.md — Expand README into operator manual + re-run ship gates (ruff/mypy/pytest/Conventional Commits) + record VERIFICATION.md with QA-04 deferred to human (Wave 1, no deps)
 **UI hint**: no
 
 ## Progress
@@ -174,7 +176,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Intent and Control | 6/6 | Complete   | 2026-05-06 |
 | 6. Pipeline Orchestrator | 4/4 | Complete    | 2026-05-10 |
 | 7. UI Dashboard | 4/4 | Complete   | 2026-05-08 |
-| 8. End-to-End and Ship Gates | 0/TBD | Not started | - |
+| 8. End-to-End and Ship Gates | 0/1 | Not started | - |
 
 ---
 *Roadmap created: 2026-05-03*
