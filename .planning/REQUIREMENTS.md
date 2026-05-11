@@ -76,10 +76,10 @@
 
 ### UI
 
-- [ ] **UI-01**: DearPyGui single window — live preview with skeleton overlay, subject ID badge, framing-target vertical line, current/target angle text
+- [x] **UI-01**: DearPyGui single window — live preview with skeleton overlay, subject ID badge, framing-target vertical line, current/target angle text
 - [ ] **UI-02**: Live tuning sliders — pan time-constant, deadband, max velocity, FOV
 - [ ] **UI-03**: Buttons — `Start`, `Pause`, `Home`, `E-Stop`, `Save Config`
-- [ ] **UI-04**: Status panel — motor link state, camera FPS, detection conf, ID lock state, last error
+- [x] **UI-04**: Status panel — motor link state, camera FPS, detection conf, ID lock state, last error
 - [x] **UI-05**: Hotkeys — `S` start, `P` pause, `H` home, `E` estop, `Q` quit
 
 ### Testing
@@ -174,10 +174,10 @@ Populated by `gsd-roadmapper` 2026-05-03 from `.planning/ROADMAP.md` (8 phases).
 | PIPE-01 | Phase 6 | Complete |
 | PIPE-02 | Phase 6 | Complete |
 | PIPE-03 | Phase 6 | Complete |
-| UI-01 | Phase 7 | Pending |
+| UI-01 | Phase 7 | Complete |
 | UI-02 | Phase 7 | Pending |
 | UI-03 | Phase 7 | Pending |
-| UI-04 | Phase 7 | Pending |
+| UI-04 | Phase 7 | Complete |
 | UI-05 | Phase 7 | Complete |
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Complete |

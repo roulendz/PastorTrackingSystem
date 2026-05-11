@@ -142,7 +142,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 - [x] 07-01-PLAN.md — dearpygui dep + Config preview fields + PipelineSnapshot/Cache extension + tick-loop hook (Wave 0) (completed 2026-05-11)
 - [x] 07-02-PLAN.md — ui shell: _overlays.py (pure coord) + _pipeline_thread.py (host) + dashboard.py (render loop + 5 buttons + 5 hotkeys + D-04 quit) (Wave 1, depends 07-01) (completed 2026-05-11)
-- [ ] 07-04-PLAN.md — _event_bus.py + logging_config extension (BEFORE JSONRenderer per RESEARCH §5) + _status_panel.py + dashboard StatusPanel wiring + __main__ --ui/--headless flag (Wave 2, depends 07-02)
+- [x] 07-04-PLAN.md — _event_bus.py + logging_config extension (BEFORE JSONRenderer per RESEARCH §5) + _status_panel.py + dashboard StatusPanel wiring + __main__ --ui/--headless flag (Wave 2, depends 07-02)
 - [ ] 07-03-PLAN.md — sliders + _pending_config + Save Config restart sequence + unsaved-changes modal-decision (Wave 3, depends 07-04)
 **UI hint**: yes
 **Cross-phase contract notes** (from Phase 3 deep review, commit aac3da1):
@@ -173,7 +173,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Perception | 0/3 | Not started | - |
 | 5. Intent and Control | 6/6 | Complete   | 2026-05-06 |
 | 6. Pipeline Orchestrator | 4/4 | Complete    | 2026-05-10 |
-| 7. UI Dashboard | 0/4 | Not started | - |
+| 7. UI Dashboard | 3/4 | In Progress|  |
 | 8. End-to-End and Ship Gates | 0/TBD | Not started | - |
 
 ---
