@@ -488,14 +488,20 @@ def test_on_exit_callback_invokes_stop_dearpygui() -> None:
 
 def test_slider_callback_writes_to_pending_config() -> None:
     """Plan 07-03 Task 1: closure-bound slider callback stores into _pending_config."""
+    from unittest.mock import patch
+
     dashboard, _, _ = _make_dashboard()
     cb = dashboard._make_slider_cb("pan_time_constant_sec")
-    cb(0, 1.2, None)
+    # Patch dpg so _refresh_unsaved_badge does not poke a real viewport.
+    with patch("pastor_tracker.ui.dashboard.dpg"):
+        cb(0, 1.2, None)
     assert dashboard._pending_config == {"pan_time_constant_sec": 1.2}
 
 
 def test_slider_callback_factory_no_late_binding() -> None:
     """RESEARCH 'Code Examples' lines 821-826: closure binds key at definition."""
+    from unittest.mock import patch
+
     dashboard, _, _ = _make_dashboard()
     keys = [
         "pan_time_constant_sec",
@@ -505,8 +511,9 @@ def test_slider_callback_factory_no_late_binding() -> None:
     ]
     values = [0.5, 0.3, 25.0, 80.0]
     cbs = [dashboard._make_slider_cb(k) for k in keys]
-    for cb, value in zip(cbs, values, strict=True):
-        cb(0, value, None)
+    with patch("pastor_tracker.ui.dashboard.dpg"):
+        for cb, value in zip(cbs, values, strict=True):
+            cb(0, value, None)
     assert dashboard._pending_config == dict(zip(keys, values, strict=True))
 
 

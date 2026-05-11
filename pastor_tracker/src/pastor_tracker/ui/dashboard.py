@@ -90,6 +90,10 @@ _ESTOP_TEXT_COLOR_RGB: Final[tuple[int, int, int]] = (255, 0, 0)
 _ID_LOCK_TEXT_POS: Final[tuple[int, int]] = (10, 10)
 _ANGLE_TEXT_BOTTOM_OFFSET_PX: Final[int] = 24
 
+# Unsaved-changes badge text (CONTEXT.md "Specific Ideas" line 183 wording).
+# Empty string when buffer is empty; this label otherwise.
+_UNSAVED_BADGE_LABEL: Final[str] = "(unsaved changes)"
+
 
 def _default_pipeline_factory(config: Config) -> Pipeline:
     """Default 8-stage Pipeline construction -- mirrors ``__main__._amain``.
@@ -203,6 +207,10 @@ class Dashboard:
         # Widget tags assigned in _build_ui (after dpg.create_context).
         self._tag_texture: int = 0
         self._tag_drawlist: int = 0
+        # Plan 07-03: unsaved-changes badge widget tag. Set in
+        # _build_unsaved_badge(); used by _refresh_unsaved_badge() to
+        # push the text via dpg.set_value().
+        self._tag_unsaved_badge: int = 0
         # Plan 07-04 status panel. Dashboard constructs its own event bus
         # when running standalone (e.g. tests); ``__main__.py`` injects a
         # shared one so structlog taps land in the SAME deque the panel
@@ -297,16 +305,29 @@ class Dashboard:
                 )
             # --- RIGHT: sliders + buttons + status ---
             with dpg.group():
-                self._build_slider_stubs()
+                self._build_unsaved_badge()
+                self._build_sliders()
                 self._build_buttons(estop_theme)
                 self._build_status_slots()
         self._build_hotkeys()
 
-    def _build_slider_stubs(self) -> None:
-        """Plan 07-02 stub: 4 sliders with bounds; callback only logs DEBUG.
+    def _build_unsaved_badge(self) -> None:
+        """Plan 07-03: dedicated text widget for the unsaved-changes badge.
 
-        Plan 07-03 swaps in the real ``_pending_config[key] = value``
-        callback + unsaved-changes badge refresh.
+        The widget tag is held on the Dashboard so slider callbacks (and
+        the Save Config success path) can push fresh text via
+        :meth:`_refresh_unsaved_badge`. Initial value is empty -- the
+        buffer is empty on first paint.
+        """
+        self._tag_unsaved_badge = dpg.add_text("")
+
+    def _build_sliders(self) -> None:
+        """Plan 07-03: 4 sliders with D-09 bounds + closure-factory callbacks.
+
+        The closure factory (:meth:`_make_slider_cb`) binds the field key
+        at slider-construction time -- this avoids the late-binding
+        gotcha that a single shared lambda would suffer (RESEARCH §"Code
+        Examples" lines 821-826).
         """
         dpg.add_slider_float(
             label="pan_time_constant_sec",
@@ -314,7 +335,7 @@ class Dashboard:
             min_value=_PAN_TIME_CONSTANT_MIN_SEC,
             max_value=_PAN_TIME_CONSTANT_MAX_SEC,
             format="%.2f",
-            callback=self._on_slider_change_stub,
+            callback=self._make_slider_cb("pan_time_constant_sec"),
         )
         dpg.add_slider_float(
             label="pan_deadband_deg",
@@ -322,7 +343,7 @@ class Dashboard:
             min_value=_PAN_DEADBAND_MIN_DEG,
             max_value=_PAN_DEADBAND_MAX_DEG,
             format="%.2f",
-            callback=self._on_slider_change_stub,
+            callback=self._make_slider_cb("pan_deadband_deg"),
         )
         dpg.add_slider_float(
             label="pan_max_velocity_deg_per_sec",
@@ -330,7 +351,7 @@ class Dashboard:
             min_value=_PAN_VELOCITY_MIN_DEG_PER_SEC,
             max_value=_PAN_VELOCITY_MAX_DEG_PER_SEC,
             format="%.1f",
-            callback=self._on_slider_change_stub,
+            callback=self._make_slider_cb("pan_max_velocity_deg_per_sec"),
         )
         dpg.add_slider_float(
             label="camera_horizontal_fov_deg",
@@ -338,8 +359,29 @@ class Dashboard:
             min_value=_FOV_MIN_DEG,
             max_value=_FOV_MAX_DEG,
             format="%.1f",
-            callback=self._on_slider_change_stub,
+            callback=self._make_slider_cb("camera_horizontal_fov_deg"),
         )
+
+    def _make_slider_cb(
+        self, key: str
+    ) -> Callable[[int, float, object], None]:
+        """Closure factory: binds ``key`` at definition site.
+
+        Per RESEARCH §"Code Examples" lines 821-826: a single shared
+        callback that read ``key`` from a loop variable would suffer the
+        Python late-binding bug (all callbacks would write to the LAST
+        key). The factory returns a fresh closure that captures ``key``
+        in its own scope.
+        """
+        def _cb(sender: int, app_data: float, user_data: object) -> None:
+            del sender, user_data
+            self._pending_config[key] = app_data
+            self._refresh_unsaved_badge()
+        return _cb
+
+    def _refresh_unsaved_badge(self) -> None:
+        """Push the current badge text to the reserved widget."""
+        dpg.set_value(self._tag_unsaved_badge, self._unsaved_badge_text())
 
     def _build_buttons(self, estop_theme: int) -> None:
         with dpg.group(horizontal=True):
@@ -386,22 +428,18 @@ class Dashboard:
                 key=dpg.mvKey_Q, callback=self._on_quit_pressed
             )
 
-    # ----- Plan 07-03 / 07-04 forward-compat hooks ----------------------
+    # ----- Plan 07-03: unsaved-changes badge helpers --------------------
 
     def _unsaved_badge_text(self) -> str:
-        """Returns "(unsaved changes)" when _pending_config is non-empty.
+        """Returns ``_UNSAVED_BADGE_LABEL`` when ``_pending_config`` non-empty.
 
-        Plan 07-02 stub: always returns empty string. Plan 07-03 swaps in
-        the real ``"(unsaved changes)" if self._pending_config else ""``.
+        Pure helper -- also read by the Plan 07-04 :class:`StatusPanel`
+        each ``_STATUS_REFRESH_DIVISOR`` tick to render the "Pipeline:"
+        status line with an optional trailing "(unsaved changes)".
         """
-        return ""
-
-    def _on_slider_change_stub(
-        self, sender: int, app_data: float, user_data: object
-    ) -> None:
-        """Plan 07-02 stub. Plan 07-03 lands `_pending_config[key] = value`."""
-        del sender, app_data, user_data
-        self._logger.debug("ui_slider_stub_invoked")
+        if not self._pending_config:
+            return ""
+        return _UNSAVED_BADGE_LABEL
 
     # ----- button + hotkey callbacks ------------------------------------
 
