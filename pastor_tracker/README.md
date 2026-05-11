@@ -154,8 +154,8 @@ This is the QA-04 on-stage smoke procedure. Run it on every stage rehearsal befo
 ### Run
 
 6. From `pastor_tracker/`: `uv run pastor-tracker` (default UI).
-7. Confirm the preview window opens, the framing-target vertical line is drawn, and the subject bounding box overlays the speaker.
-8. Press `S` to start tracking. The motor should begin tracking after a < 1 s damping ramp-up.
+7. Confirm the preview window opens and shows live frames from the OBS Virtual Camera.
+8. Press `S` to start tracking. The framing-target vertical line is drawn, the subject bounding box overlays the speaker, and the motor begins tracking after a < 1 s damping ramp-up.
 9. Speaker walks slowly stage-left, dwells 3 s, walks stage-right, dwells 3 s, repeats for **at least 5 minutes** of continuous tracking.
 
 ### Pass criteria
