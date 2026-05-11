@@ -527,6 +527,15 @@ class Dashboard:
         On ``ValidationError`` the operator-facing banner is set, the
         ``_pending_config`` buffer is preserved, and no Pipeline restart
         is attempted (CONTEXT.md "Specific Ideas" line 182).
+
+        CR-02 rollback discipline: the new Pipeline + PipelineThreadHost
+        are constructed + started in locals BEFORE the old host is torn
+        down. If ``_pipeline_factory`` / ``_host_factory`` / new
+        ``host.start()`` raises, ``self._config`` / ``self._pipeline`` /
+        ``self._host`` retain the OLD values (no swap), the
+        ``_pending_config`` buffer is preserved so the operator can retry
+        or revert sliders, and a red banner surfaces the failure. The old
+        host is teardown-eligible only once the new host is fully up.
         """
         del sender, app_data, user_data
         if not self._pending_config:
@@ -548,13 +557,37 @@ class Dashboard:
             )
             self._show_error_banner(self._format_validation_error(exc))
             return  # do NOT clear _pending_config
-        # 2. Persist BEFORE teardown -- a crash during the teardown chain
-        #    still leaves the new config on disk for the next boot.
+        if self._host is None or self._pipeline is None:
+            raise RuntimeError(
+                "Save Config fired before run() initialized pipeline/host"
+            )
+        # 2. Persist BEFORE any teardown -- a crash during the teardown
+        #    chain still leaves the new config on disk for the next boot.
         self._write_config_json(new_config)
-        # 3. Quit old Pipeline. The Future.result(...) blocks the UI on
-        #    the main thread (RESEARCH A6 -- documented freeze window).
-        assert self._host is not None
-        assert self._pipeline is not None
+        # 3. CR-02: Build the new pipeline + host EAGERLY in locals so a
+        #    construction or start() failure leaves ``self._*`` pointing
+        #    at the still-alive old objects. The old host is not torn
+        #    down until the new host has been confirmed up.
+        try:
+            new_pipeline = self._pipeline_factory(new_config)
+            new_host = self._host_factory()
+            new_host.start()
+        except Exception as exc:  # noqa: BLE001 -- documented rollback boundary; classifier branches on exc type
+            self._logger.error(
+                "ui_save_config_restart_failed",
+                stage="construct_new_host",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
+            self._show_error_banner(
+                f"{_ERROR_BANNER_PREFIX}restart failed: {exc}"
+            )
+            # CR-02 rollback: do NOT swap. Old host + pipeline are still
+            # the canonical pair; _pending_config is preserved so the
+            # operator can retry or revert sliders.
+            return
+        # 4. New host is up. Tear down the old host (Pitfall 3 -- threads
+        #    + event loops are single-use; we must construct a fresh pair).
         old_host = self._host
         old_pipeline = self._pipeline
         try:
@@ -568,14 +601,14 @@ class Dashboard:
                 exc_msg=str(exc),
             )
         old_host.stop()
-        # 4. Fresh PipelineThreadHost + fresh Pipeline (Pitfall 3 --
-        #    threads + event loops are single-use).
+        # 5. Commit the swap. From here on ``self._*`` references the new
+        #    pair. ``new_pipeline.start()`` is still fire-and-forget at
+        #    this commit; CR-01 layers the blocking-result + classifier.
         self._config = new_config
-        self._pipeline = self._pipeline_factory(new_config)
-        self._host = self._host_factory()
-        self._host.start()
+        self._pipeline = new_pipeline
+        self._host = new_host
         self._host.submit(self._pipeline.start())
-        # 5. Clear buffer ONLY on full success.
+        # 6. Clear buffer ONLY on full success.
         self._pending_config.clear()
         self._refresh_unsaved_badge()
         self._clear_error_banner()

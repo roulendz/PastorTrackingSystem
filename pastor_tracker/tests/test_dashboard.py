@@ -789,3 +789,115 @@ def test_default_pipeline_factory_constructs_pipeline_or_raises_hardware() -> No
     from pastor_tracker.pipeline import Pipeline
 
     assert isinstance(result, Pipeline)
+
+
+# ---- CR-02 rollback regression -----------------------------------------
+
+
+def test_save_config_rollback_on_pipeline_factory_failure(tmp_path: object) -> None:
+    """CR-02: pipeline_factory raise leaves old self._* intact, preserves buffer."""
+    from pathlib import Path as _Path
+    from unittest.mock import patch
+
+    from pastor_tracker.io.arduino_transport import ArduinoPortNotFoundError
+
+    # First factory call (run() init mirror) succeeds; second call (Save)
+    # raises -- simulating USB unplug between launch and Save.
+    pipelines: list[Mock] = []
+    factory_calls: list[int] = [0]
+
+    def _pipeline_factory(_cfg: Config) -> Mock:
+        factory_calls[0] += 1
+        if factory_calls[0] == 1:
+            p = _make_mock_pipeline()
+            pipelines.append(p)
+            return p
+        raise ArduinoPortNotFoundError("USB device vanished mid-session")
+
+    hosts: list[Mock] = []
+
+    def _host_factory() -> Mock:
+        h = _make_mock_host()
+        hosts.append(h)
+        return h
+
+    dashboard = Dashboard(
+        Config(),
+        pipeline_factory=_pipeline_factory,
+        host_factory=_host_factory,
+        config_json_path=_Path(str(tmp_path)) / "config.json",
+    )
+    dashboard._pipeline = _pipeline_factory(dashboard._config)
+    dashboard._host = _host_factory()
+    dashboard._pending_config["pan_deadband_deg"] = 0.6
+    old_host = dashboard._host
+    old_pipeline = dashboard._pipeline
+    old_config = dashboard._config
+
+    with capture_logs() as logs, patch("pastor_tracker.ui.dashboard.dpg"):
+        dashboard._on_save_config_pressed(0, None, None)
+
+    # Old state intact -- no swap occurred.
+    assert dashboard._host is old_host
+    assert dashboard._pipeline is old_pipeline
+    assert dashboard._config is old_config
+    # Old host NOT torn down (still alive for next retry).
+    old_host.stop.assert_not_called()
+    # Pending buffer preserved so operator can retry / revert sliders.
+    assert dashboard._pending_config == {"pan_deadband_deg": 0.6}
+    # Operator-visible error banner up.
+    assert "restart failed" in dashboard._error_banner_text
+    # Structured log event surfaced (CR-02 + CR-01 share this event name).
+    assert any(
+        entry.get("event") == "ui_save_config_restart_failed" for entry in logs
+    )
+
+
+def test_save_config_rollback_on_host_start_failure(tmp_path: object) -> None:
+    """CR-02: new host.start() raise leaves old self._* intact, preserves buffer."""
+    from pathlib import Path as _Path
+    from unittest.mock import patch
+
+    pipelines: list[Mock] = []
+
+    def _pipeline_factory(_cfg: Config) -> Mock:
+        p = _make_mock_pipeline()
+        pipelines.append(p)
+        return p
+
+    host_calls: list[int] = [0]
+    hosts: list[Mock] = []
+
+    def _host_factory() -> Mock:
+        host_calls[0] += 1
+        h = _make_mock_host()
+        if host_calls[0] == 2:
+            # Second host (rebuild during Save) fails to start.
+            h.start.side_effect = RuntimeError("loop_ready barrier missed")
+        hosts.append(h)
+        return h
+
+    dashboard = Dashboard(
+        Config(),
+        pipeline_factory=_pipeline_factory,
+        host_factory=_host_factory,
+        config_json_path=_Path(str(tmp_path)) / "config.json",
+    )
+    dashboard._pipeline = _pipeline_factory(dashboard._config)
+    dashboard._host = _host_factory()
+    dashboard._pending_config["pan_deadband_deg"] = 0.6
+    old_host = dashboard._host
+    old_pipeline = dashboard._pipeline
+
+    with capture_logs() as logs, patch("pastor_tracker.ui.dashboard.dpg"):
+        dashboard._on_save_config_pressed(0, None, None)
+
+    # Old state intact.
+    assert dashboard._host is old_host
+    assert dashboard._pipeline is old_pipeline
+    old_host.stop.assert_not_called()
+    assert dashboard._pending_config == {"pan_deadband_deg": 0.6}
+    assert "restart failed" in dashboard._error_banner_text
+    assert any(
+        entry.get("event") == "ui_save_config_restart_failed" for entry in logs
+    )
