@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-05-11T10:34:04.296Z"
-last_activity: 2026-05-11 -- Phase 7 planning complete
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-05-11T10:44:51.542Z"
+last_activity: 2026-05-11 -- Phase 7 Plan 01 (Wave 0 foundation) complete
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 25
-  completed_plans: 21
-  percent: 84
+  completed_plans: 22
+  percent: 88
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** Cinematic, jitter-free auto-tracking of a single primary speaker — no overshoot, no oscillation, no lock-loss, no audible motor jerk.
-**Current focus:** Phase 6 — Pipeline Orchestrator
+**Current focus:** Phase 7 — UI Dashboard (Wave 0 complete; Wave 1 next)
 
 ## Current Position
 
 Phase: 7
-Plan: Not started
+Plan: 02 (next; Wave 1 — UI shell)
 Status: Ready to execute
-Last activity: 2026-05-11 -- Phase 7 planning complete
+Last activity: 2026-05-11 -- Phase 7 Plan 01 (Wave 0 foundation) complete
 
-Progress: [██████████] 100%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [██████████] 100%
 | Phase 05 P04 | 13min | 2 tasks | 5 files |
 | Phase 05 P05 | 7min | 2 tasks tasks | 3 files files |
 | Phase 05 P06 | 12min | 1 tasks | 1 files |
+| Phase 07 P01 | 8min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,11 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 05-05: Coverage CLI uses --cov=src/pastor_tracker/control (directory form) not module-dotted -- pytest-cov 6.3 + numpy 2.4 hits cannot-load-module-twice on dotted form; directory form matches Plan 04 working invocation
 - [Phase ?]: Plan 05-06: dwell_then_walk over ramp for the velocity-clamp test -- D-06 at-target seed makes pure-ramp clamp tests vacuously pass; dwell_then_walk forces a real center-then-third target transition that exercises both dampers
 - [Phase ?]: Plan 05-06: ramp/dwell_then_walk constant-vx dilution -- helpers produce vx = (x_end - x_start) / total_sec; cap total_sec at min(time_budget, span_max/walk_vx - margin) so analyzer flips
+- [Phase 07]: Plan 07-01: dearpygui locked at 2.3.1 (within >=2.1,<3.0 plan-mandated range); plan documented 2.1.1 as RESEARCH-time-verified but uv resolver picked latest in-range - acceptable per plan's text; mypy override at pyproject.toml:87 already covers dearpygui.*
+- [Phase 07]: Plan 07-01: Preview drawlist bounds set as module-level _PREVIEW_*_PX_{MIN,MAX} Final constants in config.py (CLAUDE.md rule 6); only default= values are inline (consistent with capture_width precedent)
+- [Phase 07]: Plan 07-01: PipelineSnapshot extension lives BELOW motor_state with explicit CONTEXT.md authorization citation; the 7 D-16 fields keep their original ordering -- additive extension only
+- [Phase 07]: Plan 07-01: _tick_loop cache-write inserted directly after self._latest_frame = frame (D-17) and BEFORE await self._tracker.consume(...) so the snapshot reflects the same tick's detection; sequential await chain untouched
+- [Phase 07]: Plan 07-01: Empty-detections branch deliberately omitted (hold-on-None) to mirror last_target_x_normalized; status panel formats None as '-' / 'NONE' per CONTEXT.md Specific Ideas
 
 ### Pending Todos
 
@@ -137,6 +143,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-06T10:08:34.718Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-05-11T10:43:21Z
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
