@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 07-03-PLAN.md (Phase 7 complete)
-last_updated: "2026-05-11T19:16:44.536Z"
-last_activity: 2026-05-11 -- Phase 8 planning complete
+last_updated: "2026-05-11T19:17:19.641Z"
+last_activity: 2026-05-11 -- Phase 8 Plan 01 (README + ship-gate re-verify + VERIFICATION) complete; Phase 8 closed-pending-smoke; v1.0 milestone shipped (QA-02 + QA-01 format hotfixes deferred)
 progress:
   total_phases: 8
   completed_phases: 7
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-03)
 
 **Core value:** Cinematic, jitter-free auto-tracking of a single primary speaker — no overshoot, no oscillation, no lock-loss, no audible motor jerk.
-**Current focus:** Phase 7 — UI Dashboard (Wave 1 complete; Wave 2 next — sliders + Save Config)
+**Current focus:** v1.0 lifecycle — QA-04 on-stage smoke pending human operator on next stage rehearsal; QA-02 mypy and QA-01 format hotfixes deferred to follow-up plans
 
 ## Current Position
 
-Phase: 7
-Plan: complete — Phase 7 closed; next phase is Phase 8 (End-to-End and Ship Gates)
-Status: Ready to execute
-Last activity: 2026-05-11 -- Phase 8 planning complete
+Phase: 8 (End-to-End and Ship Gates) — complete (human_needed)
+Plan: complete — Phase 8 closed (human_needed for QA-04 smoke); v1.0 milestone shipped
+Status: Phase 8 complete (human_needed)
+Last activity: 2026-05-11 -- Phase 8 Plan 01 complete; v1.0 milestone shipped
 
 Progress: [██████████] 100%
 
