@@ -854,6 +854,33 @@ def test_default_pipeline_factory_constructs_pipeline_or_raises_hardware() -> No
 # ---- CR-02 rollback regression -----------------------------------------
 
 
+# ---- WR-04 cancellation-safe done-callbacks ----------------------------
+
+
+def test_handle_home_done_returns_silently_on_cancelled_future() -> None:
+    """WR-04: a cancelled future must NOT cause Future.exception() to escape."""
+    dashboard, _, _ = _make_dashboard()
+    fut: Future[object] = Future()
+    fut.cancel()
+    # Note: invoking fut.exception() directly on a cancelled future raises
+    # CancelledError -- the guard inside _handle_home_done prevents that.
+    with capture_logs() as logs:
+        # Must NOT raise CancelledError into the test runner.
+        dashboard._handle_home_done(fut)  # type: ignore[arg-type]
+    # And must not have logged ui_command_failed (the cancel is benign).
+    assert not any(entry.get("event") == "ui_command_failed" for entry in logs)
+
+
+def test_log_command_completion_returns_silently_on_cancelled_future() -> None:
+    """WR-04: same cancellation-safety for the generic lifecycle done-cb."""
+    dashboard, _, _ = _make_dashboard()
+    fut: Future[object] = Future()
+    fut.cancel()
+    with capture_logs() as logs:
+        dashboard._log_command_completion(fut)  # type: ignore[arg-type]
+    assert not any(entry.get("event") == "ui_command_failed" for entry in logs)
+
+
 # ---- WR-02 explicit-raise guard regression -----------------------------
 
 

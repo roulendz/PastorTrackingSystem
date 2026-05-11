@@ -848,7 +848,19 @@ class Dashboard:
     # ----- done-callbacks ------------------------------------------------
 
     def _handle_home_done(self, fut: Future[None]) -> None:
-        """Pitfall 9: home is NOT idempotent on HOMING; catch the typed exception."""
+        """Pitfall 9: home is NOT idempotent on HOMING; catch the typed exception.
+
+        WR-04: ``Future.exception()`` itself raises ``CancelledError`` when
+        the future was cancelled (e.g. ``host.stop()`` during Save Config
+        restart or quit drains in-flight futures). Guard with
+        ``fut.cancelled()`` before reading the exception so the
+        callback returns cleanly instead of letting ``CancelledError``
+        escape into asyncio's loop callback machinery (which would log
+        it as an unhandled callback exception and risk tripping
+        ``filterwarnings=['error']`` policies per Phase 2 W-05 precedent).
+        """
+        if fut.cancelled():
+            return
         exc = fut.exception()
         if isinstance(exc, OrchestratorRejected):
             self._logger.debug("ui_home_skipped", reason=str(exc))
@@ -862,6 +874,9 @@ class Dashboard:
             )
 
     def _log_command_completion(self, fut: Future[None]) -> None:
+        """WR-04: cancellation-safe done-callback for lifecycle commands."""
+        if fut.cancelled():
+            return
         exc = fut.exception()
         if exc is None:
             return
