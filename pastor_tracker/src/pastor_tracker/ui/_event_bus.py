@@ -69,12 +69,25 @@ class EventBusProcessor:
         buffer: The deque to ``appendleft`` captured triples into. Caller
             owns its construction; the status panel reads from the SAME
             deque instance.
+
+    WR-06 fail-fast guard: the ``level`` key is REQUIRED. It is set
+    earlier in the chain by :func:`structlog.processors.add_log_level`;
+    a missing ``level`` means either (a) the chain was misconfigured
+    (this processor placed before ``add_log_level``) or (b) some other
+    processor stripped the key. Either case is a structural bug -- the
+    status panel's "Last error" field would be permanently empty and no
+    test would catch the regression. We raise on the FIRST event that
+    arrives without ``level`` so the misconfiguration surfaces loudly at
+    process boot instead of silently degrading the operator dashboard.
     """
 
-    __slots__ = ("_buf",)
+    __slots__ = ("_buf", "_chain_validated")
 
     def __init__(self, buffer: EventBuffer) -> None:
         self._buf = buffer
+        # WR-06: one-shot guard. The first call validates the chain
+        # contract; subsequent calls skip the check on the hot path.
+        self._chain_validated = False
 
     def __call__(
         self,
@@ -89,8 +102,22 @@ class EventBusProcessor:
         ``timestamp``. Both are stringified defensively because a
         misconfigured chain (level missing) would otherwise let a non-str
         slip into the panel's ``set_value`` call.
+
+        WR-06: the FIRST event that arrives without a ``"level"`` key
+        triggers a structural error. ``add_log_level`` is a mandatory
+        upstream processor; its absence means the chain in
+        ``configure_logging`` was reordered without updating this tap.
         """
         del logger, method_name  # structlog signature requires them; we do not use.
+        if not self._chain_validated:
+            if "level" not in event_dict:
+                raise RuntimeError(
+                    "EventBusProcessor invariant violated: 'level' key "
+                    "missing from event_dict. Check that "
+                    "structlog.processors.add_log_level runs BEFORE "
+                    "EventBusProcessor in configure_logging()."
+                )
+            self._chain_validated = True
         level = event_dict.get("level")
         if level in _CAPTURED_LEVELS:
             self._buf.appendleft((

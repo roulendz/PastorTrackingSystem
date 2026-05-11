@@ -149,13 +149,56 @@ def test_make_event_bus_returns_bounded_deque() -> None:
     assert buf.maxlen == EVENT_BUS_MAXLEN
 
 
-@pytest.mark.parametrize("missing_level", [None, "notice", "TRACE", ""])
-def test_unknown_level_not_captured(missing_level: str | None) -> None:
+@pytest.mark.parametrize("unknown_level", ["notice", "TRACE", ""])
+def test_unknown_level_not_captured(unknown_level: str) -> None:
     """Anything outside {warning, error, critical} is ignored (defensive)."""
     buf = _fresh_buf()
     processor = EventBusProcessor(buf)
-    payload: dict[str, object] = {"event": "x", "timestamp": "t"}
-    if missing_level is not None:
-        payload["level"] = missing_level
+    payload: dict[str, object] = {
+        "event": "x",
+        "timestamp": "t",
+        "level": unknown_level,
+    }
     processor(None, "info", payload)  # type: ignore[arg-type]
     assert len(buf) == 0
+
+
+def test_missing_level_key_raises_fail_fast() -> None:
+    """WR-06: a missing ``level`` key is a structural chain misconfiguration.
+
+    ``add_log_level`` is the mandatory upstream processor; its absence
+    means EventBusProcessor was inserted before it (or after a
+    processor that stripped the key). Raise on the first event so the
+    misconfiguration surfaces at process boot instead of silently
+    leaving the operator's "Last error" field empty forever.
+    """
+    buf = _fresh_buf()
+    processor = EventBusProcessor(buf)
+    payload: dict[str, object] = {"event": "x", "timestamp": "t"}
+    with pytest.raises(RuntimeError, match="add_log_level"):
+        processor(None, "info", payload)  # type: ignore[arg-type]
+
+
+def test_chain_validation_is_one_shot() -> None:
+    """WR-06: the boundary check is gated to first call only (hot-path-free).
+
+    Once a valid event has passed through, subsequent events are not
+    re-checked. A later event missing ``level`` (which would itself be
+    a fresh bug) is silently treated as "level not in _CAPTURED_LEVELS"
+    rather than re-raising -- the one-shot guard is intentional so the
+    fail-fast cost is paid exactly once per process.
+    """
+    buf = _fresh_buf()
+    processor = EventBusProcessor(buf)
+    # First event is well-formed -> validation flips _chain_validated True.
+    processor(
+        None,
+        "warning",
+        {"level": "warning", "event": "ok", "timestamp": "t"},
+    )
+    assert processor._chain_validated is True
+    # Second event lacks ``level`` -- but the one-shot guard is already
+    # tripped, so this does NOT raise. It is also not captured (level
+    # is None, not in _CAPTURED_LEVELS).
+    processor(None, "warning", {"event": "x", "timestamp": "t"})  # type: ignore[arg-type]
+    assert len(buf) == 1  # only the first event captured
